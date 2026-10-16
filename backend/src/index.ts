@@ -3,7 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { JsonStorage } from './storage/JsonStorage';
 import { JsonlStorage } from './storage/JsonlStorage';
-import { LlmAdapter } from './llm/LlmAdapter';
+import { LlmAdapter, resolveLlmConfig } from './llm/LlmAdapter';
 import { ExperimentController } from './experiments/ExperimentController';
 import { createAgentsRouter } from './api/agents';
 import { createExperimentRouter } from './api/experiment';
@@ -24,46 +24,55 @@ const controller = new ExperimentController(jsonStorage, jsonlStorage, llmAdapte
 app.use('/api/agents', createAgentsRouter(jsonStorage));
 app.use('/api/experiment', createExperimentRouter(controller));
 
+app.get('/api/llm/config', (req, res) => {
+    res.json(resolveLlmConfig());
+});
+
 app.get('/api/llm/models', async (req, res) => {
     try {
-        const config = controller.getConfig();
-        const baseUrl = config?.llmConfig?.baseUrl || 'http://127.0.0.1:8080/v1';
-
-        // Temporarily use the adapter to check models at provided URL
-        const tempAdapter = new LlmAdapter({ baseUrl, model: 'default' });
-        const models = await tempAdapter.getModels();
-        res.json(models);
-    } catch (e: any) {
-        res.status(500).json({ error: e.message });
+        const baseUrl = typeof req.query.baseUrl === 'string' ? req.query.baseUrl : undefined;
+        const adapter = new LlmAdapter({ baseUrl });
+        res.json(await adapter.getModels());
+    } catch (error: any) {
+        res.status(502).json({ error: error.message });
     }
 });
 
-// SSE endpoint for live events
-app.get('/api/events', (req, res) => {
+app.get('/api/events', async (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
     res.flushHeaders();
-
-    const listener = (eventType: string, data: any) => {
-        res.write(`event: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`);
+    // Queue events during the snapshot read so history always precedes live updates.
+    let ready = false;
+    const pending: { type: string; data: any }[] = [];
+    const send = (type: string, data: any) => {
+        if (!res.destroyed) res.write(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`);
     };
-
-    controller.onEvent(listener);
-
-    // Initial state dispatch
-    res.write(`event: status_changed\ndata: ${JSON.stringify({ status: controller.getStatus() })}\n\n`);
-
-    req.on('close', () => {
-        // Simple listener removal (a real app would use EventEmitter properly)
-        controller.onEvent((_, __) => {});
+    const unsubscribe = controller.onEvent((type, data) => {
+        if (ready) send(type, data);
+        else pending.push({ type, data });
     });
+    const heartbeat = setInterval(() => { if (!res.destroyed) res.write(': heartbeat\n\n'); }, 15000);
+    res.on('close', () => { unsubscribe(); clearInterval(heartbeat); });
+    try {
+        send('snapshot', await controller.getSnapshot());
+        ready = true;
+        for (const event of pending) send(event.type, event.data);
+    } catch {
+        send('connection_error', { message: 'Could not load research history; reconnect to retry' });
+        res.end();
+    }
 });
 
 app.get('/health', (req, res) => {
     res.json({ status: 'ok' });
 });
 
-app.listen(port, () => {
-    console.log(`Backend server listening at http://localhost:${port}`);
-});
+export { app, controller };
+
+if (require.main === module) {
+    app.listen(port, () => {
+        console.log(`Backend server listening at http://localhost:${port}`);
+    });
+}

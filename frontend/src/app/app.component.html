@@ -52,24 +52,47 @@
             </div>
         </div>
 
+        <div *ngIf="diagnostic" class="diagnostic" role="alert">{{ diagnostic }}</div>
+        <div *ngIf="connectionMessage" role="status">{{ connectionMessage }}</div>
         <div class="controls">
-            <button (click)="startExperiment()" [disabled]="experimentStatus !== 'idle' && experimentStatus !== 'stopped'">Start</button>
-            <button (click)="pauseExperiment()" [disabled]="experimentStatus !== 'running'">Pause</button>
-            <button (click)="resumeExperiment()" [disabled]="experimentStatus !== 'paused'">Resume</button>
-            <button (click)="stopExperiment()" [disabled]="experimentStatus === 'idle' || experimentStatus === 'stopped'">Stop</button>
-            <button (click)="resetExperiment()" [disabled]="experimentStatus === 'running'">Reset</button>
+            <button (click)="startExperiment()" [disabled]="requestPending || experimentStatus !== 'idle' && experimentStatus !== 'stopped'">Start</button>
+            <button (click)="pauseExperiment()" [disabled]="requestPending || experimentStatus !== 'running'">Pause</button>
+            <button (click)="resumeExperiment()" [disabled]="requestPending || experimentStatus !== 'paused'">Resume</button>
+            <button (click)="stopExperiment()" [disabled]="requestPending || experimentStatus === 'idle' || experimentStatus === 'stopped'">Stop</button>
+            <button (click)="resetExperiment()" [disabled]="requestPending || experimentStatus === 'running'">Reset</button>
         </div>
 
         <div class="form-group" style="display:flex; gap: 10px;">
             <div>
                 <label>Max Turns</label>
-                <input type="number" [(ngModel)]="maxTurns" style="width: 80px;" [disabled]="experimentStatus !== 'idle'">
+                <input type="number" [(ngModel)]="maxTurns" style="width: 80px;" [disabled]="requestPending || experimentStatus !== 'idle'">
             </div>
             <div style="flex: 1;">
                 <label>Run ID</label>
-                <input type="text" [(ngModel)]="runId" [disabled]="experimentStatus !== 'idle'">
+                <input type="text" [(ngModel)]="runId" [disabled]="requestPending || experimentStatus !== 'idle'">
             </div>
         </div>
+
+        <fieldset [disabled]="experimentStatus !== 'idle' || requestPending" class="model-config">
+            <legend>Local model</legend>
+            <label for="model-url">API base URL</label>
+            <input id="model-url" [(ngModel)]="llmBaseUrl" (ngModelChange)="models = []; selectedModel = ''">
+            <button (click)="discoverModels()">Discover models</button>
+            <label for="model-id">Loaded model</label>
+            <select id="model-id" [(ngModel)]="selectedModel">
+                <option value="">Select a model</option>
+                <option *ngFor="let model of models" [value]="model.id">{{ model.id }}</option>
+                <option *ngIf="selectedModel && !models.length" [value]="selectedModel">{{ selectedModel }}</option>
+            </select>
+            <label for="max-tokens">Maximum completion tokens</label>
+            <input id="max-tokens" type="number" min="1" step="1" [(ngModel)]="maxTokens">
+            <label for="output-mode">Structured output</label>
+            <select id="output-mode" [(ngModel)]="outputMode">
+                <option value="json_schema">JSON Schema (preferred)</option>
+                <option value="json_only">JSON-only compatibility (JSON object mode)</option>
+            </select>
+            <small>Model and output settings are recorded and fixed for the run. Use a new Run ID to change them.</small>
+        </fieldset>
 
         <div class="transcript" #transcriptContainer>
             <div *ngIf="turns.length === 0" style="color: #888; font-style: italic;">No conversation yet.</div>
@@ -81,9 +104,7 @@
                         {{turn.turnRecord.timestamp | date:'mediumTime'}}
                     </span>
                 </div>
-                <div class="turn-content">
-                    {{turn.turnRecord.response}}
-                </div>
+                <div class="turn-content">{{turn.turnRecord.response}}</div>
             </div>
 
             <div *ngIf="activeTurnAgent" style="padding: 10px; font-style: italic; color: #666;">
@@ -101,12 +122,13 @@
         <div style="height: 100%; overflow-y: auto;">
             <div *ngIf="auditEvents.length === 0" style="color: #888; font-style: italic;">No events.</div>
             <div class="log-entry" *ngFor="let evt of auditEvents">
-                <strong style="color: #0056b3;">[{{evt.type}}]</strong> Turn {{evt.turnIndex || '?'}} ({{evt.agentId || 'System'}})<br>
+                <strong style="color: #0056b3;">[{{evt.type}}]</strong> Turn {{evt.turnIndex ?? '?'}} ({{evt.agentId || 'System'}})<br>
                 <div *ngIf="evt.type === 'memory_update'">
                     <div *ngFor="let op of evt.operations">
                         <span [ngStyle]="{'color': op.status === 'success' ? 'green' : 'red'}">
                             {{op.operation.action | uppercase}} {{op.operation.type}}
                         </span>: {{op.operation.content}} <br>
+                        <div *ngIf="op.error">Rejected: {{op.error}}</div>
                         <i style="color: #666;">"{{op.operation.reason}}"</i>
                     </div>
                 </div>

@@ -27,6 +27,12 @@ export function createAgentsRouter(storage: JsonStorage): Router {
                 return res.status(400).json({ error: 'Missing required fields (id, name, stats)' });
             }
 
+            if (typeof id !== 'string' || !/^[A-Za-z0-9_-]+$/.test(id) || typeof name !== 'string' ||
+                typeof stats !== 'object' || Array.isArray(stats) || !Object.values(stats).every((stat: any) =>
+                    stat && Number.isFinite(stat.initial) && stat.initial >= 0 && stat.initial <= 10 && stat.current === stat.initial)) {
+                return res.status(400).json({ error: 'Agent IDs must use letters, numbers, hyphens or underscores; initial stats must be numbers between 0 and 10 and match current values' });
+            }
+
             const existing = await storage.loadAgentIdentity(id);
             if (existing) {
                 return res.status(409).json({ error: 'Agent already exists' });

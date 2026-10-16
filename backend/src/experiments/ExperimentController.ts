@@ -1,6 +1,8 @@
-import { JsonStorage, AgentState } from '../storage/JsonStorage';
+import { JsonStorage } from '../storage/JsonStorage';
 import { JsonlStorage } from '../storage/JsonlStorage';
-import { LlmAdapter, LlmConfig } from '../llm/LlmAdapter';
+import { LlmAdapter, LlmConfig, LlmError, resolveLlmConfig } from '../llm/LlmAdapter';
+import { randomUUID } from 'crypto';
+import { isDeepStrictEqual } from 'util';
 import { MemoryManager } from '../agents/MemoryManager';
 
 export type RunStatus = 'idle' | 'running' | 'paused' | 'stopped' | 'completed';
@@ -25,7 +27,10 @@ export class ExperimentController {
     private shouldStop: boolean = false;
     private activePromise: Promise<void> | null = null;
 
-    private onEventCallback?: (eventType: string, data: any) => void;
+    private subscribers = new Set<(eventType: string, data: any) => void>();
+    private commands: Promise<unknown> = Promise.resolve();
+    private activeAgentId: string | null = null;
+    private lastError: any = null;
 
     constructor(jsonStorage: JsonStorage, jsonlStorage: JsonlStorage, llmAdapter: LlmAdapter) {
         this.jsonStorage = jsonStorage;
@@ -34,109 +39,136 @@ export class ExperimentController {
         this.memoryManager = new MemoryManager(this.jsonStorage);
     }
 
-    onEvent(cb: (eventType: string, data: any) => void) {
-        this.onEventCallback = cb;
+    onEvent(cb: (eventType: string, data: any) => void): () => void {
+        this.subscribers.add(cb);
+        return () => { this.subscribers.delete(cb); };
     }
-
     private emit(eventType: string, data: any) {
-        if (this.onEventCallback) {
-            this.onEventCallback(eventType, data);
+        for (const cb of this.subscribers) {
+            try { cb(eventType, data); } catch { /* One disconnected client cannot fail a turn. */ }
         }
     }
-
-    getStatus(): RunStatus {
-        return this.status;
+    getStatus() { return this.status; }
+    getConfig() { return this.config ? structuredClone(this.config) : null; }
+    getTurnIndex() { return this.currentTurnIndex; }
+    getState() {
+        return { status: this.status, config: this.getConfig(), currentTurnIndex: this.currentTurnIndex,
+            activeAgentId: this.activeAgentId, error: this.lastError };
     }
-
-    getConfig(): ExperimentConfig | null {
-        return this.config;
+    async getSnapshot() {
+        const runId = this.config?.runId;
+        const state = this.getState();
+        const turns = runId ? await this.jsonlStorage.getConversationHistory(runId) : [];
+        const events = runId ? await this.jsonlStorage.getEventHistory(runId) : [];
+        return { ...state, turns, events };
     }
-
-    getTurnIndex(): number {
-        return this.currentTurnIndex;
+    private publishStatus() { this.emit('status_changed', this.getState()); }
+    // Lifecycle commands are serialized, including discovery and disk I/O in start().
+    private command(work: () => Promise<void>): Promise<void> {
+        const result = this.commands.then(work);
+        this.commands = result.catch(() => {});
+        return result;
     }
-
-    async start(config: ExperimentConfig) {
-        if (this.status === 'running') {
-            throw new Error('Experiment is already running.');
+    private launchLoop() {
+        if (this.activePromise) throw new Error('A turn loop is still active');
+        this.activePromise = this.runLoop().finally(() => { this.activePromise = null; });
+    }
+    start(config: ExperimentConfig) { return this.command(async () => {
+        if (this.activePromise || this.status === 'running' || this.status === 'paused') throw new Error('Stop or reset the current experiment before starting another');
+        if (!/^[A-Za-z0-9_-]+$/.test(config.runId) || !Number.isSafeInteger(config.maxTurns) || config.maxTurns < 1 ||
+            !Array.isArray(config.agentIds) || config.agentIds.length < 2 || new Set(config.agentIds).size !== config.agentIds.length ||
+            !config.agentIds.every(id => typeof id === 'string' && /^[A-Za-z0-9_-]+$/.test(id))) throw new Error('Invalid run ID, agent IDs or turn limit');
+        for (const id of config.agentIds) {
+            if (!await this.jsonStorage.loadAgentIdentity(id)) throw new Error(`Agent ${id} missing`);
         }
-
-        this.config = config;
+        const llmConfig = resolveLlmConfig(config.llmConfig);
+        const discovery = new LlmAdapter(llmConfig);
+        const models = await discovery.getModels();
+        if (!llmConfig.model) {
+            if (models.length !== 1) throw new Error('Select a loaded model from model discovery');
+            llmConfig.model = models[0].id;
+        }
+        if (!models.some(model => model.id === llmConfig.model)) throw new Error('Selected model is not in the loaded model list');
+        const resolved = { ...config, agentIds: [...config.agentIds], llmConfig };
+        const existing = await this.jsonlStorage.loadConfig(config.runId);
+        if (existing && !isDeepStrictEqual(existing, resolved)) throw new Error('Run ID already has different metadata; use a new run ID to change model, output mode or settings');
+        const history = await this.jsonlStorage.getConversationHistory(config.runId);
+        const events = await this.jsonlStorage.getEventHistory(config.runId);
+        if (!existing) await this.jsonlStorage.saveConfig(config.runId, resolved);
+        this.config = resolved;
+        this.llmAdapter.updateConfig(llmConfig);
+        this.currentTurnIndex = history.length;
         this.shouldPause = false;
         this.shouldStop = false;
-
-        // Save config
-        await this.jsonlStorage.saveConfig(config.runId, config);
-
-        // Resume state if conversation log exists
-        const history = await this.jsonlStorage.getConversationHistory(config.runId);
-        this.currentTurnIndex = history.length;
-
-        if (this.currentTurnIndex >= config.maxTurns) {
-            this.status = 'completed';
-            this.emit('status_changed', { status: this.status });
-            return;
-        }
-
-        this.status = 'running';
-        this.emit('status_changed', { status: this.status });
-        this.activePromise = this.runLoop();
-    }
-
-    async pause() {
+        this.lastError = null;
+        this.status = this.currentTurnIndex >= config.maxTurns ? 'completed' : 'running';
+        this.emit('snapshot', { ...this.getState(), turns: history, events });
+        this.publishStatus();
+        if (this.status === 'running') this.launchLoop();
+    }); }
+    pause() { return this.command(async () => {
         if (this.status !== 'running') return;
         this.shouldPause = true;
         this.status = 'paused';
-        this.emit('status_changed', { status: this.status });
-    }
-
-    async resume() {
+        this.publishStatus();
+        // Finish the in-flight turn before any Resume can launch the next loop.
+        await this.activePromise;
+    }); }
+    resume() { return this.command(async () => {
         if (this.status !== 'paused' || !this.config) return;
+        await this.activePromise;
         this.shouldPause = false;
         this.shouldStop = false;
-        this.status = 'running';
-        this.emit('status_changed', { status: this.status });
-        this.activePromise = this.runLoop();
-    }
-
-    async stop() {
+        this.lastError = null;
+        this.status = this.currentTurnIndex >= this.config.maxTurns ? 'completed' : 'running';
+        this.publishStatus();
+        if (this.status === 'running') this.launchLoop();
+    }); }
+    stop() { return this.command(async () => {
         this.shouldStop = true;
         this.status = 'stopped';
-        this.emit('status_changed', { status: this.status });
-        if (this.activePromise) {
-            await this.activePromise;
-        }
-    }
-
-    async reset() {
+        this.publishStatus();
+        await this.activePromise;
+    }); }
+    reset() { return this.command(async () => {
+        this.shouldStop = true;
+        await this.activePromise;
         this.status = 'idle';
         this.config = null;
         this.currentTurnIndex = 0;
+        this.activeAgentId = null;
+        this.lastError = null;
         this.shouldPause = false;
         this.shouldStop = false;
-        this.emit('status_changed', { status: this.status });
-    }
-
+        this.publishStatus();
+        this.emit('snapshot', await this.getSnapshot());
+    }); }
     private async runLoop() {
         if (!this.config) return;
-
         while (this.status === 'running' && this.currentTurnIndex < this.config.maxTurns && !this.shouldPause && !this.shouldStop) {
-            const activeAgentId = this.config.agentIds[this.currentTurnIndex % this.config.agentIds.length];
-
+            const agentId = this.config.agentIds[this.currentTurnIndex % this.config.agentIds.length];
+            this.activeAgentId = agentId;
             try {
-                await this.executeTurn(activeAgentId);
-                this.currentTurnIndex++;
-
-                if (this.currentTurnIndex >= this.config.maxTurns) {
-                    this.status = 'completed';
-                    this.emit('status_changed', { status: this.status });
-                    break;
-                }
+                await this.executeTurn(agentId);
+                if (this.currentTurnIndex >= this.config.maxTurns && !this.shouldStop) this.status = 'completed';
             } catch (error: any) {
-                console.error("Turn failed:", error);
-                this.status = 'paused'; // auto-pause on error
-                this.emit('status_changed', { status: this.status, error: error.message });
-                break;
+                this.activeAgentId = null;
+                this.shouldPause = true;
+                this.lastError = {
+                    id: randomUUID(), type: 'experiment_error', runId: this.config.runId,
+                    turnIndex: this.currentTurnIndex, agentId,
+                    message: error instanceof LlmError ? error.message : 'Turn execution failed; check backend storage and configuration',
+                    ...(error instanceof LlmError ? { diagnostics: error.diagnostics } : {}),
+                    timestamp: new Date().toISOString()
+                };
+                try { await this.jsonlStorage.appendEvent(this.config.runId, this.lastError); }
+                catch { this.lastError.message += '; research error log could not be written'; }
+                this.status = this.shouldStop ? 'stopped' : 'paused';
+                console.error('Experiment paused', this.lastError);
+                this.emit('experiment_error', this.lastError);
+            } finally {
+                this.activeAgentId = null;
+                this.publishStatus();
             }
         }
     }
@@ -201,20 +233,21 @@ ${transcript ? transcript : '(No conversation yet)'}`;
             timestamp: new Date().toISOString()
         };
 
-        // Validate and apply memory operations atomically
+        // Validate each proposal; rejected operations are preserved in the audit trail.
         const auditTrail = await this.memoryManager.applyOperations(agentId, response.memory_operations || []);
 
         // Log everything immutably
-        await this.jsonlStorage.appendConversationTurn(this.config!.runId, turnRecord);
+        await this.jsonlStorage.appendConversationTurn(this.config!.runId, { ...turnRecord, auditTrail, diagnostics: this.llmAdapter.lastDiagnostics });
+        // The appended turn is the commit point. Never retry a completed turn.
+        this.currentTurnIndex++;
+        this.emit('turn_completed', { turnRecord, auditTrail });
         await this.jsonlStorage.appendEvent(this.config!.runId, {
-            turnIndex: this.currentTurnIndex,
+            turnIndex: turnRecord.turnIndex,
             agentId,
             type: 'memory_update',
             operations: auditTrail,
             timestamp: new Date().toISOString()
         });
 
-        // Broadcast updates
-        this.emit('turn_completed', { turnRecord, auditTrail });
     }
 }
