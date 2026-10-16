@@ -1,0 +1,119 @@
+<div class="container">
+
+    <!-- Left: Setup & Agent Management -->
+    <div class="panel left-panel">
+        <div class="header">
+            <h2>Agent Setup</h2>
+        </div>
+
+        <div *ngIf="experimentStatus !== 'idle'">
+            <p><strong>Experiment is active. Setup is locked.</strong></p>
+        </div>
+
+        <div *ngIf="experimentStatus === 'idle'">
+            <div class="agent-card">
+                <h3>Create New Agent</h3>
+                <div class="form-group">
+                    <label>ID (e.g. agent-a)</label>
+                    <input type="text" [(ngModel)]="newAgent.id">
+                </div>
+                <div class="form-group">
+                    <label>Name</label>
+                    <input type="text" [(ngModel)]="newAgent.name">
+                </div>
+                <div class="form-group">
+                    <label>Curiosity (0-10)</label>
+                    <input type="number" [(ngModel)]="newAgent.stats.curiosity">
+                </div>
+                <div class="form-group">
+                    <label>Sociability (0-10)</label>
+                    <input type="number" [(ngModel)]="newAgent.stats.sociability">
+                </div>
+                <button (click)="createAgent()">Create Agent</button>
+            </div>
+        </div>
+
+        <div class="header" style="margin-top: 20px;">
+            <h3>Available Agents</h3>
+        </div>
+        <div class="agent-card" *ngFor="let a of availableAgents">
+            <strong>{{ a.name }}</strong> ({{ a.id }})<br>
+            <small>C: {{a.stats['curiosity']?.initial || 0}}, S: {{a.stats['sociability']?.initial || 0}}</small>
+        </div>
+
+    </div>
+
+    <!-- Middle: Transcript & Controls -->
+    <div class="panel middle-panel">
+        <div class="header" style="display: flex; justify-content: space-between; align-items: center;">
+            <h2>Conversation</h2>
+            <div>
+                Status: <span class="status-badge status-{{experimentStatus}}">{{ experimentStatus | uppercase }}</span>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button (click)="startExperiment()" [disabled]="experimentStatus !== 'idle' && experimentStatus !== 'stopped'">Start</button>
+            <button (click)="pauseExperiment()" [disabled]="experimentStatus !== 'running'">Pause</button>
+            <button (click)="resumeExperiment()" [disabled]="experimentStatus !== 'paused'">Resume</button>
+            <button (click)="stopExperiment()" [disabled]="experimentStatus === 'idle' || experimentStatus === 'stopped'">Stop</button>
+            <button (click)="resetExperiment()" [disabled]="experimentStatus === 'running'">Reset</button>
+        </div>
+
+        <div class="form-group" style="display:flex; gap: 10px;">
+            <div>
+                <label>Max Turns</label>
+                <input type="number" [(ngModel)]="maxTurns" style="width: 80px;" [disabled]="experimentStatus !== 'idle'">
+            </div>
+            <div style="flex: 1;">
+                <label>Run ID</label>
+                <input type="text" [(ngModel)]="runId" [disabled]="experimentStatus !== 'idle'">
+            </div>
+        </div>
+
+        <div class="transcript" #transcriptContainer>
+            <div *ngIf="turns.length === 0" style="color: #888; font-style: italic;">No conversation yet.</div>
+
+            <div class="turn" *ngFor="let turn of turns">
+                <div class="turn-header">
+                    [Turn {{turn.turnRecord.turnIndex}}] {{turn.turnRecord.agentName}}
+                    <span style="color: #888; font-weight: normal; font-size: 0.8em; float: right;">
+                        {{turn.turnRecord.timestamp | date:'mediumTime'}}
+                    </span>
+                </div>
+                <div class="turn-content">
+                    {{turn.turnRecord.response}}
+                </div>
+            </div>
+
+            <div *ngIf="activeTurnAgent" style="padding: 10px; font-style: italic; color: #666;">
+                {{ activeTurnAgent }} is thinking...
+            </div>
+        </div>
+    </div>
+
+    <!-- Right: Audit Log & Memory -->
+    <div class="panel right-panel">
+        <div class="header">
+            <h2>Audit & State Events</h2>
+        </div>
+
+        <div style="height: 100%; overflow-y: auto;">
+            <div *ngIf="auditEvents.length === 0" style="color: #888; font-style: italic;">No events.</div>
+            <div class="log-entry" *ngFor="let evt of auditEvents">
+                <strong style="color: #0056b3;">[{{evt.type}}]</strong> Turn {{evt.turnIndex || '?'}} ({{evt.agentId || 'System'}})<br>
+                <div *ngIf="evt.type === 'memory_update'">
+                    <div *ngFor="let op of evt.operations">
+                        <span [ngStyle]="{'color': op.status === 'success' ? 'green' : 'red'}">
+                            {{op.operation.action | uppercase}} {{op.operation.type}}
+                        </span>: {{op.operation.content}} <br>
+                        <i style="color: #666;">"{{op.operation.reason}}"</i>
+                    </div>
+                </div>
+                <div *ngIf="evt.type !== 'memory_update'">
+                    {{ evt | json }}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
