@@ -33,6 +33,15 @@ export class JsonlStorage {
         await fs.writeFile(path.join(expDir, 'config.json'), JSON.stringify(config, null, 2), 'utf-8');
     }
 
+    async loadConfig(runId: string): Promise<any | null> {
+        try {
+            return JSON.parse(await fs.readFile(path.join(this.getExperimentDir(runId), 'config.json'), 'utf-8'));
+        } catch (error: any) {
+            if (error.code === 'ENOENT') return null;
+            throw error;
+        }
+    }
+
     /**
      * Appends a conversation turn to the log.
      */

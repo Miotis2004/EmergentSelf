@@ -78,3 +78,65 @@ You can change the backend LLM configuration (URL, models) within the frontend d
 - **Connection refused (port 8080)**: Ensure your local model server is running and accessible on `127.0.0.1:8080`.
 - **CORS errors**: The backend should handle CORS, but ensure your frontend is running on `http://localhost:4200` and the backend on the expected port (e.g., `3000`).
 - **Memory not updating**: Check the backend console logs. Ensure the selected model supports structured output (JSON schema) and successfully returns the requested format.
+
+## Structured output and Phase I diagnostics
+
+The dashboard discovers loaded model IDs from the backend's `/api/llm/models`
+endpoint (which queries the selected server's `/v1/models`). Select a model before
+starting. The exact selected identifier, temperature, token budget and output mode
+are saved in each run's `config.json`. Run IDs cannot be reused with different
+settings; reset and choose a new run ID when changing them. Resume retains the
+recorded settings and retries the failed turn, keeping completed turns intact.
+
+Backend environment defaults (set in the shell or ignored `backend/.env`):
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `LLM_BASE_URL` | `http://127.0.0.1:8080/v1` | OpenAI-compatible API base URL |
+| `LLM_MAX_TOKENS` | `2048` | Positive integer completion token limit; dashboard can override per run |
+| `LLM_OUTPUT_MODE` | `json_schema` | `json_schema` or explicit `json_only` compatibility mode |
+| `LLM_DEBUG_CONTENT` | unset | Set to `true` only for deliberate debugging of response content |
+
+JSON Schema mode sends the agent-turn schema to the server and independently
+validates every returned object with the same schema. JSON-only mode sends
+`response_format: {"type":"json_object"}` plus a format-only instruction; the
+same independent schema validation still applies. There is no automatic mode
+switch, JSON repair, Markdown stripping, dialogue rewriting or invented response.
+If a server rejects a mode, configure a supported one for a new run. Missing
+`memory_operations` is normalized to `[]`; malformed operations are rejected.
+Stat updates must target an existing stat, use `update`, and contain a finite
+number in the dashboard's 0–10 range. Initial stat values never change.
+
+Backend diagnostics and error events record HTTP status, requested/reported model,
+finish reason, content presence/length, a capped excerpt and token usage when
+provided. By default the excerpt exposes only punctuation with text redacted.
+`LLM_DEBUG_CONTENT=true` includes up to 200 characters of raw model output, which
+can contain sensitive information; leave it disabled for normal research runs.
+Complete prompts and conversations are not printed to the console. Research
+conversation/state/audit files intentionally retain the experimental record.
+`finish_reason: "length"` is always treated as truncation, even if its JSON parses.
+
+Inference or validation errors appear inline in the dashboard and in the audit
+panel, clear the thinking indicator and pause the run. Resume retries the failed
+turn. Pause completes any in-flight turn before Resume can launch another loop.
+Multiple dashboards can subscribe simultaneously; reconnecting restores saved
+conversation and audit history. Backend process restart does not automatically
+start a run: submit the same configuration/Run ID to continue saved turns.
+
+Run regression checks with `cd backend && npm test`. These use controlled local
+HTTP responses, including a 100-turn run and failure/retry and Pause/Resume races;
+they do not establish compatibility with your actual model.
+
+For the real local-model acceptance check, start your llama.cpp server, then run:
+
+```bash
+cd backend
+# Uses discovery automatically when exactly one model is loaded.
+# Set LLM_TEST_MODEL to an exact discovered ID if multiple models are loaded.
+LLM_BASE_URL=http://127.0.0.1:8080/v1 npm run test:local-model
+```
+
+This creates isolated Bob/Sara states with numeric attributes, runs 100 real turns
+using the unchanged application identity prompts, and preserves the resulting
+conversation, metadata and audit files in the printed temporary directory. It
+stops with a failure on invalid inference output and never substitutes dialogue.

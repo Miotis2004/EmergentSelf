@@ -9,6 +9,8 @@ export interface ExperimentConfig {
     llmConfig: {
         baseUrl: string;
         model: string;
+        maxTokens?: number;
+        outputMode?: 'json_schema' | 'json_only';
     };
 }
 
@@ -47,40 +49,27 @@ export class ExperimentService {
       return this.http.get(`${this.apiUrl}/status`);
   }
 
-  getLlmModels(): Observable<any[]> {
-      return this.http.get<any[]>('http://localhost:3000/api/llm/models');
+  getLlmDefaults(): Observable<any> {
+      return this.http.get('http://localhost:3000/api/llm/config');
+  }
+
+  getLlmModels(baseUrl: string): Observable<{id: string}[]> {
+      return this.http.get<{id: string}[]>('http://localhost:3000/api/llm/models', { params: { baseUrl } });
   }
 
   connectEvents() {
     if (this.eventSource) return;
     this.eventSource = new EventSource('http://localhost:3000/api/events');
-
-    // Status changes
-    this.eventSource.addEventListener('status_changed', (event: MessageEvent) => {
-      this.zone.run(() => {
-        this.events$.next({ type: 'status_changed', data: JSON.parse(event.data) });
-      });
-    });
-
-    // Turn started
-    this.eventSource.addEventListener('turn_started', (event: MessageEvent) => {
-        this.zone.run(() => {
-            this.events$.next({ type: 'turn_started', data: JSON.parse(event.data) });
+    for (const type of ['snapshot', 'status_changed', 'turn_started', 'turn_completed', 'experiment_error', 'connection_error']) {
+        this.eventSource.addEventListener(type, (event: MessageEvent) => {
+            this.zone.run(() => {
+                try { this.events$.next({ type, data: JSON.parse(event.data) }); }
+                catch { this.events$.next({ type: 'connection_error', data: { message: 'Invalid live event; reconnect to restore history' } }); }
+            });
         });
-    });
-
-    // Turn completed
-    this.eventSource.addEventListener('turn_completed', (event: MessageEvent) => {
-        this.zone.run(() => {
-            this.events$.next({ type: 'turn_completed', data: JSON.parse(event.data) });
-        });
-    });
-
-    this.eventSource.onerror = (error) => {
-        console.error('SSE Error:', error);
-        this.zone.run(() => {
-             this.events$.next({ type: 'error', data: error });
-        });
+    }
+    this.eventSource.onerror = () => {
+        this.zone.run(() => this.events$.next({ type: 'connection_error', data: { message: 'Live connection interrupted. Reconnecting and restoring history…' } }));
     };
   }
 

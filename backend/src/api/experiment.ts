@@ -5,11 +5,7 @@ export function createExperimentRouter(controller: ExperimentController): Router
     const router = Router();
 
     router.get('/status', (req: Request, res: Response) => {
-        res.json({
-            status: controller.getStatus(),
-            config: controller.getConfig(),
-            currentTurnIndex: controller.getTurnIndex()
-        });
+        res.json(controller.getState());
     });
 
     router.post('/start', async (req: Request, res: Response) => {
