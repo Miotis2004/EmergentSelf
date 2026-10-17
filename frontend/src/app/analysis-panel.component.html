@@ -13,6 +13,18 @@
   </fieldset>
   <section *ngIf="report">
     <p>{{report.metricVersion}} · {{report.totals.runs}} runs · {{report.totals.successfulResponses}} successful responses · {{report.totals.failedAttempts}} failed attempts · {{report.totals.humanRatings}} human ratings</p>
+    <details *ngIf="report.continuity"><summary>Branch lineage & pre/post continuity measures</summary>
+      <p>{{report.continuity.interpretation}}</p>
+      <div *ngFor="let run of report.continuity.runs"><h4>{{run.branchId}} · source snapshot {{run.source.snapshotId}}</h4>
+        <p>Parent branch {{run.source.parentBranchId || 'none'}} · {{run.interventionCount}} interventions · researcher {{run.actor}}</p>
+        <p *ngFor="let a of run.agents">{{a.agentId}}: source-to-latest self-description lexical similarity {{format(a.selfDescriptionSimilarity)}}.</p>
+        <details><summary>Configuration changes and self-description evidence</summary><pre>{{run.configurationDifferences | json}}</pre><pre>{{run.agents | json}}</pre></details>
+        <div *ngFor="let c of run.comparisons"><strong>{{c.agentId}} / {{c.probeId}} / post turn {{c.postTurnIndex}}</strong><p>{{c.modelPolicy}} · {{c.contextPolicy}} · model differences {{c.modelDifferences | json}}</p>
+          <p>Self-description similarity: {{format(c.selfDescriptionSimilarity)}}. Lexical overlap is not semantic or subjective identity.</p>
+          <table><thead><tr><th>Probe turn</th><th>Pre / post status</th><th>Response similarity</th><th>Source record IDs</th></tr></thead><tbody><tr *ngFor="let row of c.rows"><td>{{row.probeTurn}}</td><td>{{row.preStatus}} / {{row.postStatus}}</td><td>{{format(row.responseSimilarity)}}</td><td>{{row.preRecordId}} / {{row.postRecordId}}</td></tr></tbody></table>
+        </div>
+      </div>
+    </details>
     <details *ngIf="report.social"><summary>Social decisions, task scores & feedback conditions</summary>
       <p>{{report.social.interpretation}}</p>
       <table><thead><tr><th>Feedback condition / matched design</th><th>Runs</th><th>Address / decline fraction</th><th>Mean amount / score</th><th>Within-agent amount change</th></tr></thead><tbody><tr *ngFor="let g of report.social.groups"><td>{{g.condition}} / {{g.designHash.slice(0,12)}}</td><td>{{g.runCount}}</td><td>{{format(g.metrics.addressed.mean)}} / {{format(g.metrics.declined.mean)}}</td><td>{{format(g.metrics.amount.mean)}} / {{format(g.metrics.meanTaskScore.mean)}}</td><td>{{format(g.metrics.amountChange.mean)}}</td></tr></tbody></table>

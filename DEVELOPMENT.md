@@ -158,10 +158,12 @@ No database, online model retraining, reward/punishment, external web access for
 
 ### Acceptance criteria
 
-- [ ] A cloned branch has an auditable provenance linking it to the source snapshot.
-- [ ] Branches have isolated state and logs after cloning.
-- [ ] Memory interventions are reversible in a separate trial branch and fully logged.
-- [ ] Conclusions are limited to measurable identity continuity and behavior, not subjective awareness.
+- [x] A cloned branch has an auditable provenance linking it to the source snapshot.
+- [x] Branches have isolated state and logs after cloning.
+- [x] Memory interventions are reversible in a separate trial branch and fully logged.
+- [x] Conclusions are limited to measurable identity continuity and behavior, not subjective awareness.
+
+**Implementation evidence:** Immutable source-linked branch manifests, isolated state/history, reversible memory/stat/history operations, explicit model/version differences, paired read-only probes, continuity analysis, and recoverable materialization/execution are covered by backend/API and Angular tests. See [PHASE_VI.md](PHASE_VI.md) for schemas, workflows, boundaries and interpretation limits. Local-model experiments remain researcher validation.
 
 ## Phase VII: Research synthesis and publication readiness
 

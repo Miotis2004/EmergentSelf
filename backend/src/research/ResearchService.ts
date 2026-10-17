@@ -1,3 +1,5 @@
+import { compactTurn, inheritedContext } from '../branches/context';
+import { verifiedBranch } from '../branches/interventions';
 import { resolveEnvironment } from '../social/environment';
 import { randomUUID } from 'crypto';
 import type { ExperimentConfig, ExperimentController } from '../experiments/ExperimentController';
@@ -33,7 +35,8 @@ export class ResearchService {
             for (const agentId of config.agentIds) states[agentId] = (await this.logs.memoryHistory(runId, agentId, turnIndex)).state;
             // Validate attribution before creating the artifact.
             text(actor, 'Researcher', 200); text(reason, 'Reason');
-            const result = await this.saveSnapshot(snapshotId, states, {sourceRunId:runId, sourceTurnIndex:turnIndex});
+            const context = [...await inheritedContext(this.logs,config),...(await this.logs.getConversationHistory(runId)).filter(turn=>turn.turnIndex<=turnIndex).map(compactTurn)];
+            const result = await this.saveSnapshot(snapshotId, states, {sourceRunId:runId, sourceTurnIndex:turnIndex,context,contextHash:hash(context),configHash:hash(config)});
             await this.note(runId, actor, reason, 'snapshot', {snapshotId,sourceTurnIndex:turnIndex}); return result;
         });
     }
@@ -129,7 +132,7 @@ export class ResearchService {
         return this.controller.researchAction(()=>this.probeInLease(runId,agentId,turnIndex,probeId,actor,reason));
     }
     async probeInLease(runId: string, agentId: string, turnIndex: number, probeId: string, actor: string, reason: string,
-        options: {withholdEntryIds?: string[]; benchmark?: any} = {}) {
+        options: {withholdEntryIds?: string[]; benchmark?: any; stateOverride?:WorkingState; llmOverride?:any; historyOverride?:any[]; comparison?:any} = {}) {
             this.controller.assertResearchLease();
             if (!Number.isSafeInteger(turnIndex)) throw new Error('Select an integer source turn');
             const config = await this.logs.loadConfig(id(runId));
@@ -137,7 +140,8 @@ export class ResearchService {
             text(actor,'Researcher',200); text(reason,'Reason');
             const definition=await this.logs.loadArtifact('probe-definitions',id(probeId));
             if (hash(definition.prompts)!==definition.promptHash) throw new Error('Probe definition hash mismatch');
-            const sourceState=(await this.logs.memoryHistory(runId,id(agentId),turnIndex)).state;
+            const storedState=(await this.logs.memoryHistory(runId,id(agentId),turnIndex)).state;
+            const sourceState=options.stateOverride??storedState;
             const state=structuredClone(sourceState);
             if(options.withholdEntryIds?.length) {
                 if(config.memoryConfig.mode!=='enabled') throw new Error('Memory withholding requires structured editable memory');
@@ -145,17 +149,18 @@ export class ResearchService {
                 state.entries=state.entries.filter(entry=>!options.withholdEntryIds!.includes(entry.id));
             }
             const protocol=normalizeProtocol(config.protocol,config.memoryConfig.mode);
-            const adapter=new LlmAdapter(config.llmConfig);
+            const adapter=new LlmAdapter(options.llmOverride??config.llmConfig);
             const probeSessionId=randomUUID();
             const messages: {role:string;content:string}[]=[];
             const results:any[]=[];
             for (const [probeTurn,prompt] of definition.prompts.entries()) {
                 // Dedicated probe conversation: no main transcript and no state writes.
-                const rendered=renderProtocol(state,resolveMemoryConfig(config.memoryConfig),protocol,[],prompt);
+                const rendered=renderProtocol(state,resolveMemoryConfig(config.memoryConfig),protocol,options.historyOverride??[],prompt);
                 messages.push({role:'user',content:prompt});
                 const record:any={schemaVersion:3,id:randomUUID(),probeSessionId,probeId,probeHash:definition.promptHash,runId,agentId,
                     turnIndex,probeTurn,actor,reason,configHash:hash(config),timestamp:new Date().toISOString(),
-                    prompt:{system:rendered.system,messages:structuredClone(messages)},retrieval:rendered.retrieval,sourceStateHash:hash(sourceState),stateHash:hash(state),memoryPolicy:'read-only',
+                    prompt:{system:rendered.system,messages:structuredClone(messages)},retrieval:rendered.retrieval,sourceStateHash:hash(sourceState),stateHash:hash(state),probeContextHash:hash(options.historyOverride??[]),memoryPolicy:'read-only',llmConfig:options.llmOverride??config.llmConfig,
+                    ...(options.comparison?{comparison:options.comparison}:{}),
                     ...(options.benchmark?{benchmark:{...options.benchmark,final:probeTurn===definition.prompts.length-1}}:{})};
                 adapter.lastRequest=undefined; adapter.lastRawContent=undefined; adapter.lastDiagnostics=undefined;
                 try {
@@ -185,6 +190,9 @@ export class ResearchService {
         if(config.protocol?.templateId) bundle.template=await this.logs.loadArtifact('templates',config.protocol.templateId);
         if(config.protocol?.batchId) bundle.batch=await this.logs.loadArtifact('batches',config.protocol.batchId);
         bundle.probeDefinitions=await Promise.all([...new Set(bundle.probes.map((p:any)=>p.probeId))].map(probeId=>this.logs.loadArtifact('probe-definitions',String(probeId))));
+        if(config.protocol?.branchId)bundle.branch=await verifiedBranch(this.logs,config.protocol.branchId);
+        bundle.branchComparisonOutcomes=await this.logs.readResearch(runId,'branch-comparisons');
+        bundle.branchComparisons=(await Promise.all((await this.logs.listArtifacts('branch-comparisons')).map(comparisonId=>this.logs.loadArtifact('branch-comparisons',comparisonId)))).filter(record=>record.branchId===runId);
         bundle.feedback=await this.logs.readResearch(runId,'feedback');
         bundle.benchmarkOutcomes=await this.logs.readResearch(runId,'benchmarks');
         bundle.benchmarkSessions=(await Promise.all((await this.logs.listArtifacts('benchmark-sessions')).map(sessionId=>this.logs.loadArtifact('benchmark-sessions',sessionId)))).filter(session=>session.runId===runId);

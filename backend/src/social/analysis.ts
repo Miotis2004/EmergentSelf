@@ -30,7 +30,7 @@ export function analyzeSocial(bundles:any[],windowSize:number){
         const designHash=hash({model:bundle.config.llmConfig,participants:bundle.config.agentIds,topic:bundle.config.initialTopic??'',maxTurns:bundle.config.maxTurns,
             memory:{...memory,mode},social:env.socialConfig,task:env.taskConfig,
             feedbackRules:{positiveScore:env.feedbackConfig.positiveScore,negativeScore:env.feedbackConfig.negativeScore,maxVisible:env.feedbackConfig.maxVisible},
-            prompt:bundle.config.protocol?.systemPrompt,turnPrompt:bundle.config.protocol?.turnPrompt,attributes:bundle.config.protocol?.attributeMode,roles:bundle.config.protocol?.roles,inputLimit:bundle.config.protocol?.inputCharLimit,
+            inheritedHistory:bundle.config.protocol?.historyContextHash??bundle.config.protocol?.historySnapshotId??null,prompt:bundle.config.protocol?.systemPrompt,turnPrompt:bundle.config.protocol?.turnPrompt,attributes:bundle.config.protocol?.attributeMode,roles:bundle.config.protocol?.roles,inputLimit:bundle.config.protocol?.inputCharLimit,
             initialState:bundle.config.protocol?.initialStateHash??(bundle.baseline?.states?hash(bundle.baseline.states):bundle.runId),legacy:bundle.config.protocol?null:bundle.runId});
         return {runId:bundle.runId,condition:environmentCondition(bundle.config),designHash,configuration:env,agents,decisions:rows,
             taskOutcomes:outcomes,feedback:rewards,unsettledDecisions:rows.filter((r:any)=>env.taskConfig.kind!=='none'&&!outcomes.some(o=>o.awards.some((a:any)=>a.decisionEventId===r.eventId))).length};

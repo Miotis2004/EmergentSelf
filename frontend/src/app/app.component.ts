@@ -1,4 +1,5 @@
 import { Component, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewChecked } from '@angular/core';
+import { BranchPanelComponent } from './branch-panel.component';
 import { SocialControlsComponent } from './social-controls.component';
 import { AnalysisPanelComponent } from './analysis-panel.component';
 import { RouterOutlet } from '@angular/router';
@@ -13,7 +14,7 @@ import { Subscription } from 'rxjs';
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, FormsModule, MemoryInspectorComponent, ResearchPanelComponent, AnalysisPanelComponent, RouterOutlet, SocialControlsComponent],
+  imports: [CommonModule, FormsModule, MemoryInspectorComponent, ResearchPanelComponent, AnalysisPanelComponent, RouterOutlet, SocialControlsComponent, BranchPanelComponent],
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.css']
 })

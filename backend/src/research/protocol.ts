@@ -31,6 +31,9 @@ export interface Protocol {
     attributeMode: 'numeric' | 'arbitrary' | 'role';
     roles: Record<string, string>;
     stateScope: 'shared' | 'trial';
+    branchId?: string;
+    historySnapshotId?: string;
+    historyContextHash?: string;
     snapshotId?: string;
     initialStateHash?: string;
     templateId?: string;
@@ -71,9 +74,11 @@ export function normalizeProtocol(input: Partial<Protocol>, mode: MemoryConfig['
     if (!roles || typeof roles !== 'object' || Array.isArray(roles)) throw new Error('Roles must map agent IDs to descriptions');
     for (const [key, value] of Object.entries(roles)) { id(key); text(value, 'Role description', 2000); }
     if (attributeMode !== 'role' && Object.keys(roles).length) throw new Error('Role descriptions require the explicit role condition');
-    for (const key of ['snapshotId','templateId','batchId'] as const) if (input[key] !== undefined) id(input[key]);
+    for (const key of ['snapshotId','templateId','batchId','branchId','historySnapshotId'] as const) if (input[key] !== undefined) id(input[key]);
+    if(input.historyContextHash!==undefined&&!/^[a-f0-9]{64}$/.test(input.historyContextHash))throw new Error('Invalid inherited context hash');
     if (input.initialStateHash !== undefined && !/^[a-f0-9]{64}$/.test(input.initialStateHash)) throw new Error('Invalid initial-state hash');
     for (const key of ['trialIndex','repeatIndex','randomizationSeed'] as const) if (input[key] !== undefined) seed(input[key]);
+    if((input.branchId||input.historySnapshotId)&&stateScope!=='trial')throw new Error('Branches and inherited context require isolated trial state');
     if (stateScope === 'trial' && !input.snapshotId) throw new Error('Isolated trials require a frozen snapshot');
     return { ...input, version: 1, condition, systemPrompt, turnPrompt, inputCharLimit, attributeMode, roles: { ...roles }, stateScope };
 }
