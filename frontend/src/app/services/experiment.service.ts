@@ -5,6 +5,7 @@ import { Observable, Subject } from 'rxjs';
 export interface ExperimentConfig {
     runId: string;
     agentIds: string[];
+    initialTopic?: string;
     maxTurns: number;
     llmConfig: {
         baseUrl: string;

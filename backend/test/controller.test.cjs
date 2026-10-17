@@ -1,42 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { mkdtemp, rm } = require('node:fs/promises');
-const { tmpdir } = require('node:os');
-const path = require('node:path');
-const http = require('node:http');
-const { JsonStorage } = require('../dist/storage/JsonStorage');
-const { JsonlStorage } = require('../dist/storage/JsonlStorage');
 const { MemoryManager } = require('../dist/agents/MemoryManager');
-const { LlmAdapter } = require('../dist/llm/LlmAdapter');
-const { ExperimentController } = require('../dist/experiments/ExperimentController');
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-async function until(predicate) {
-  const deadline = Date.now() + 15000;
-  while (!predicate()) { if (Date.now() > deadline) throw Error('Timed out waiting for controller'); await sleep(5); }
-}
-async function fixture(t, reply) {
-  const root = await mkdtemp(path.join(tmpdir(), 'emergent-test-'));
-  const storage = new JsonStorage(path.join(root, 'agents'));
-  const logs = new JsonlStorage(path.join(root, 'research'));
-  for (const [id, name] of [['bob', 'Bob'], ['sara', 'Sara']]) {
-    await storage.saveAgentIdentity(id, { id, name, stats: { curiosity: { initial: 2, current: 2 } }, memories: [], beliefs: [] });
-  }
-  let requests = 0, concurrent = 0, maximum = 0;
-  const server = http.createServer(async (req, res) => {
-    if (req.url.endsWith('/models')) { res.end(JSON.stringify({ data: [{ id: 'real-loaded-id' }] })); return; }
-    let raw = ''; for await (const part of req) raw += part;
-    concurrent++; maximum = Math.max(maximum, concurrent);
-    const n = requests++;
-    const content = await reply(n, JSON.parse(raw));
-    concurrent--;
-    res.end(JSON.stringify({ model: 'real-loaded-id', choices: [{ finish_reason: 'stop', message: { content } }] }));
-  });
-  await new Promise(r => server.listen(0, '127.0.0.1', r));
-  const controller = new ExperimentController(storage, logs, new LlmAdapter());
-  t.after(async () => { await controller.stop(); await new Promise(r => server.close(r)); await rm(root, { recursive: true, force: true }); });
-  const config = { runId: 'test-run', agentIds: ['bob', 'sara'], maxTurns: 100, llmConfig: { baseUrl: `http://127.0.0.1:${server.address().port}/v1`, model: '' } };
-  return { controller, storage, logs, config, stats: () => ({ requests, maximum }) };
-}
+const { fixture, until, sleep } = require('./helpers.cjs');
 
 test('100 alternating turns with schema validation, exact text, audit events and one inference at a time', async t => {
   const f = await fixture(t, async n => JSON.stringify({ response: `Original turn ${n}\n  untouched.`, memory_operations: [{ action: 'add', type: 'memory', content: `Observed ${n}`, reason: 'test proposal' }] }));

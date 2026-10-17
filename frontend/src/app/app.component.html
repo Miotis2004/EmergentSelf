@@ -7,7 +7,7 @@
         </div>
 
         <div *ngIf="experimentStatus !== 'idle'">
-            <p><strong>Experiment is active. Setup is locked.</strong></p>
+            <p><strong>Saved experiment configuration is locked. Reset to configure the next experiment.</strong></p>
         </div>
 
         <div *ngIf="experimentStatus === 'idle'">
@@ -39,6 +39,11 @@
         <div class="agent-card" *ngFor="let a of availableAgents">
             <strong>{{ a.name }}</strong> ({{ a.id }})<br>
             <small>C: {{a.stats['curiosity']?.initial || 0}}, S: {{a.stats['sociability']?.initial || 0}}</small>
+            <label class="participation-choice">
+                <input type="checkbox" [ngModel]="selectedAgentIds.has(a.id)"
+                    (ngModelChange)="setAgentIncluded(a.id, $event)" [disabled]="configurationLocked">
+                Include in Next Experiment
+            </label>
         </div>
 
     </div>
@@ -73,7 +78,18 @@
             </div>
         </div>
 
-        <fieldset [disabled]="experimentStatus !== 'idle' || requestPending" class="model-config">
+        <div class="form-group">
+            <label for="conversation-topic">Conversation Topic</label>
+            <textarea id="conversation-topic" rows="3" maxlength="1000" [(ngModel)]="initialTopic"
+                [disabled]="configurationLocked" aria-describedby="topic-help"></textarea>
+            <small id="topic-help">Optional starting stimulus for the first turn only (up to 1,000 characters).</small>
+        </div>
+        <div *ngIf="savedAgentIds" class="saved-participants" aria-label="Saved participants">
+            <strong>Participants (turn order):</strong>
+            <ol><li *ngFor="let id of savedAgentIds">{{ participantLabel(id) }}</li></ol>
+        </div>
+
+        <fieldset [disabled]="configurationLocked" class="model-config">
             <legend>Local model</legend>
             <label for="model-url">API base URL</label>
             <input id="model-url" [(ngModel)]="llmBaseUrl" (ngModelChange)="models = []; selectedModel = ''">

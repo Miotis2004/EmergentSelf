@@ -9,9 +9,18 @@ export type RunStatus = 'idle' | 'running' | 'paused' | 'stopped' | 'completed';
 
 export interface ExperimentConfig {
     runId: string;
-    agentIds: string[]; // typically two for Phase I
+    agentIds: string[]; // Immutable participant order for the sequential scheduler.
+    initialTopic?: string; // Legacy configurations omit this field.
     maxTurns: number;
     llmConfig: LlmConfig;
+}
+
+export function normalizeInitialTopic(value: unknown): string {
+    if (value === undefined) return '';
+    if (typeof value !== 'string') throw new Error('Conversation topic must be text');
+    const topic = value.trim();
+    if (topic.length > 1000) throw new Error('Conversation topic must be at most 1,000 characters');
+    return topic;
 }
 
 export class ExperimentController {
@@ -73,39 +82,45 @@ export class ExperimentController {
         if (this.activePromise) throw new Error('A turn loop is still active');
         this.activePromise = this.runLoop().finally(() => { this.activePromise = null; });
     }
-    start(config: ExperimentConfig) { return this.command(async () => {
-        if (this.activePromise || this.status === 'running' || this.status === 'paused') throw new Error('Stop or reset the current experiment before starting another');
-        if (!/^[A-Za-z0-9_-]+$/.test(config.runId) || !Number.isSafeInteger(config.maxTurns) || config.maxTurns < 1 ||
-            !Array.isArray(config.agentIds) || config.agentIds.length < 2 || new Set(config.agentIds).size !== config.agentIds.length ||
-            !config.agentIds.every(id => typeof id === 'string' && /^[A-Za-z0-9_-]+$/.test(id))) throw new Error('Invalid run ID, agent IDs or turn limit');
-        for (const id of config.agentIds) {
-            if (!await this.jsonStorage.loadAgentIdentity(id)) throw new Error(`Agent ${id} missing`);
-        }
-        const llmConfig = resolveLlmConfig(config.llmConfig);
-        const discovery = new LlmAdapter(llmConfig);
-        const models = await discovery.getModels();
-        if (!llmConfig.model) {
-            if (models.length !== 1) throw new Error('Select a loaded model from model discovery');
-            llmConfig.model = models[0].id;
-        }
-        if (!models.some(model => model.id === llmConfig.model)) throw new Error('Selected model is not in the loaded model list');
-        const resolved = { ...config, agentIds: [...config.agentIds], llmConfig };
-        const existing = await this.jsonlStorage.loadConfig(config.runId);
-        if (existing && !isDeepStrictEqual(existing, resolved)) throw new Error('Run ID already has different metadata; use a new run ID to change model, output mode or settings');
-        const history = await this.jsonlStorage.getConversationHistory(config.runId);
-        const events = await this.jsonlStorage.getEventHistory(config.runId);
-        if (!existing) await this.jsonlStorage.saveConfig(config.runId, resolved);
-        this.config = resolved;
-        this.llmAdapter.updateConfig(llmConfig);
-        this.currentTurnIndex = history.length;
-        this.shouldPause = false;
-        this.shouldStop = false;
-        this.lastError = null;
-        this.status = this.currentTurnIndex >= config.maxTurns ? 'completed' : 'running';
-        this.emit('snapshot', { ...this.getState(), turns: history, events });
-        this.publishStatus();
-        if (this.status === 'running') this.launchLoop();
-    }); }
+    start(input: ExperimentConfig) {
+        // Snapshot caller-owned objects before asynchronous discovery or disk reads.
+        const config = structuredClone(input);
+        return this.command(async () => {
+            if (this.activePromise || this.status === 'running' || this.status === 'paused') throw new Error('Stop or reset the current experiment before starting another');
+            if (!/^[A-Za-z0-9_-]+$/.test(config.runId) || !Number.isSafeInteger(config.maxTurns) || config.maxTurns < 1 ||
+                !Array.isArray(config.agentIds) || config.agentIds.length < 2 || new Set(config.agentIds).size !== config.agentIds.length ||
+                !config.agentIds.every(id => typeof id === 'string' && /^[A-Za-z0-9_-]+$/.test(id))) throw new Error('Invalid run ID, agent IDs or turn limit');
+            const initialTopic = normalizeInitialTopic(config.initialTopic);
+            for (const id of config.agentIds) {
+                if (!await this.jsonStorage.loadAgentIdentity(id)) throw new Error(`Agent ${id} missing`);
+            }
+            const llmConfig = resolveLlmConfig(config.llmConfig);
+            const discovery = new LlmAdapter(llmConfig);
+            const models = await discovery.getModels();
+            if (!llmConfig.model) {
+                if (models.length !== 1) throw new Error('Select a loaded model from model discovery');
+                llmConfig.model = models[0].id;
+            }
+            if (!models.some(model => model.id === llmConfig.model)) throw new Error('Selected model is not in the loaded model list');
+            const resolved = { ...config, agentIds: [...config.agentIds], initialTopic, llmConfig };
+            const existing = await this.jsonlStorage.loadConfig(config.runId);
+            if (existing && !isDeepStrictEqual({ ...existing, initialTopic: normalizeInitialTopic(existing.initialTopic) }, resolved)) throw new Error('Run ID already has different metadata; use a new run ID to change participants, topic, model or settings');
+            const history = await this.jsonlStorage.getConversationHistory(config.runId);
+            const events = await this.jsonlStorage.getEventHistory(config.runId);
+            if (!existing && (history.length || events.length)) throw new Error('Run already has research logs without configuration; use a new run ID');
+            if (!existing) await this.jsonlStorage.saveConfig(config.runId, resolved);
+            this.config = resolved;
+            this.llmAdapter.updateConfig(llmConfig);
+            this.currentTurnIndex = history.length;
+            this.shouldPause = false;
+            this.shouldStop = false;
+            this.lastError = null;
+            this.status = this.currentTurnIndex >= config.maxTurns ? 'completed' : 'running';
+            this.emit('snapshot', { ...this.getState(), turns: history, events });
+            this.publishStatus();
+            if (this.status === 'running') this.launchLoop();
+        });
+    }
     pause() { return this.command(async () => {
         if (this.status !== 'running') return;
         this.shouldPause = true;
@@ -208,7 +223,11 @@ ${transcript ? transcript : '(No conversation yet)'}`;
 
         return {
             system,
-            messages: [{ role: 'user', content: `It is your turn to speak, ${identity.name}.` }]
+            messages: [{
+                role: 'user',
+                content: this.currentTurnIndex === 0 && this.config!.initialTopic
+                    ? this.config!.initialTopic : `It is your turn to speak, ${identity.name}.`
+            }]
         };
     }
 
