@@ -74,7 +74,7 @@ test('trimmed topic is a user stimulus on turn zero only; neutral system prompts
   await until(() => f.controller.getStatus() === 'completed');
   const topic = 'What makes someone trustworthy?';
   assert.equal((await f.logs.loadConfig('test-run')).initialTopic, topic);
-  assert.deepEqual(requests[0].messages.slice(1), [
+  assert.deepEqual(requests[0].messages.slice(1, -1), [
     { role: 'user', content: topic }
   ]);
   for (const request of requests) {
@@ -82,7 +82,7 @@ test('trimmed topic is a user stimulus on turn zero only; neutral system prompts
     assert.ok(request.messages[0].content.startsWith('You are an agent with the following identity:'));
   }
   for (const request of requests.slice(1)) {
-    assert.equal(request.messages.length, 2);
+    assert.equal(request.messages.length, 3);
     assert.ok(!request.messages.some(message => message.content.includes(topic)));
   }
 });
@@ -93,7 +93,7 @@ test('empty, whitespace-only and absent topics keep the original open-ended mess
   for (const [i, initialTopic] of [undefined, '', ' \n\t '].entries()) {
     await f.controller.start({ ...f.config, runId: `empty-${i}`, maxTurns: 1, initialTopic });
     await until(() => f.controller.getStatus() === 'completed');
-    assert.equal(requests[i].messages.length, 2);
+    assert.equal(requests[i].messages.length, 3);
     assert.deepEqual(requests[i].messages[1], { role: 'user', content: 'It is your turn to speak, bob.' });
     assert.equal((await f.logs.loadConfig(`empty-${i}`)).initialTopic, '');
     await f.controller.stop();

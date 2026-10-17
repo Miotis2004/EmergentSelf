@@ -16,13 +16,13 @@ async function server(t, handler) {
 }
 const envelope = (content, finish_reason = 'stop') => ({ model: 'loaded-model', choices: [{ message: { content }, finish_reason }], usage: { prompt_tokens: 123, completion_tokens: 45, total_tokens: 168 } });
 
-test('preserves exact dialogue, normalizes absent operations, records safe diagnostics and uses 2048 tokens', async t => {
+test('preserves exact dialogue, requires explicit operations, records safe diagnostics and uses 2048 tokens', async t => {
   const original = 'Hello, Sara.\n  Unchanged words and whitespace. 私';
   const baseUrl = await server(t, payload => {
     assert.equal(payload.max_tokens, 2048);
     assert.equal(payload.response_format.type, 'json_schema');
     assert.equal(payload.messages[0].content, 'unchanged identity');
-    return { body: envelope(JSON.stringify({ response: original })) };
+    return { body: envelope(JSON.stringify({ response: original, memory_operations: [] })) };
   });
   const adapter = new LlmAdapter({ baseUrl, model: 'loaded-model' });
   assert.deepEqual(await adapter.generateTurn('unchanged identity', []), { response: original, memory_operations: [] });
@@ -36,6 +36,7 @@ test('preserves exact dialogue, normalizes absent operations, records safe diagn
 
 test('rejects HTTP, envelope, truncation, JSON and schema failures with diagnostics and no automatic fallback', async t => {
   const cases = [
+    [{ body: envelope('{"response":"hello"}') }, /agent-turn schema/],
     [{ body: '<html>private memory content</html>' }, /non-JSON HTTP body/],
     [{ status: 400, body: { error: 'schema unsupported' } }, /HTTP 400.*No automatic fallback/],
     [{ body: {} }, /missing choices/],
@@ -83,4 +84,18 @@ test('JSON-only compatibility is explicit; environment defaults and discovery ar
   const adapter = new LlmAdapter({ baseUrl, model: 'actual-model' });
   assert.deepEqual(await adapter.getModels(), [{ id: 'actual-model' }]);
   assert.equal((await adapter.generateTurn('', [])).response, 'verbatim');
+});
+
+test('input budgets include the transport contract without dropping instructions',async t=>{
+  let calls=0;
+  const baseUrl=await server(t,()=>{calls++;return {body:envelope('{"response":"JSON is our discussion topic.","memory_operations":[]}')};});
+  const adapter=new LlmAdapter({baseUrl,model:'loaded-model'});
+  const {outputContract}=require('../dist/llm/LlmAdapter');
+  const {responseSchema}=require('../dist/llm/agentTurnSchema');
+  const size='identity'.length+'hello'.length+outputContract(responseSchema()).length;
+  await assert.rejects(adapter.generateTurn('identity',[{role:'user',content:'hello'}],size-1),/input character limit/);
+  assert.equal(calls,0);assert.equal(adapter.lastValidation.stage,'request');assert.equal(adapter.lastValidation.status,'failed');
+  assert.equal(adapter.lastRequest.messages.at(-1).content,outputContract(responseSchema()));
+  assert.equal((await adapter.generateTurn('identity',[{role:'user',content:'hello'}],size)).response,'JSON is our discussion topic.');
+  assert.equal(calls,1);
 });

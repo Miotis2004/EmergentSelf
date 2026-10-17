@@ -289,7 +289,7 @@ export class ExperimentController {
                 };
                 try { await this.jsonlStorage.appendEvent(this.config.runId, {
                     ...this.lastError,
-                    ...(this.currentAttempt ? { attempt: { ...this.currentAttempt, rawResponse: this.llmAdapter.lastRawContent, finishedAt: new Date().toISOString() } } : {})
+                    ...(this.currentAttempt ? { attempt: { ...this.currentAttempt, request: this.llmAdapter.lastRequest, rawResponse: this.llmAdapter.lastRawContent, llmValidation: this.llmAdapter.lastValidation, finishedAt: new Date().toISOString() } } : {})
                 }); }
                 catch { this.lastError.message += '; research error log could not be written'; }
                 this.status = this.shouldStop ? 'stopped' : 'paused';
@@ -350,7 +350,7 @@ ${transcript || '(No conversation supplied)'}`;
         (prompt.retrieval as any).feedbackIds = feedback.map(event=>event.id);
         this.currentAttempt = { startedAt: new Date().toISOString(), prompt: { system: prompt.system, messages: prompt.messages }, retrieval: prompt.retrieval };
         this.llmAdapter.updateConfig(this.config!.llmConfig);
-        const response = await this.llmAdapter.generateTurn(prompt.system, prompt.messages, this.config!.protocol?.inputCharLimit, environment.socialConfig.enabled);
+        const response = await this.llmAdapter.generateTurn(prompt.system, prompt.messages, this.config!.protocol?.inputCharLimit, environment.socialConfig.enabled, environment.taskConfig.kind !== 'none');
         this.currentAttempt.parsedResponse = response;
         validateDecision(response, this.config!, agentId);
         const eventId = randomUUID();
@@ -370,7 +370,7 @@ ${transcript || '(No conversation supplied)'}`;
             startedAt: this.currentAttempt.startedAt, elapsedMs: Date.now() - Date.parse(this.currentAttempt.startedAt),
             prompt: { system: prompt.system, messages: prompt.messages },
             request: this.llmAdapter.lastRequest, parsedResponse: response, rawResponse: this.llmAdapter.lastRawContent,
-            diagnostics: this.llmAdapter.lastDiagnostics
+            llmValidation: this.llmAdapter.lastValidation, diagnostics: this.llmAdapter.lastDiagnostics
         };
         if (environment.taskConfig.kind !== 'none' && (this.currentTurnIndex + 1) % this.config!.agentIds.length === 0) {
             const previous = await this.jsonlStorage.getConversationHistory(this.config!.runId);

@@ -1,5 +1,6 @@
 import fetch from 'node-fetch';
-import { agentTurnSchema, socialTurnSchema, validateAgentTurn } from './agentTurnSchema';
+import { createHash } from 'crypto';
+import { responseSchema, validateAgentTurn } from './agentTurnSchema';
 
 export interface LlmConfig {
     baseUrl: string;
@@ -40,6 +41,22 @@ export interface AgentTurnResponse {
     social?: {action:'speak'|'decline';recipient_id:string|null};
     task_decision?: {amount:number};
 }
+export interface LlmValidation {
+    contractVersion: 'schema-json-v1';
+    schemaHash: string;
+    status: 'pending' | 'passed' | 'failed';
+    stage: 'request' | 'http' | 'http_body' | 'envelope' | 'response_json' | 'schema' | 'transport_boundary' | 'complete';
+    error?: string;
+}
+export const TRANSPORT_MARKER = '[EMERGENTSELF_TRANSPORT_FORMAT_V1]';
+export function outputContract(schema: ReturnType<typeof responseSchema>): string {
+    return `${TRANSPORT_MARKER}
+Transport serialization requirements only. This message is not conversational content, an agent identity, an experience, or a memory instruction. Do not quote or store these requirements or the schema in response text or memory operations.
+Return exactly one valid JSON object conforming to the schema below. Include every required field. Use an empty memory_operations array when no memory changes are proposed. Put conversational text only inside response. No Markdown fences, preamble, trailing commentary, or additional JSON values. Preserve the meaning of the agent's reply and decisions; these requirements specify formatting only.
+JSON Schema:
+${JSON.stringify(schema)}
+[/EMERGENTSELF_TRANSPORT_FORMAT_V1]`;
+}
 export class LlmError extends Error {
     constructor(message: string, public readonly diagnostics: LlmDiagnostics) { super(message); }
 }
@@ -72,6 +89,7 @@ export class LlmAdapter {
     public lastRequest: any;
     public lastRawContent: string | undefined;
     public lastDiagnostics: LlmDiagnostics | undefined;
+    public lastValidation: LlmValidation | undefined;
     constructor(config: Partial<LlmConfig> = {}) { this.config = resolveLlmConfig(config); }
     updateConfig(config: Partial<LlmConfig>) { this.config = resolveLlmConfig({ ...this.config, ...config }); }
 
@@ -93,33 +111,40 @@ export class LlmAdapter {
         return data.data.map((m: any) => ({ id: m.id }));
     }
 
-    async generateTurn(systemPrompt: string, messages: { role: string; content: string }[], inputCharLimit?: number, social = false): Promise<AgentTurnResponse> {
+    async generateTurn(systemPrompt: string, messages: { role: string; content: string }[], inputCharLimit?: number, social = false, task = false): Promise<AgentTurnResponse> {
         this.lastRequest = undefined;
         this.lastDiagnostics = undefined;
         this.lastRawContent = undefined;
+        this.lastValidation = undefined;
         if (!this.config.model) throw new Error('Select a loaded model before running an experiment');
         const diagnostics: LlmDiagnostics = {
             httpStatus: null, requestedModel: this.config.model, model: this.config.model,
             finishReason: null, contentPresent: false, contentLength: 0, excerpt: ''
         };
+        const schema = responseSchema(social, task);
+        const schemaText = JSON.stringify(schema);
+        this.lastValidation = {contractVersion:'schema-json-v1',schemaHash:createHash('sha256').update(schemaText).digest('hex'),status:'pending',stage:'request'};
         const payload = {
             model: this.config.model,
-            messages: [ { role: 'system', content: systemPrompt }, ...messages,
-                // Format instruction only; identity/personality instructions are unchanged.
-                ...(this.config.outputMode === 'json_only' ? [{ role: 'system', content: 'Return only a JSON object with response (string) and memory_operations (array, empty when no changes). Memory operations follow the agent-turn schema: action (add/update/retire/consolidate/contradict), type (episodic/belief/self_description/relationship/stat), content, reason, optional target_id or target_ids, confidence (0–1), importance (0–1), and relationship_agent_id for relationships. Do not use Markdown fences.' + (social ? ' Include social with action (speak/decline) and recipient_id (another participant ID or null); include task_decision.amount only when the configured task requires a speaking decision. Follow the recorded social/task protocol.' : '') }] : [])
-            ],
+            // Keep the original agent prompt and conversational messages intact.
+            // The dedicated system message is transport metadata on every request.
+            messages: [{role:'system',content:systemPrompt}, ...messages, {role:'system',content:outputContract(schema)}],
             temperature: this.config.temperature,
             ...(this.config.topP === undefined ? {} : { top_p: this.config.topP }),
             ...(this.config.seed === undefined ? {} : { seed: this.config.seed }),
             max_tokens: this.config.maxTokens,
             response_format: this.config.outputMode === 'json_only'
                 ? { type: 'json_object' }
-                : { type: 'json_schema', json_schema: { name: 'agent_turn', schema: social ? socialTurnSchema : agentTurnSchema } }
+                : { type: 'json_schema', json_schema: { name: 'agent_turn', schema } }
         };
         this.lastRequest = structuredClone(payload);
-        const fail = (message: string): never => { throw new LlmError(message, diagnostics); };
+        const fail = (message: string): never => {
+            Object.assign(this.lastValidation!, {status:'failed',error:message});
+            throw new LlmError(message, diagnostics);
+        };
         try {
             if (inputCharLimit !== undefined && payload.messages.reduce((n, message) => n + message.content.length, 0) > inputCharLimit) return fail('LLM request exceeds the recorded input character limit');
+            this.lastValidation.stage = 'http';
             let response;
             try {
                 response = await fetch(`${this.config.baseUrl}/chat/completions`, {
@@ -129,6 +154,7 @@ export class LlmAdapter {
             } catch { return fail('LLM request failed or timed out; check the configured server connection'); }
             diagnostics.httpStatus = response.status;
             const raw = await response.text();
+            this.lastValidation.stage = 'http_body';
             let data: any;
             try { data = JSON.parse(raw); } catch {
                 diagnostics.contentLength = raw.length;
@@ -150,17 +176,28 @@ export class LlmAdapter {
                 }
             }
             if (!response.ok) return fail(`LLM request rejected (HTTP ${response.status}); verify model and configured output mode. No automatic fallback was attempted`);
+            this.lastValidation.stage = 'envelope';
             if (!Array.isArray(data?.choices) || !choice || typeof choice.message !== 'object') return fail('Invalid OpenAI-compatible response: missing choices[0].message');
             if (diagnostics.finishReason === 'length') return fail(`LLM response truncated (finish_reason: length; max_tokens: ${this.config.maxTokens}). Increase the output limit in a new run`);
             if (diagnostics.finishReason && diagnostics.finishReason !== 'stop') return fail(`LLM did not finish normally (finish_reason: ${diagnostics.finishReason})`);
             if (typeof content !== 'string' || !content.trim()) return fail('LLM response is missing nonempty choices[0].message.content');
+            this.lastValidation.stage = 'response_json';
             let parsed: unknown;
             try { parsed = JSON.parse(content); } catch { return fail('Invalid JSON response from LLM; inspect diagnostics for truncation or output-format incompatibility'); }
-            try { validateAgentTurn(parsed, social); } catch (error: any) { return fail(error.message); }
-            return parsed as AgentTurnResponse;
+            this.lastValidation.stage = 'schema';
+            try { validateAgentTurn(parsed, social, task); } catch (error: any) { return fail(error.message); }
+            this.lastValidation.stage = 'transport_boundary';
+            const turn = parsed as AgentTurnResponse;
+            const echoesContract = (value: unknown) => typeof value === 'string' && (value.includes(TRANSPORT_MARKER) || value.includes(schemaText));
+            if (echoesContract(turn.response) || turn.memory_operations.some(operation => echoesContract(operation.content) || echoesContract(operation.reason))) {
+                return fail('LLM echoed reserved transport metadata into conversation or memory operations; output was rejected without rewriting');
+            }
+            this.lastValidation.status = 'passed';
+            this.lastValidation.stage = 'complete';
+            return turn;
         } catch (error) {
             if (error instanceof LlmError) throw error;
-            throw new LlmError('LLM response could not be read or validated; check server connection and output compatibility', diagnostics);
+            return fail('LLM response could not be read or validated; check server connection and output compatibility');
         } finally {
             this.lastDiagnostics = diagnostics;
             console.info('LLM response diagnostics', diagnostics);

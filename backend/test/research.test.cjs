@@ -125,7 +125,7 @@ test('standardized multi-turn probes are isolated, logged with exact requests an
  assert.equal(result.results.length,2);assert.ok(result.results.every(r=>r.status==='success'&&r.memoryPolicy==='read-only'));
  assert.equal(f.stats().requests,beforeCalls+2);
  assert.equal(result.results[0].request.messages[1].content,'What do you remember?');
- assert.equal(result.results[1].request.messages.at(-1).content,'What evidence supports that?');
+ assert.equal(result.results[1].request.messages.at(-2).content,'What evidence supports that?');
  assert.equal(result.results[0].turnIndex,0);assert.equal(result.results[0].runId,runId);
  assert.ok(!result.results[0].prompt.system.includes('Unchanged model text'));
  assert.equal(hash(await f.logs.getConversationHistory(runId)),historyBefore);
@@ -180,12 +180,12 @@ test('starting snapshot integrity and immutable configuration are enforced acros
 
 test('probe budget failures do not misattribute the previous request or model response',async t=>{
  const f=await fixture(t,reply);const research=service(f);
- await research.template('budget-probe',config(f,{protocol:{systemPrompt:'{id}',turnPrompt:'{name}',inputCharLimit:20}}));
+ await research.template('budget-probe',config(f,{protocol:{systemPrompt:'{id}',turnPrompt:'{name}',inputCharLimit:20+require('../dist/llm/LlmAdapter').outputContract(require('../dist/llm/agentTurnSchema').responseSchema()).length}}));
  const batch=await research.batch('budget-probe-batch','budget-probe',1,['enabled'],2);const runId=batch.trials[0].runId;
  await start(f,research,'budget-probe-batch',runId);await research.defineProbe('budget-probe-definition',['A','B']);
  const before=f.stats().requests;const result=await research.probe(runId,'bob',0,'budget-probe-definition','Researcher','Check a fixed budget');
  assert.equal(result.results[0].status,'success');assert.equal(result.results[1].status,'error');
- assert.equal(result.results[1].request,undefined);assert.equal(result.results[1].rawResponse,undefined);
+ assert.equal(result.results[1].request.messages.at(-2).content,'B');assert.equal(result.results[1].llmValidation.stage,'request');assert.equal(result.results[1].rawResponse,undefined);
  assert.equal(f.stats().requests,before+1);
 });
 

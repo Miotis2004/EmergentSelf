@@ -147,7 +147,7 @@ test('JSON-only social output follows the same decisions and preserves actual sp
  const requests=[];const f=await fixture(t,(n,p)=>{requests.push(p);return JSON.stringify(social('  Exact\nmodel text.','sara'));});
  await f.controller.start(config(f,{maxTurns:1,taskConfig:{kind:'none'},llmConfig:{...f.config.llmConfig,outputMode:'json_only'}}));await done(f);
  assert.equal(f.controller.getStatus(),'completed');assert.equal(requests[0].response_format.type,'json_object');
- assert.ok(requests[0].messages.at(-1).content.includes('Include social'));
+ assert.ok(requests[0].messages.at(-1).content.includes('"social"'));
  assert.equal((await f.logs.getConversationHistory(f.config.runId))[0].response,'  Exact\nmodel text.');
 });
 
