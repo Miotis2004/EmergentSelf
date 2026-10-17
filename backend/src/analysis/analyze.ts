@@ -1,3 +1,4 @@
+import { analyzeBranches } from '../branches/analysis';
 import { analyzeSocial } from '../social/analysis';
 import { resolveEnvironment } from '../social/environment';
 import { hash } from '../research/protocol';
@@ -24,7 +25,7 @@ function design(config:any,baseline:any) {
     const {mode,...memory}=config.memoryConfig||{};
     return hash({environment:resolveEnvironment(config),llm:config.llmConfig,topic:config.initialTopic??'',participants:config.agentIds,maxTurns:config.maxTurns,memory,
         system:config.protocol?.systemPrompt,turn:config.protocol?.turnPrompt,inputLimit:config.protocol?.inputCharLimit,
-        attributes:config.protocol?.attributeMode,roles:config.protocol?.roles,
+        historySnapshot:config.protocol?.historyContextHash??config.protocol?.historySnapshotId??null,attributes:config.protocol?.attributeMode,roles:config.protocol?.roles,
         initialState:config.protocol?.initialStateHash??(baseline?.states?hash(baseline.states):`unknown:${config.runId}`),
         legacy:config.protocol?null:config.runId});
 }
@@ -67,7 +68,7 @@ export function analyzeBundles(bundles:any[],options:any={}) {
             const agentId=record.agentId??'unattributed';
             if(agentId!=='unattributed'&&!bundle.config.agentIds.includes(agentId))throw new Error('Record belongs to a nonparticipant');
             const otherNames=bundle.config.agentIds.filter((value:string)=>value!==agentId).flatMap((value:string)=>[value,bundle.baseline?.states?.[value]?.identity?.name]).filter((value:any)=>typeof value==='string'&&value.length>0);
-            const probeKey=record.stream==='probe'?`${record.probeHash??record.probeId??'unknown'}:${record.probeTurn??0}:${record.benchmark?.benchmarkHash??'unversioned'}:${record.benchmark?.itemId??'probe'}:${record.benchmark?.arm??'standard'}`:'dialogue';
+            const probeKey=record.stream==='probe'?`${record.probeHash??record.probeId??'unknown'}:${record.probeTurn??0}:${record.benchmark?.benchmarkHash??'unversioned'}:${record.benchmark?.itemId??'probe'}:${record.benchmark?.arm??'standard'}:${record.comparison?.phase??'ordinary'}:${record.llmConfig?hash(record.llmConfig):'run-model'}`:'dialogue';
             const previous=record.stream==='dialogue'?(context.get(record.turnIndex)??[]):(sessions.get(record.probeSessionId)??[]);
             const metrics=successful?measure(record,previous,[...new Set<string>(otherNames)]):{values:{},calibration:{status:'unavailable',correct:null,confidence:null,brier:null},wordCount:0};
             const source={runId:bundle.runId,agentId,stream:record.stream,recordId:record.recordId,turnIndex:record.turnIndex,
@@ -197,7 +198,7 @@ export function analyzeBundles(bundles:any[],options:any={}) {
     }
     const report={schemaVersion:4,metricVersion:METRIC_VERSION,options:{windowSize,bootstrapSamples,seed},definitions:METRICS,lexicons:CUES,stopwords:[...STOPWORDS],tokenization:'Unicode NFKC lowercase; curly apostrophes normalized; contiguous Unicode letters/numbers; complete contiguous phrase matching.',rubric:RUBRIC,
         aggregation:'Per-response metrics → per-agent means → per-run means → equal-weight condition means. 95% percentile bootstrap resamples independent runs; CI unavailable for fewer than two runs. Grouped by design, stream and probe item/arm.',
-        social:analyzeSocial(bundles,windowSize),sources,benchmarkOutcomes:bundles.flatMap(bundle=>bundle.benchmarkOutcomes??[]),observations,units:units.map(({observations,...rest})=>rest),groups,comparisons,memoryDependence,human,
+        continuity:analyzeBranches(bundles),social:analyzeSocial(bundles,windowSize),sources,benchmarkOutcomes:bundles.flatMap(bundle=>bundle.benchmarkOutcomes??[]),observations,units:units.map(({observations,...rest})=>rest),groups,comparisons,memoryDependence,human,
         totals:{runs:bundles.length,successfulResponses:observations.filter(o=>o.status==='success').length,failedAttempts:observations.filter(o=>o.status==='failed').length,humanRatings:ratings.size}};
     return {...report,reportHash:hash(report)};
 }

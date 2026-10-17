@@ -1,3 +1,5 @@
+import { BranchService } from './branches/BranchService';
+import { createBranchesRouter } from './api/branches';
 import { createFeedbackRouter } from './api/feedback';
 import { FeedbackService } from './social/FeedbackService';
 import express from 'express';
@@ -31,6 +33,7 @@ const controller = new ExperimentController(jsonStorage, jsonlStorage, llmAdapte
 app.use('/api/agents', createAgentsRouter(jsonStorage));
 const research = new ResearchService(controller, jsonlStorage, jsonStorage);
 app.use('/api/research', createResearchRouter(research));
+app.use('/api/branches',createBranchesRouter(new BranchService(controller,jsonlStorage,research)));
 app.use('/api/analysis', createAnalysisRouter(new AnalysisService(controller, jsonlStorage, research), new BenchmarkService(controller, jsonlStorage, research)));
 app.use('/api/research',createFeedbackRouter(new FeedbackService(controller,jsonlStorage)));
 app.use('/api/experiment', createExperimentRouter(controller, jsonlStorage));

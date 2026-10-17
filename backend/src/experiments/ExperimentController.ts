@@ -1,3 +1,5 @@
+import { inheritedContext } from '../branches/context';
+import { verifiedBranch } from '../branches/interventions';
 import { JsonStorage } from '../storage/JsonStorage';
 import { JsonlStorage, TurnProjectionError } from '../storage/JsonlStorage';
 import { LlmAdapter, LlmConfig, LlmError, resolveLlmConfig } from '../llm/LlmAdapter';
@@ -145,6 +147,12 @@ export class ExperimentController {
             try {
                 await this.jsonlStorage.recoverPendingTurns(this.jsonStorage);
                 this.activeStorage = protocol?.stateScope === 'trial' ? this.jsonlStorage.trialStorage(config.runId) : this.jsonStorage;
+                if(protocol?.branchId){
+                    const branch=await verifiedBranch(this.jsonlStorage,protocol.branchId);
+                    if(hash(config)!==branch.configHash)throw new Error('Start branches with their exact saved configuration');
+                    if(hash(await this.jsonlStorage.loadArtifact('snapshots',branch.snapshot.snapshotId))!==hash(branch.snapshot))throw new Error('Branch snapshot differs from its manifest');
+                }
+                await inheritedContext(this.jsonlStorage,config);
                 let startingStates: any;
                 if (protocol?.stateScope === 'trial') {
                     const snapshot = await this.jsonlStorage.loadArtifact('snapshots', protocol.snapshotId!);
@@ -300,7 +308,7 @@ export class ExperimentController {
         const config = resolveMemoryConfig(this.config!.memoryConfig);
         const identity = state.identity;
         const retrieved = retrieveMemory(state, config);
-        const history = await this.jsonlStorage.getConversationHistory(this.config!.runId);
+        const history = [...await inheritedContext(this.jsonlStorage,this.config),...await this.jsonlStorage.getConversationHistory(this.config!.runId)];
         if (this.config!.protocol) return renderProtocol(state, config, normalizeProtocol(this.config!.protocol, config.mode), history,
             this.currentTurnIndex === 0 && this.config!.initialTopic ? this.config!.initialTopic : undefined);
         const transcript = boundedTranscript(history, config);

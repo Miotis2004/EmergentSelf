@@ -1,0 +1,54 @@
+<details><summary><strong>Identity continuity, branches & interventions</strong></summary>
+ <p>Branches copy participant state into isolated runs. Lineage and observed continuity describe behavior and state; they do not establish subjective awareness.</p>
+ <p *ngIf="error" role="alert">{{error}}</p><p *ngIf="message" role="status">{{message}}</p><button (click)="refresh()">Refresh branch sources</button>
+ <fieldset [disabled]="busy || running"><legend>New immutable branch</legend>
+  <p>Capture a historical snapshot with the experimental controls first. The source run must have a fixed Phase III protocol. A branch baseline source uses its saved initial state; capture a fresh snapshot to branch from its later evolution.</p>
+  <label>New branch / run ID <input [(ngModel)]="branchId"></label>
+  <label>Source type <select [(ngModel)]="sourceMode"><option value="snapshot">Historical snapshot</option><option value="branch">Saved branch baseline</option></select></label>
+  <label>Source ID <input [attr.list]="sourceMode === 'snapshot' ? 'branch-snapshots' : 'branch-ids'" [(ngModel)]="sourceId"></label>
+  <label>New turns to run <input type="number" min="1" max="100000" [(ngModel)]="maxTurns"></label>
+  <label>Researcher <input [(ngModel)]="actor"></label><label>Rationale <textarea [(ngModel)]="reason" maxlength="4000"></textarea></label>
+  <label><input type="checkbox" [(ngModel)]="overrideModel">Use a different endpoint, loaded model or version</label>
+  <div *ngIf="overrideModel"><label>Model endpoint <input [(ngModel)]="baseUrl"></label><button (click)="discover()">Discover branch models</button>
+   <label>Loaded model <input list="branch-models" [(ngModel)]="model"></label><label>Model version / weight hash (or explicit unverified declaration) <input [(ngModel)]="modelVersion"></label>
+  </div>
+  <fieldset><legend>Ordered interventions (leave empty for a control clone)</legend>
+   <label>Intervention <select [(ngModel)]="kind"><option value="withhold">Withhold selected memories</option><option value="restore">Restore withheld memories</option><option value="transplant">Transplant from donor snapshot</option><option value="swap">Swap selected memories</option><option value="attributes">Change current numeric attribute</option><option value="history">Change conversational history only</option><option value="reverse">Reverse a recorded intervention</option></select></label>
+   <label *ngIf="kind !== 'history' && kind !== 'reverse'">Target agent ID <input [(ngModel)]="agentId"></label>
+   <label *ngIf="['withhold','restore','transplant','swap'].includes(kind)">Selected active entry IDs (whitespace separated) <textarea [(ngModel)]="entryIds"></textarea></label>
+   <div *ngIf="kind === 'restore' || kind === 'reverse'"><label>Branch containing the original intervention <input list="branch-ids" [(ngModel)]="fromBranchId"></label><label>Original operation index (starts at 0) <input type="number" min="0" [(ngModel)]="operationIndex"></label></div>
+   <div *ngIf="kind === 'transplant' || (kind === 'history' && historyMode === 'replace')"><label>Donor snapshot ID <input list="branch-snapshots" [(ngModel)]="donorSnapshotId"></label></div>
+   <label *ngIf="kind === 'transplant'">Donor agent ID <input [(ngModel)]="donorAgentId"></label>
+   <div *ngIf="kind === 'swap'"><label>Other participant ID <input [(ngModel)]="otherAgentId"></label><label>Other participant's selected entry IDs <textarea [(ngModel)]="otherEntryIds"></textarea></label></div>
+   <details *ngIf="kind === 'transplant' || kind === 'swap'"><summary>Relationship subject mappings</summary><p>If an imported relationship would point at its new owner or an absent participant, explicitly map the old subject to another selected participant. Entry wording is preserved.</p>
+    <label>Mapping into target agent (JSON object, optional) <textarea [(ngModel)]="relationshipMap" placeholder='{"bob":"sara"}'></textarea></label>
+    <label *ngIf="kind === 'swap'">Mapping into other participant (JSON object, optional) <textarea [(ngModel)]="otherRelationshipMap"></textarea></label>
+   </details>
+   <div *ngIf="kind === 'attributes'"><label>Existing stat key <input [(ngModel)]="statKey"></label><label>Current value (0–10) <input type="number" min="0" max="10" [(ngModel)]="statValue"></label><p>Initial stats remain immutable. Requires structured memory and numeric/arbitrary attribute presentation.</p></div>
+   <label *ngIf="kind === 'history'">History operation <select [(ngModel)]="historyMode"><option value="clear">Clear inherited conversation</option><option value="replace">Replace with donor snapshot context</option></select></label>
+   <button (click)="addOperation()" [disabled]="operations.length >= 20">Add intervention</button>
+   <div *ngFor="let op of operations;index as i"><strong>{{i}}:</strong> {{op | json}} <button (click)="removeOperation(i)">Remove</button></div>
+  </fieldset><button (click)="create()">Create immutable branch</button>
+ </fieldset>
+ <fieldset [disabled]="busy || running"><legend>Saved branch execution and inspection</legend>
+  <label>Branch ID <input list="branch-ids" [(ngModel)]="selectedBranch"></label><button (click)="load()">Inspect</button><button (click)="prepare()">Prepare baseline</button><button (click)="start()">Start saved branch</button>
+  <p>Stop or reset a paused active run before starting another. Resume uses the main lifecycle control and retains the branch's saved state and configuration.</p>
+  <div *ngIf="saved"><p>Source {{saved.source.sourceRunId}} at turn {{saved.source.sourceTurnIndex}}, snapshot {{saved.source.snapshotId}}. Parent branch: {{saved.source.parentBranchId || 'none'}}.</p>
+   <p>Model {{saved.configuration.llmConfig.model}} · version {{saved.configuration.llmConfig.modelVersion}}. Inherited context: {{saved.snapshot.context.length}} source turns. New maximum turns: {{saved.configuration.maxTurns}}.</p>
+   <details><summary>Lineage, configuration differences and before/after evidence</summary><pre>{{saved.source | json}}</pre><pre>{{saved.configurationDifferences | json}}</pre><pre>{{saved.interventions | json}}</pre></details>
+  </div>
+ </fieldset>
+ <fieldset [disabled]="busy || running"><legend>Paired pre/post probes</legend>
+  <p>Both phases are read-only and logged in the selected branch. Pre uses its source snapshot; post uses the selected branch turn. This can be run at the prepared baseline (-1) or after evolution.</p>
+  <label>Probe agent ID <input [(ngModel)]="agentId"></label><label>Saved probe definition <input list="branch-probes" [(ngModel)]="probeId"></label>
+  <label>Post-intervention branch turn (-1 for initial baseline) <input type="number" min="-1" [(ngModel)]="postTurnIndex"></label>
+  <label>Models <select [(ngModel)]="modelPolicy"><option value="same_branch">Same branch model for both phases</option><option value="source_vs_branch">Source model before; branch model after</option></select></label>
+  <label>Context <select [(ngModel)]="contextPolicy"><option value="isolated">Isolated standardized probes</option><option value="phase_history">Each phase's bounded conversation history</option></select></label>
+  <button (click)="runPair()">Run paired probes</button><p *ngFor="let outcome of pair?.outcomes">{{outcome.phase}}: {{outcome.status}} · {{outcome.attempts}} attempts · {{outcome.unrunTurns}} unrun turns. {{outcome.error}}</p>
+  <p>Generate an analysis report for the branch to inspect paired responses and self-description stability. Model changes and unrun/failed probes remain explicit.</p>
+ </fieldset>
+ <datalist id="branch-ids"><option *ngFor="let id of catalog.branches" [value]="id"></option></datalist>
+ <datalist id="branch-snapshots"><option *ngFor="let id of snapshots" [value]="id"></option></datalist>
+ <datalist id="branch-probes"><option *ngFor="let id of probes" [value]="id"></option></datalist>
+ <datalist id="branch-models"><option *ngFor="let m of models" [value]="m.id"></option></datalist>
+</details>

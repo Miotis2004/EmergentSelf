@@ -455,3 +455,7 @@ No additional services or dependencies are required. Run the backend and Angular
 ## Phase V social interaction and feedback
 
 No additional services or dependencies are required. Use **Social interaction, tasks & feedback** to configure the next run. Freeze a feedback-enabled template and include matched feedback-off arms for controlled batches. [PHASE_V.md](PHASE_V.md) describes exact payoff rules, feedback delivery, recovery, API fields and analysis.
+
+## Phase VI branches and identity continuity
+
+No additional dependencies or services are required. Capture a historical snapshot from a fixed-protocol run, then use **Identity continuity, branches & interventions** to create, inspect, prepare and start independent runs. [PHASE_VI.md](PHASE_VI.md) documents reversible operations, model variants, paired probes, API fields and analysis.

@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
 import { JsonStorage } from './JsonStorage';
@@ -119,17 +120,23 @@ export class JsonlStorage {
     async loadBaseline(runId: string): Promise<any> {
         return JSON.parse(await fs.readFile(path.join(this.getExperimentDir(runId), 'memory-baseline.json'), 'utf8'));
     }
-    async saveArtifact(kind: 'templates' | 'snapshots' | 'batches' | 'probe-definitions' | 'benchmarks' | 'benchmark-sessions' | 'evaluations-private' | 'ratings', artifactId: string, value: any) {
+    async saveArtifact(kind: 'templates' | 'snapshots' | 'batches' | 'probe-definitions' | 'benchmarks' | 'benchmark-sessions' | 'evaluations-private' | 'ratings' | 'branches' | 'branch-comparisons', artifactId: string, value: any) {
         if (!/^[A-Za-z0-9_-]{1,120}$/.test(artifactId)) throw new Error('Invalid artifact ID');
         const dir = path.join(this.baseDir, kind);
         await this.ensureDir(dir);
-        await fs.writeFile(path.join(dir, `${artifactId}.json`), JSON.stringify(value, null, 2), {flag:'wx'});
+        const target = path.join(dir, `${artifactId}.json`);
+        const temporary = `${target}.${randomUUID()}.tmp`;
+        try {
+            await fs.writeFile(temporary, JSON.stringify(value, null, 2), {flag:'wx'});
+            // Publish the complete immutable document atomically, without replacing an ID.
+            await fs.link(temporary, target);
+        } finally { await fs.rm(temporary, {force:true}); }
     }
-    async loadArtifact(kind: 'templates' | 'snapshots' | 'batches' | 'probe-definitions' | 'benchmarks' | 'benchmark-sessions' | 'evaluations-private' | 'ratings', artifactId: string): Promise<any> {
+    async loadArtifact(kind: 'templates' | 'snapshots' | 'batches' | 'probe-definitions' | 'benchmarks' | 'benchmark-sessions' | 'evaluations-private' | 'ratings' | 'branches' | 'branch-comparisons', artifactId: string): Promise<any> {
         if (!/^[A-Za-z0-9_-]{1,120}$/.test(artifactId)) throw new Error('Invalid artifact ID');
         return JSON.parse(await fs.readFile(path.join(this.baseDir, kind, `${artifactId}.json`), 'utf8'));
     }
-    async listArtifacts(kind: 'templates' | 'snapshots' | 'batches' | 'probe-definitions' | 'benchmarks' | 'benchmark-sessions' | 'evaluations-private' | 'ratings') {
+    async listArtifacts(kind: 'templates' | 'snapshots' | 'batches' | 'probe-definitions' | 'benchmarks' | 'benchmark-sessions' | 'evaluations-private' | 'ratings' | 'branches' | 'branch-comparisons') {
         try { return (await fs.readdir(path.join(this.baseDir, kind))).filter(file => file.endsWith('.json')).map(file => file.slice(0,-5)).sort(); }
         catch (error: any) { if (error.code === 'ENOENT') return []; throw error; }
     }
@@ -137,11 +144,11 @@ export class JsonlStorage {
         try { return (await fs.readdir(path.join(this.baseDir, 'experiments'), {withFileTypes:true})).filter(entry => entry.isDirectory()).map(entry => entry.name).sort(); }
         catch (error: any) { if (error.code === 'ENOENT') return []; throw error; }
     }
-    async appendResearch(runId: string, stream: 'probes' | 'interventions' | 'benchmarks' | 'feedback', record: any) {
+    async appendResearch(runId: string, stream: 'probes' | 'interventions' | 'benchmarks' | 'feedback' | 'branch-comparisons', record: any) {
         const dir = this.getExperimentDir(runId); await this.ensureDir(dir);
         await this.appendJsonl(path.join(dir, `${stream}.jsonl`), record);
     }
-    async readResearch(runId: string, stream: 'probes' | 'interventions' | 'benchmarks' | 'feedback'): Promise<any[]> {
+    async readResearch(runId: string, stream: 'probes' | 'interventions' | 'benchmarks' | 'feedback' | 'branch-comparisons'): Promise<any[]> {
         return this.readJsonl(path.join(this.getExperimentDir(runId), `${stream}.jsonl`));
     }
 
