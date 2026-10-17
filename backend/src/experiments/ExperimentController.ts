@@ -1,3 +1,4 @@
+import { memoryOperationGuide } from '../memory/operationGuide';
 import { demeanorContext } from '../agents/startingDemeanor';
 import { inheritedContext } from '../branches/context';
 import { verifiedBranch } from '../branches/interventions';
@@ -290,7 +291,7 @@ export class ExperimentController {
                 };
                 try { await this.jsonlStorage.appendEvent(this.config.runId, {
                     ...this.lastError,
-                    ...(this.currentAttempt ? { attempt: { ...this.currentAttempt, request: this.llmAdapter.lastRequest, rawResponse: this.llmAdapter.lastRawContent, llmValidation: this.llmAdapter.lastValidation, finishedAt: new Date().toISOString() } } : {})
+                    ...(this.currentAttempt ? { attempt: { ...this.currentAttempt, request: this.llmAdapter.lastRequest, parsedResponse: this.llmAdapter.lastParsedResponse, rawResponse: this.llmAdapter.lastRawContent, llmValidation: this.llmAdapter.lastValidation, finishedAt: new Date().toISOString() } } : {})
                 }); }
                 catch { this.lastError.message += '; research error log could not be written'; }
                 this.status = this.shouldStop ? 'stopped' : 'paused';
@@ -331,7 +332,7 @@ Based on the recent conversation transcript below, you must generate a reply.
 You can also propose changes to your memories or beliefs if you learned something new or changed your mind.
 
 Recent conversation:
-${transcript || '(No conversation supplied)'}`;
+${transcript || '(No conversation supplied)'}${memoryOperationGuide(config)}`;
         return {
             state,
             retrieval: { ...retrieved.metadata, transcriptChars: transcript.length, config },

@@ -25,7 +25,9 @@ export class MemoryManager {
             const candidate = structuredClone(state);
             try {
                 if (op.type === 'stat') {
-                    if (op.action !== 'update' || !op.target_id || !Object.hasOwn(candidate.identity.stats, op.target_id)) throw new Error('Invalid stat target or action');
+                    if (op.action !== 'update') throw new Error('Invalid stat action: stats require update');
+                    if (!op.target_id) throw new Error('Missing target_id for stat update');
+                    if (!Object.hasOwn(candidate.identity.stats, op.target_id)) throw new Error('Nonexistent stat target: use an exact existing stat name');
                     if (typeof op.content !== 'number' || !Number.isFinite(op.content) || op.content < 0 || op.content > 10) throw new Error('Stat values must be finite numbers between 0 and 10');
                     record.before = structuredClone(candidate.identity.stats[op.target_id]);
                     record.previous_content = record.before.current;
@@ -36,11 +38,13 @@ export class MemoryManager {
                     if (typeof op.content !== 'string' || !op.content.trim() || op.content.length > context.config.maxEntryChars) throw new Error('Memory content must be nonempty text within the configured entry limit');
                     const targets = op.action === 'consolidate' ? op.target_ids : op.target_id ? [op.target_id] : [];
                     const originals = (targets || []).map(id => {
-                        const entry = candidate.entries.find(e => e.id === id && e.type === type && e.status === 'active');
-                        if (!entry) throw new Error('Target active memory entry not found in this agent/category');
+                        const entry = candidate.entries.find(e => e.id === id);
+                        if (!entry) throw new Error('Nonexistent target: no entry with that ID in this agent’s stored memory');
+                        if (entry.status !== 'active') throw new Error('Inactive target: revision requires an active entry');
+                        if (entry.type !== type) throw new Error('Category mismatch: target entry belongs to a different memory category');
                         return entry;
                     });
-                    if (op.action !== 'add' && (!originals.length || (op.action === 'consolidate' && originals.length < 2))) throw new Error('Memory revision requires existing target IDs');
+                    if (op.action !== 'add' && (!originals.length || (op.action === 'consolidate' && originals.length < 2))) throw new Error(op.action === 'consolidate' ? 'Missing target_ids: consolidation requires at least two existing active entry IDs' : 'Missing target_id: revision requires an existing active entry ID');
                     const subject = op.relationship_agent_id ?? originals[0]?.relationship_agent_id;
                     if (type === 'relationship' && (!subject || subject === candidate.identity.id || !context.participants.includes(subject))) throw new Error('Relationship subject must be another participant');
                     if (type !== 'relationship' && op.relationship_agent_id) throw new Error('Only relationships can have a relationship subject');

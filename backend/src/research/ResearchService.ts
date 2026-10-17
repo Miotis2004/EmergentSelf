@@ -162,14 +162,14 @@ export class ResearchService {
                     prompt:{system:rendered.system,messages:structuredClone(messages)},retrieval:rendered.retrieval,sourceStateHash:hash(sourceState),stateHash:hash(state),probeContextHash:hash(options.historyOverride??[]),memoryPolicy:'read-only',llmConfig:options.llmOverride??config.llmConfig,
                     ...(options.comparison?{comparison:options.comparison}:{}),
                     ...(options.benchmark?{benchmark:{...options.benchmark,final:probeTurn===definition.prompts.length-1}}:{})};
-                adapter.lastRequest=undefined; adapter.lastRawContent=undefined; adapter.lastDiagnostics=undefined; adapter.lastValidation=undefined;
+                adapter.lastParsedResponse=undefined; adapter.lastRequest=undefined; adapter.lastRawContent=undefined; adapter.lastDiagnostics=undefined; adapter.lastValidation=undefined;
                 try {
                     if(rendered.system.length+messages.reduce((n,m)=>n+m.content.length,0)>protocol.inputCharLimit) throw new Error('Probe exceeds the recorded input character limit');
                     const response=await adapter.generateTurn(rendered.system,messages,protocol.inputCharLimit);
                     Object.assign(record,{status:'success',request:adapter.lastRequest,rawResponse:adapter.lastRawContent,response,llmValidation:adapter.lastValidation,diagnostics:adapter.lastDiagnostics});
                     messages.push({role:'assistant',content:response.response});
                 } catch(error) {
-                    Object.assign(record,{status:'error',request:adapter.lastRequest,rawResponse:adapter.lastRawContent,
+                    Object.assign(record,{status:'error',request:adapter.lastRequest,rawResponse:adapter.lastRawContent,parsedResponse:adapter.lastParsedResponse,
                         error:error instanceof LlmError ? error.message : 'Probe failed its input budget or connection check',llmValidation:adapter.lastValidation,diagnostics:adapter.lastDiagnostics});
                 }
                 await this.logs.appendResearch(runId,'probes',record); results.push(record);

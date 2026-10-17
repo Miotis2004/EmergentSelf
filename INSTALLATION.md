@@ -251,6 +251,33 @@ history. Every accepted/rejected operation has a source-linked before/after audi
 Invalid targets, confidence/importance, stat changes, subjects, and limits are
 rejected; another agent's private entries cannot be targeted.
 
+Every enabled-memory inference includes an operation-reference guide in both the
+standard and research-protocol prompt paths. A newly formulated belief can use
+`add` without a target: a position expressed in conversation does not imply that
+a stored entry already exists. Revisions must use exact active IDs from the
+retrieved context; target IDs must never be invented. Stat updates use the exact
+stat name instead of a memory-entry ID.
+
+Active retrieved entries and extractive excerpts are grouped by category with
+complete IDs. Category headings count toward the existing retrieval/digest
+character budgets; ranking and source contents are unchanged. Research templates
+continue to control where `{memory}` and `{digest}` appear.
+
+The shared response schema uses complete `anyOf` object alternatives for local
+constrained decoders: `update`, `retire`, and `contradict` require `target_id`,
+and `consolidate` requires at least two distinct `target_ids`. Independent
+validation remains mandatory in both JSON Schema and JSON-only modes. A missing
+reference rejects the response before state changes and pauses the experiment;
+the error event retains the original raw response, parsed proposal, and reason.
+Existing but inactive targets, nonexistent targets, and category mismatches are
+reported separately in the per-operation audit for structurally valid proposals.
+Failed updates are never converted to additions, and model content is not repaired.
+The guide and response schema count toward recorded inference input budgets.
+
+No migration or rewrite of agent states, frozen snapshots, or historical logs is
+performed. New prompts, schema hashes, proposals, and audit outcomes are recorded
+with new inference attempts using the existing append-only research log.
+
 Retrieval is deterministic and configurable in the dashboard, recorded in
 `config.json` as `memoryConfig`, and repeated in each turn's retrieval metadata:
 
