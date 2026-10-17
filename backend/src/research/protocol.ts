@@ -1,3 +1,4 @@
+import { demeanorContext } from '../agents/startingDemeanor';
 import { createHash } from 'crypto';
 import { MemoryConfig, WorkingState } from '../memory/types';
 import { retrieveMemory, boundedTranscript } from '../memory/retrieval';
@@ -111,7 +112,7 @@ export function renderProtocol(state: WorkingState, config: MemoryConfig, protoc
         transcript: boundedTranscript(history, config) || '(No conversation supplied)' };
     // One replacement pass: memory/role text containing braces is never interpreted.
     const render = (value: string) => value.replace(/(?<!\{)\{([A-Za-z_]+)\}(?!\})/g, (_, key) => fields[key]);
-    const system = render(protocol.systemPrompt);
+    const system = render(protocol.systemPrompt) + demeanorContext(identity, protocol.attributeMode === 'role');
     const messages = [{ role: 'user', content: stimulus ?? render(protocol.turnPrompt) }];
     if (system.length + messages[0].content.length > protocol.inputCharLimit) throw new ProtocolError('Rendered prompt exceeds the recorded input character limit');
     return { system, messages, retrieval: { ...retrieved.metadata, attributeLabels, transcriptChars: fields.transcript.length, config }, state };

@@ -14,6 +14,14 @@ describe('Memory history explorer', () => {
         timeline:[{turnIndex:2,timestamp:'2026-01-01T00:00:00Z',operations:[{operation:{type:'belief',action:'update',reason:'New evidence'},status:'success'}],retrieval:{selectedIds:['belief-1'],summaryIds:[],omittedEntries:0,mode:'enabled'}}],
         diff:{added:[],removed:[],stats:[],changed:[{before:{...entry,content:'Earlier opinion',confidence:0.5},after:entry}]}
     };
+    it('compares saved initial disposition with learned identity and current attributes', () => {
+        component.history = {...history,state:{entries:[{...entry,type:'self_description',content:'I now enjoy discussion'}],identity:{id:'bob',name:'Bob',startingDemeanor:{type:'solitary',description:'Initially reserved'},stats:{curiosity:{initial:3,current:7}}}}};
+        fixture.detectChanges();
+        const text=fixture.nativeElement.textContent;
+        expect(text).toContain('Initially reserved');
+        expect(text).toContain('initial 3, current 7');
+        expect(text).toContain('I now enjoy discussion');
+    });
     beforeEach(async()=>{
         service={getMemoryHistory:jasmine.createSpy().and.returnValue(of(history))};
         await TestBed.configureTestingModule({imports:[MemoryInspectorComponent],providers:[{provide:ExperimentService,useValue:service}]}).compileComponents();

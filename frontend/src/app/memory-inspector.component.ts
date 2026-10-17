@@ -25,6 +25,14 @@ import { ExperimentService } from './services/experiment.service';
           <option *ngFor="let index of indices" [ngValue]="index">{{index === -1 ? 'Initial state' : index}}</option>
         </select></label>
         <p>Showing state after turn {{history.turnIndex}}. History begins at {{history.baselineTurn}}.</p>
+        <section *ngIf="history.state?.identity as identity" aria-label="Initial identity">
+          <h4>Initial identity</h4>
+          <p>{{identity.name}} ({{identity.id}})</p>
+          <p *ngIf="identity.startingDemeanor as demeanor"><strong>Starting Demeanor (creation metadata):</strong>
+            {{demeanor.type}} — {{demeanor.description}}</p>
+          <p *ngIf="!identity.startingDemeanor">Starting Demeanor: unspecified</p>
+          <p *ngFor="let stat of identity.stats | keyvalue">{{stat.key}}: initial {{statInitial(stat.value)}}, current {{statCurrent(stat.value)}}</p>
+        </section>
         <section *ngFor="let kind of kinds">
           <h4>{{kind.label}}</h4>
           <p *ngIf="!entries(kind.type).length">No active entries.</p>
@@ -112,5 +120,8 @@ export class MemoryInspectorComponent implements OnChanges, OnDestroy {
         });
     }
     ngOnDestroy() { this.pending?.unsubscribe(); }
+    statInitial(value: any) { return value.initial; }
+    statCurrent(value: any) { return value.current; }
+
     entries(type: string) { return this.history?.state?.entries.filter((e: any) => e.type === type && e.status === 'active') ?? []; }
 }

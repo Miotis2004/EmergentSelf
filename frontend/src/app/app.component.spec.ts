@@ -18,7 +18,7 @@ describe('Experiment participants and initial topic', () => {
 
     beforeEach(async () => {
         events = new Subject();
-        agents = { getAgents: jasmine.createSpy().and.returnValue(of([agent('sara'), agent('charlie'), agent('bob')])) };
+        agents = { getDemeanors: () => of([{type:'analytical',label:'Analytical and Scientific',description:'Approaches questions methodically, values evidence, and tests explanations'},{type:'custom',label:'Custom',description:''}]), createAgent: jasmine.createSpy().and.returnValue(of(agent('new'))), getAgents: jasmine.createSpy().and.returnValue(of([agent('sara'), agent('charlie'), agent('bob')])) };
         experiments = {
             events$: events,
             studies: () => of({studies:[],publications:[],runIds:[]}),
@@ -42,6 +42,36 @@ describe('Experiment participants and initial topic', () => {
     });
 
     afterEach(() => fixture.destroy());
+
+    it('creates preset and custom initial dispositions without changing numerical attributes', () => {
+        component.newAgent.id = 'new'; component.newAgent.name = 'New';
+        component.demeanorType = 'analytical'; component.createAgent();
+        const preset = agents.createAgent.calls.mostRecent().args[0];
+        expect(preset.startingDemeanor.type).toBe('analytical');
+        expect(preset.stats.curiosity).toEqual({initial:5,current:5});
+        component.newAgent.id = 'custom'; component.newAgent.name = 'Custom';
+        component.demeanorType = 'custom'; component.customDemeanor = '  Patient and reflective  ';
+        component.createAgent();
+        expect(agents.createAgent.calls.mostRecent().args[0].startingDemeanor).toEqual({type:'custom',description:'Patient and reflective'});
+    });
+
+    it('shows custom input only when selected and rejects empty or oversized custom descriptions', () => {
+        component.newAgent.id = 'custom'; component.newAgent.name = 'Custom';
+        expect(fixture.nativeElement.querySelector('#custom-demeanor')).toBeNull();
+        component.demeanorType = 'custom'; fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('#custom-demeanor').maxLength).toBe(1000);
+        for (const text of ['   ', 'x'.repeat(1001)]) { component.customDemeanor=text; component.createAgent(); }
+        expect(agents.createAgent).not.toHaveBeenCalled();
+        expect(component.agentCreationError).toContain('1–1,000');
+    });
+
+    it('omits demeanor for legacy behavior and displays saved demeanor without an edit control', () => {
+        component.newAgent.id = 'new'; component.newAgent.name = 'New'; component.createAgent();
+        expect(agents.createAgent.calls.mostRecent().args[0].startingDemeanor).toBeUndefined();
+        component.availableAgents[0].startingDemeanor={type:'custom',description:'Patient and reflective'};
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('.starting-demeanor').textContent).toContain('Patient and reflective');
+    });
 
     it('defaults all agents to selected and keeps deterministic ID order', () => {
         expect(component.nextParticipantIds).toEqual(['bob','charlie','sara']);

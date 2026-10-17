@@ -31,6 +31,20 @@
                     <label>Sociability (0-10)</label>
                     <input type="number" [(ngModel)]="newAgent.stats.sociability">
                 </div>
+                <div class="form-group">
+                    <label for="starting-demeanor">Starting Demeanor</label>
+                    <select id="starting-demeanor" [(ngModel)]="demeanorType" aria-describedby="demeanor-help">
+                        <option value="">Unspecified (existing behavior)</option>
+                        <option *ngFor="let option of demeanorOptions" [value]="option.type">{{option.label}}</option>
+                    </select>
+                    <small id="demeanor-help">An initial tendency, not immutable behavior. Saved at creation; create a new agent to choose a different starting demeanor.</small>
+                </div>
+                <div class="form-group" *ngIf="demeanorType === 'custom'">
+                    <label for="custom-demeanor">Custom demeanor description</label>
+                    <textarea id="custom-demeanor" rows="3" maxlength="1000" [(ngModel)]="customDemeanor"></textarea>
+                    <small>Up to 1,000 characters.</small>
+                </div>
+                <p *ngIf="agentCreationError" role="alert">{{agentCreationError}}</p>
                 <button (click)="createAgent()">Create Agent</button>
             </div>
         </div>
@@ -41,6 +55,10 @@
         <div class="agent-card" *ngFor="let a of availableAgents">
             <strong>{{ a.name }}</strong> ({{ a.id }})<br>
             <small>C: {{a.stats['curiosity']?.initial || 0}}, S: {{a.stats['sociability']?.initial || 0}}</small>
+            <p *ngIf="a.startingDemeanor as demeanor" class="starting-demeanor">
+                <strong>Starting Demeanor:</strong> {{demeanorLabel(demeanor.type)}}<br>
+                <small>{{demeanor.description}}</small>
+            </p>
             <label class="participation-choice">
                 <input type="checkbox" [ngModel]="selectedAgentIds.has(a.id)"
                     (ngModelChange)="setAgentIncluded(a.id, $event)" [disabled]="configurationLocked">
