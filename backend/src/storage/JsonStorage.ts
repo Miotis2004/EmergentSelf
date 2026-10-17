@@ -133,6 +133,15 @@ export class JsonStorage {
         return importLegacy(identity, await this.readJson<any[]>(path.join(dir, 'memory.json')) || [], await this.readJson<any[]>(path.join(dir, 'beliefs.json')) || []);
     }
 
+    async createClone(agentId: string, state: WorkingState): Promise<void> {
+        if (state.identity.id !== agentId) throw new Error('Invalid clone identity');
+        const dir = this.getAgentDir(agentId);
+        await this.ensureDir(path.dirname(dir));
+        await fs.mkdir(dir); // Exclusive reservation: never overwrite any existing agent.
+        try { await this.atomicWrite(path.join(dir, 'state.json'), state); }
+        catch (error) { await fs.rm(dir, {recursive:true, force:true}); throw error; }
+    }
+
     async saveWorkingState(agentId: string, state: WorkingState): Promise<void> {
         if (state.identity.id !== agentId || state.schemaVersion !== 2) throw new Error('Invalid working state identity/version');
         const dir = this.getAgentDir(agentId);

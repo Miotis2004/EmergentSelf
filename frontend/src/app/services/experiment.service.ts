@@ -54,6 +54,10 @@ export class ExperimentService {
       return this.http.get(`${this.apiUrl}/runs/${encodeURIComponent(runId)}/agents/${encodeURIComponent(agentId)}/memory`, { params });
   }
 
+  research(method: string, path: string, body?: any): Observable<any> {
+      return this.http.request(method, `http://localhost:3000/api/research${path}`, { body });
+  }
+
   getStatus(): Observable<any> {
       return this.http.get(`${this.apiUrl}/status`);
   }

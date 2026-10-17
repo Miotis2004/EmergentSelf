@@ -108,4 +108,25 @@ test('HTTP endpoints: independent SSE subscribers, inline error data, retry, and
   assert.deepEqual(snapshot.config.agentIds, ['bob','sara']);
   assert.equal(prompts[0].messages[1].content, 'Starting topic');
   for (const prompt of prompts.slice(1)) assert.ok(!prompt.messages.some(message => message.content === 'Starting topic'));
+  const callResearch=async(path,body)=>{
+    const response=await fetch(base+'/api/research'+path,{method:body?'POST':'GET',headers:{'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});
+    assert.ok(response.ok,await response.clone().text());return response.json();
+  };
+  assert.ok((await callResearch('/defaults')).systemPrompt.includes('{attributes}'));
+  await callResearch('/templates',{templateId:'http-template',configuration:{runId:'draft',agentIds:['bob','sara'],maxTurns:1,llmConfig:{baseUrl:llmBase,model:'local-model',modelVersion:'unverified'}}});
+  const manifest=await callResearch('/batches',{batchId:'http-batch',templateId:'http-template',repeats:1,conditions:['enabled','history'],randomizationSeed:1});
+  for(const trial of manifest.trials){await callResearch('/batches/http-batch/start',{runId:trial.runId});await until(()=>controller.getStatus()==='completed');}
+  const comparison=await callResearch(`/compare?left=${manifest.trials[0].runId}&right=${manifest.trials[1].runId}`);
+  assert.ok(comparison.differences.some(d=>d.path==='memoryConfig.mode'));
+  const exported=await callResearch(`/runs/${manifest.trials[0].runId}/export`);
+  assert.equal(exported.schemaVersion,3);assert.equal(exported.turns.length,1);assert.ok(exported.integrityHash);
+  const duplicate=await fetch(base+'/api/research/batches',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({batchId:'http-batch',templateId:'http-template',repeats:1,conditions:['enabled'],randomizationSeed:1})});
+  assert.equal(duplicate.status,409);
+  await post('/api/experiment/start',{runId:'direct-protocol',agentIds:['bob','sara'],maxTurns:1,memoryConfig:{mode:'history'},llmConfig:{baseUrl:llmBase,model:'local-model',modelVersion:'unverified'},protocol:{condition:'history',systemPrompt:'Direct fixed prompt {attributes}',turnPrompt:'Direct turn {name}'}});
+  await until(()=>controller.getStatus()==='completed');
+  const directExport=await callResearch('/runs/direct-protocol/export');
+  assert.equal(directExport.config.protocol.condition,'history');
+  assert.ok(directExport.turns[0].prompt.system.startsWith('Direct fixed prompt'));
+
+
 });

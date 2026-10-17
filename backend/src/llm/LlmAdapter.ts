@@ -5,6 +5,11 @@ export interface LlmConfig {
     baseUrl: string;
     model: string;
     temperature?: number;
+    topP?: number;
+    seed?: number;
+    seedSupported?: boolean;
+    modelVersion?: string;
+    contextWindowTokens?: number;
     maxTokens?: number;
     outputMode?: 'json_schema' | 'json_only';
 }
@@ -46,6 +51,11 @@ export function resolveLlmConfig(config: Partial<LlmConfig> = {}): LlmConfig {
     if (!Number.isSafeInteger(maxTokens) || maxTokens < 1) throw new Error('LLM maxTokens must be a positive integer');
     if (outputMode !== 'json_schema' && outputMode !== 'json_only') throw new Error('LLM outputMode must be json_schema or json_only');
     if (config.temperature !== undefined && (!Number.isFinite(config.temperature) || config.temperature < 0 || config.temperature > 2)) throw new Error('LLM temperature must be between 0 and 2');
+    if (config.topP !== undefined && (!Number.isFinite(config.topP) || config.topP < 0 || config.topP > 1)) throw new Error('topP must be between 0 and 1');
+    if (config.seedSupported !== undefined && typeof config.seedSupported !== 'boolean') throw new Error('seedSupported must be a boolean');
+    if (config.seed !== undefined && (!Number.isSafeInteger(config.seed) || config.seed < 0 || config.seed > 0xffffffff || config.seedSupported !== true)) throw new Error('A uint32 seed requires explicitly declared server seed support');
+    if (config.modelVersion !== undefined && (typeof config.modelVersion !== 'string' || !config.modelVersion.trim() || config.modelVersion.length > 256)) throw new Error('Invalid model version');
+    if (config.contextWindowTokens !== undefined && (!Number.isSafeInteger(config.contextWindowTokens) || config.contextWindowTokens < maxTokens)) throw new Error('Declared model context must accommodate completion tokens');
     return { ...config, baseUrl, model: config.model ?? '', maxTokens, outputMode, temperature: config.temperature ?? 0.7 };
 }
 
@@ -57,6 +67,7 @@ function excerpt(text: string): string {
 
 export class LlmAdapter {
     private config: LlmConfig;
+    public lastRequest: any;
     public lastRawContent: string | undefined;
     public lastDiagnostics: LlmDiagnostics | undefined;
     constructor(config: Partial<LlmConfig> = {}) { this.config = resolveLlmConfig(config); }
@@ -80,7 +91,8 @@ export class LlmAdapter {
         return data.data.map((m: any) => ({ id: m.id }));
     }
 
-    async generateTurn(systemPrompt: string, messages: { role: string; content: string }[]): Promise<AgentTurnResponse> {
+    async generateTurn(systemPrompt: string, messages: { role: string; content: string }[], inputCharLimit?: number): Promise<AgentTurnResponse> {
+        this.lastRequest = undefined;
         this.lastDiagnostics = undefined;
         this.lastRawContent = undefined;
         if (!this.config.model) throw new Error('Select a loaded model before running an experiment');
@@ -95,13 +107,17 @@ export class LlmAdapter {
                 ...(this.config.outputMode === 'json_only' ? [{ role: 'system', content: 'Return only a JSON object with response (string) and memory_operations (array, empty when no changes). Memory operations follow the agent-turn schema: action (add/update/retire/consolidate/contradict), type (episodic/belief/self_description/relationship/stat), content, reason, optional target_id or target_ids, confidence (0–1), importance (0–1), and relationship_agent_id for relationships. Do not use Markdown fences.' }] : [])
             ],
             temperature: this.config.temperature,
+            ...(this.config.topP === undefined ? {} : { top_p: this.config.topP }),
+            ...(this.config.seed === undefined ? {} : { seed: this.config.seed }),
             max_tokens: this.config.maxTokens,
             response_format: this.config.outputMode === 'json_only'
                 ? { type: 'json_object' }
                 : { type: 'json_schema', json_schema: { name: 'agent_turn', schema: agentTurnSchema } }
         };
+        this.lastRequest = structuredClone(payload);
         const fail = (message: string): never => { throw new LlmError(message, diagnostics); };
         try {
+            if (inputCharLimit !== undefined && payload.messages.reduce((n, message) => n + message.content.length, 0) > inputCharLimit) return fail('LLM request exceeds the recorded input character limit');
             let response;
             try {
                 response = await fetch(`${this.config.baseUrl}/chat/completions`, {

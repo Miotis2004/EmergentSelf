@@ -19,7 +19,7 @@ export interface MemoryEntry {
 }
 export interface WorkingState { schemaVersion: 2; identity: AgentState; entries: MemoryEntry[]; }
 export interface MemoryConfig {
-    mode: 'enabled' | 'none';
+    mode: 'enabled' | 'none' | 'history';
     maxActiveEntries: number;
     maxOperations: number;
     maxEntryChars: number;
@@ -40,7 +40,7 @@ export function resolveMemoryConfig(input: Partial<MemoryConfig> = {}): MemoryCo
     if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Invalid memory configuration');
     if (Object.keys(input).some(key => !Object.hasOwn(DEFAULT_MEMORY_CONFIG, key))) throw new Error('Unknown memory configuration field');
     const config = { ...DEFAULT_MEMORY_CONFIG, ...input };
-    if (!['enabled', 'none'].includes(config.mode) || !['importance', 'recent'].includes(config.retrievalRule)) throw new Error('Invalid memory mode or retrieval rule');
+    if (!['enabled', 'none', 'history'].includes(config.mode) || !['importance', 'recent'].includes(config.retrievalRule)) throw new Error('Invalid memory mode or retrieval rule');
     const limits: Record<string, [number, number]> = {
         maxActiveEntries: [1, 1000], maxOperations: [1, 50], maxEntryChars: [1, 8000],
         retrievalEntries: [0, 100], retrievalChars: [0, 32000], entryChars: [1, 8000],

@@ -141,4 +141,4 @@ See [DEVELOPMENT.md](DEVELOPMENT.md) for milestones and acceptance criteria, pro
 
 ## Project status
 
-**Phase I application and Phase II memory workflow implemented.** The conceptual layout above is historical design context; the actual application lives in `backend/` and `frontend/`. See [INSTALLATION.md](INSTALLATION.md) for setup, participant/topic selection, memory conditions, historical state inspection, and local-model validation. Automated regression checks use controlled inference responses; real-model stability and research conclusions require local experiments.
+**Phase I application, Phase II memory evolution, and Phase III experimental controls implemented.** The conceptual layout above is historical design context; the actual application lives in `backend/` and `frontend/`. See [INSTALLATION.md](INSTALLATION.md) for setup, participant/topic selection, memory conditions, historical state inspection, reproducible trial templates/batches, probes, analysis exports, and local-model validation. Automated regression checks use controlled inference responses; real-model stability and research conclusions require local experiments.

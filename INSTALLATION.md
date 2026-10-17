@@ -282,3 +282,168 @@ no-memory isolation, historical differences, consolidation retention, writer
 ownership, and journal-recovery regressions. Angular tests also cover configuration
 locking and the memory history explorer. Actual local-model behavior still needs
 the researcher-run `npm run test:local-model` check.
+
+## Phase III: controlled trials and reproducibility
+
+Open **Experimental controls & reproducibility** in the dashboard. The normal
+conversation controls remain available for Phase I/II runs. Phase III templates
+and batches are a separate, explicit workflow:
+
+1. Select participants, topic, maximum turns, model ID, output mode, and memory
+   budgets using the existing controls.
+2. Enter a new template ID and record the model weight version/hash. The literal
+   value `unverified` records unknown provenance explicitly; the application
+   cannot verify local model weights from an OpenAI-compatible model ID alone.
+3. Choose temperature, top-p, declared context size, optional sampling seed, and
+   attribute condition. Review the fixed system/turn prompts and input limit.
+   Freeze the template. This also captures an immutable starting-state snapshot.
+   Optionally choose a saved historical snapshot as the template's starting point.
+4. Select the saved template, a new batch ID, repeats per condition, conditions,
+   and randomization seed. Prepare the batch. Its immutable manifest contains
+   every complete planned configuration and participant order. At most 100 trials
+   can be prepared in a batch. No inference starts during preparation.
+5. Start each selected trial explicitly. Pause/resume/stop still use the main
+   controls. A completed trial can be followed by another manifest trial without
+   resetting or modifying the original trial. Load a saved batch to continue later.
+
+Templates and manifests use exclusive creation: existing IDs cannot be edited or
+replaced. Create a new ID for revisions. The controller verifies model discovery,
+configuration identity, starting-snapshot hash and participant membership before
+execution. Existing Phase I/II data is neither rewritten nor automatically migrated.
+
+Conditions are named and fixed in each trial's protocol and memory configuration:
+
+| Condition | Private working memory | Shared transcript | Apply state proposals |
+| --- | --- | --- | --- |
+| `none` — No memory | Withheld | Withheld | No |
+| `history` — Conversation history only | Withheld | Bounded, using recorded budgets | No |
+| `enabled` — Structured editable memory | Bounded retrieval/digest | Bounded, using recorded budgets | Yes |
+
+No-memory/history-only conditions present original initial numeric stats. All
+conditions share the template's model/version declaration, sampling, output mode,
+prompt templates, starting snapshot, completion budget, and context limits. The
+condition changes only the context/state policy. Differences remain visible in
+configuration comparison. A randomization seed shuffles the balanced condition/
+repeat assignments with a versioned LCG/Fisher–Yates procedure. Optional participant
+randomization is matched by repeat across conditions; the final order is stored in
+the manifest and run configuration. Randomization seeds are separate from inference
+seeds. Sampling settings, including an optional inference seed, stay fixed across
+repetitions. A seed is sent only when `seedSupported: true` is explicitly declared;
+unsupported or invalid seed configurations are rejected rather than silently changed.
+A server may still ignore a seed or produce nondeterministic output; fixed seeds
+are not a claim of deterministic inference.
+
+Every Phase III trial has its own `working-state/agents/<id>/state.json` under its
+research run directory. Logical agent IDs/names stay the same across repeated
+trials, avoiding clone-name changes in prompts. The frozen starting snapshot is
+copied once, then that trial's state evolves independently. The global agents and
+other trials' state are not modified. Restart/recovery projects committed turns
+back into the correct trial store. Memory entry/event IDs and timestamps are
+runtime metadata, not deterministic outputs of the randomization seed.
+
+Attribute conditions are explicit factors, never hidden personality instructions:
+
+- `numeric`: present original named numeric labels, without interpreting them.
+- `arbitrary`: sort stat keys and substitute q1, q2, …; record the label mapping in
+  turn retrieval metadata for analysis. Arbitrary labels are not proof of semantic
+  neutrality to pretrained models.
+- `role`: omit the numeric block and present the researcher's per-agent role text.
+  Every participant must have an explicit description. Other modes reject role text.
+
+Fixed prompts support `{id}`, `{name}`, `{attributes}`, `{memory}`, `{digest}`, and
+`{transcript}`. Substitution is a single literal pass; entry/role text cannot expand
+additional placeholders or execute code. The optional starting topic remains the
+first-turn user stimulus. Each turn records the rendered prompt and exact adapter
+request (including JSON-only formatting instructions, response schema, sampling
+settings, and seed), raw/parsed reply, diagnostics, state changes, and configuration
+hash. Model/server defaults not exposed in the API should be documented in your
+model-version declaration or researcher notes.
+
+`protocol.inputCharLimit` caps actual request-message characters, including any
+compatibility instruction. It defaults to 24000 and is held fixed across conditions.
+Over-budget requests fail visibly; the application does not silently shrink one
+condition's context or switch models/modes. `contextWindowTokens` is a researcher-
+declared model setting, not an instruction that reconfigures llama.cpp. Character
+limits are not exact token counts. Configure the server context and character/
+completion budgets together for your tokenizer.
+
+For historical analysis, enter a run and global turn in the research panel. Capture
+an immutable snapshot, or clone one source agent into a new globally available
+agent ID. A clone keeps original entry source references and records snapshot/run/
+turn/agent lineage in its state and a separate researcher intervention. It never
+overwrites an existing agent. This is an independent state copy, not automatic
+execution of a new experiment.
+
+Standardized probes are immutable definitions containing 1–20 literal prompts.
+Separate turns with a blank line in the dashboard. Run a probe against an agent's
+state at a recorded main-run turn. Probes use the saved model, prompts, attribute
+condition and budgets, but a separate probe-only conversation. They do not import
+the main transcript or apply proposed memory/stat changes. Probe results, failures,
+actual requests and source-state hashes go to `probes.jsonl`, not the conversation
+or memory projection. They identify the main source turn, probe session and probe
+turn. Pause/stop first: probes share the scheduler queue and research-store writer
+lock, so no probe and experiment inference can overlap. Probe context overflow
+fails explicitly instead of truncating or attributing an older reply to a new turn.
+
+Researcher names/reasons are required for notes, probes, snapshots and clones.
+These actions append to `interventions.jsonl` independently of agent memory events.
+Explicit Phase III start/restart/pause/resume/stop/reset controls also append there;
+controls from the unauthenticated local API identify their actor as `unspecified`
+rather than inventing a researcher identity. No memory transplantation, rewards,
+or other unrecorded state interventions are introduced in Phase III.
+
+Compare two started runs to see every differing configuration path, including
+model/sampling, prompts, budgets, conditions, participant order and starting-state
+hash. The interface flags legacy runs without recorded Phase III prompts. Download
+an idle/paused/completed run to obtain a versioned JSON analysis bundle containing
+configuration, baseline, complete turns, memory events, interventions, probes and
+definitions, starting snapshot, template, batch manifest, and canonical SHA-256
+checksums. Checksums support consistency checks; they are not digital signatures.
+Export requires pausing to obtain a consistent committed boundary. Research exports
+contain private prompts and memories and should be handled as experimental data.
+
+API routes (JSON bodies; IDs use letters, numbers, hyphens or underscores):
+
+| Method/path under `/api/research` | Purpose / body |
+| --- | --- |
+| `GET /defaults`, `GET /catalog` | Prompt defaults and saved identifiers |
+| `POST /templates` | `{templateId, configuration}`; full experiment settings plus optional protocol |
+| `POST /batches` | `{batchId, templateId, repeats, conditions, randomizationSeed, randomizeParticipants}` |
+| `GET /batches/:batchId` | Frozen manifest |
+| `POST /batches/:batchId/start` | `{runId}`; run must belong to the manifest |
+| `GET /compare?left=A&right=B` | Exact configuration differences |
+| `POST /snapshots` | `{snapshotId, runId, turnIndex, actor, reason}` |
+| `POST /clones` | `{snapshotId, sourceAgentId, targetAgentId, actor, reason}` |
+| `POST /probe-definitions` | `{probeId, prompts}` |
+| `POST /runs/:runId/probes` | `{probeId, agentId, turnIndex, actor, reason}` |
+| `POST /runs/:runId/interventions` | `{actor, reason}`; researcher note |
+| `GET /runs/:runId/export` | Structured analysis download |
+
+Example protocol fields inside a template's `configuration` (other fields follow
+the existing experiment API):
+
+```json
+{
+  "llmConfig": {
+    "baseUrl": "http://127.0.0.1:8080/v1", "model": "exact-loaded-id",
+    "modelVersion": "researcher-recorded-weight-hash", "temperature": 0.7,
+    "topP": 1, "maxTokens": 2048, "contextWindowTokens": 8192,
+    "seed": 42, "seedSupported": true, "outputMode": "json_schema"
+  },
+  "memoryConfig": { "mode": "enabled" },
+  "protocol": { "version": 1, "attributeMode": "numeric", "inputCharLimit": 24000 }
+}
+```
+
+Run `cd backend && npm test` and `cd frontend && npm test -- --watch=false
+--browsers=ChromeHeadless` for automated trial isolation, conditions, randomization,
+probes, snapshots/clones, configuration comparison/export, seed/budget validation,
+HTTP integration and dashboard checks. These tests use controlled responses;
+actual-model compatibility and experimental findings still require local runs.
+
+Advanced callers may also supply `protocol` to the existing experiment start API.
+Such runs require an explicit model version/hash (or `unverified`). Its default
+`stateScope: "shared"` retains the Phase II global-memory workflow; the controller
+records the baseline's `initialStateHash`, so comparisons expose differing starting
+memory instead of implying equal conditions. Snapshot-backed protocols require
+`stateScope: "trial"`; dashboard templates always choose isolated trial state.

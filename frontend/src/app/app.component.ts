@@ -1,4 +1,5 @@
 import { Component, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewChecked } from '@angular/core';
+import { ResearchPanelComponent } from './research-panel.component';
 import { MemoryInspectorComponent } from './memory-inspector.component';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -9,7 +10,7 @@ import { Subscription } from 'rxjs';
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, FormsModule, MemoryInspectorComponent],
+  imports: [CommonModule, FormsModule, MemoryInspectorComponent, ResearchPanelComponent],
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.css']
 })
@@ -40,6 +41,11 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
   memoryLimit(key: string): any { return (this.memoryConfig as any)[key]; }
   setMemoryLimit(key: string, value: number) { if (!this.configurationLocked) (this.memoryConfig as any)[key] = value; }
 
+
+  get researchConfiguration() {
+      return {runId:this.runId,agentIds:this.savedAgentIds ? [...this.savedAgentIds] : this.nextParticipantIds,initialTopic:this.initialTopic,
+          maxTurns:this.maxTurns,memoryConfig:{...this.memoryConfig},llmConfig:{baseUrl:this.llmBaseUrl,model:this.selectedModel,maxTokens:this.maxTokens,outputMode:this.outputMode}};
+  }
 
   get configurationLocked(): boolean { return this.requestPending || this.experimentStatus !== 'idle'; }
 

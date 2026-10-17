@@ -116,6 +116,7 @@
             <select id="memory-mode" [(ngModel)]="memoryConfig.mode">
                 <option value="enabled">Structured editable memory</option>
                 <option value="none">No memory</option>
+                <option value="history">Conversation history only</option>
             </select>
             <small>No memory withholds working memory and transcript history, uses initial stats, and ignores proposed state changes. Original stored state is retained.</small>
             <details>
@@ -133,6 +134,8 @@
                 <small>Limits are recorded and fixed per run. Overflow uses a deterministic extractive digest; original entries remain available in history.</small>
             </details>
         </fieldset>
+
+        <app-research-panel [configuration]="researchConfiguration" [running]="experimentStatus === 'running'" (agentsChanged)="loadAgents()"></app-research-panel>
 
         <div class="transcript" #transcriptContainer>
             <div *ngIf="turns.length === 0" style="color: #888; font-style: italic;">No conversation yet.</div>

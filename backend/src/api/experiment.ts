@@ -25,11 +25,11 @@ export function createExperimentRouter(controller: ExperimentController, logs?: 
 
     router.post('/start', async (req: Request, res: Response) => {
         try {
-            const { runId, agentIds, maxTurns, llmConfig, initialTopic, memoryConfig } = req.body;
+            const { runId, agentIds, maxTurns, llmConfig, initialTopic, memoryConfig, protocol } = req.body;
             if (!runId || !agentIds || !maxTurns || !llmConfig) {
                  return res.status(400).json({ error: 'Missing required configuration' });
             }
-            await controller.start({ runId, agentIds, maxTurns, llmConfig, initialTopic, memoryConfig });
+            await controller.start({ runId, agentIds, maxTurns, llmConfig, initialTopic, memoryConfig, ...(protocol === undefined ? {} : {protocol}) });
             res.json({ success: true });
         } catch (error: any) {
              res.status(500).json({ error: error.message });
