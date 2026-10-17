@@ -1,4 +1,5 @@
 import { Component, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewChecked } from '@angular/core';
+import { SocialControlsComponent } from './social-controls.component';
 import { AnalysisPanelComponent } from './analysis-panel.component';
 import { RouterOutlet } from '@angular/router';
 import { ResearchPanelComponent } from './research-panel.component';
@@ -12,7 +13,7 @@ import { Subscription } from 'rxjs';
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, FormsModule, MemoryInspectorComponent, ResearchPanelComponent, AnalysisPanelComponent, RouterOutlet],
+  imports: [CommonModule, FormsModule, MemoryInspectorComponent, ResearchPanelComponent, AnalysisPanelComponent, RouterOutlet, SocialControlsComponent],
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.css']
 })
@@ -25,6 +26,9 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
   selectedAgentIds = new Set<string>();
   savedAgentIds: string[] | null = null;
   initialTopic = '';
+  socialConfig = {enabled:false};
+  taskConfig = {kind:'none',endowment:10,multiplier:1.5,prize:20};
+  feedbackConfig = {enabled:false,source:'researcher',timing:'immediate',delayTurns:1,visibility:'private',positiveScore:1,negativeScore:-1,maxVisible:20};
   readonly defaultMemoryConfig = {
       mode: 'enabled', maxActiveEntries: 200, maxOperations: 20, maxEntryChars: 2000,
       retrievalEntries: 24, retrievalChars: 12000, entryChars: 1000, summaryChars: 2000,
@@ -48,7 +52,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
 
   get researchConfiguration() {
       return {runId:this.runId,agentIds:this.savedAgentIds ? [...this.savedAgentIds] : this.nextParticipantIds,initialTopic:this.initialTopic,
-          maxTurns:this.maxTurns,memoryConfig:{...this.memoryConfig},llmConfig:{baseUrl:this.llmBaseUrl,model:this.selectedModel,maxTokens:this.maxTokens,outputMode:this.outputMode}};
+          socialConfig:{...this.socialConfig},taskConfig:{...this.taskConfig},feedbackConfig:{...this.feedbackConfig},maxTurns:this.maxTurns,memoryConfig:{...this.memoryConfig},llmConfig:{baseUrl:this.llmBaseUrl,model:this.selectedModel,maxTokens:this.maxTokens,outputMode:this.outputMode}};
   }
 
   get configurationLocked(): boolean { return this.requestPending || this.experimentStatus !== 'idle'; }
@@ -190,6 +194,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
           runId: this.runId,
           agentIds,
           initialTopic,
+          socialConfig:{...this.socialConfig},taskConfig:{...this.taskConfig},feedbackConfig:{...this.feedbackConfig},
           memoryConfig: { ...this.memoryConfig },
           maxTurns: this.maxTurns,
           llmConfig: {
@@ -237,6 +242,9 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
       if (state.config) {
           this.savedAgentIds = [...state.config.agentIds];
           this.selectedAgentIds = new Set(this.savedAgentIds);
+          this.socialConfig = {enabled:false,...state.config.socialConfig};
+          this.taskConfig = {kind:'none',endowment:10,multiplier:1.5,prize:20,...state.config.taskConfig};
+          this.feedbackConfig = {enabled:false,source:'researcher',timing:'immediate',delayTurns:1,visibility:'private',positiveScore:1,negativeScore:-1,maxVisible:20,...state.config.feedbackConfig};
           this.initialTopic = state.config.initialTopic ?? '';
           this.memoryConfig = { ...this.defaultMemoryConfig, ...state.config.memoryConfig };
           this.runId = state.config.runId;
@@ -270,6 +278,8 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
               this.auditEvents.push({ type: 'memory_update', turnIndex: event.data.turnRecord.turnIndex,
                   agentId: event.data.turnRecord.agentId, operations: event.data.auditTrail });
           }
+      } else if (event.type === 'environment_event') {
+          if (!this.auditEvents.some(e=>e.id===event.data.id)) this.auditEvents.push(event.data);
       } else if (event.type === 'experiment_error') {
           this.activeTurnAgent = null;
           this.diagnostic = event.data.message;

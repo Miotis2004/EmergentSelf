@@ -41,5 +41,5 @@ export function retrieveMemory(state: WorkingState, config: MemoryConfig) {
 
 export function boundedTranscript(history: any[], config: MemoryConfig): string {
     if (config.mode === 'none' || config.transcriptTurns === 0 || config.transcriptChars === 0) return '';
-    return history.slice(-config.transcriptTurns).map(turn => `${turn.agentName}: ${turn.response}`).join('\n').slice(-config.transcriptChars);
+    return history.slice(-config.transcriptTurns).map(turn => `${turn.agentName}${turn.social ? (turn.social.action === 'decline' ? ' [declined]' : turn.social.recipient_id ? ' → ' + turn.social.recipient_id : ' → all') : ''}: ${turn.response}`).join('\n').slice(-config.transcriptChars);
 }

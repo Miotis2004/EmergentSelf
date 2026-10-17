@@ -35,6 +35,10 @@ describe('Phase III research controls',()=>{
   const call=service.research.calls.allArgs().find((args:any[])=>args[1]==='/batches');
   expect(call[2].conditions).toEqual(['history','enabled']);expect(call[2].repeats).toBe(3);expect(call[2].randomizationSeed).toBe(99);expect(call[2].randomizeParticipants).toBeTrue();
  });
+ it('prepares matched feedback control arms only when explicitly selected',()=>{
+  panel.feedbackControl=true;panel.prepareBatch();
+  const call=service.research.calls.allArgs().find((a:any[])=>a[1]==='/batches');expect(call[2].feedbackConditions).toEqual(['off','configured']);
+ });
  it('starts only the selected manifest trial and does not start batches automatically',()=>{
   panel.manifest={batchId:'frozen-batch',trials:[{runId:'trial-1'}]};panel.batchId='edited-draft';panel.startTrial('trial-1');
   expect(service.research).toHaveBeenCalledWith('POST','/batches/frozen-batch/start',{runId:'trial-1'});

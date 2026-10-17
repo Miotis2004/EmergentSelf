@@ -1,5 +1,5 @@
 import fetch from 'node-fetch';
-import { agentTurnSchema, validateAgentTurn } from './agentTurnSchema';
+import { agentTurnSchema, socialTurnSchema, validateAgentTurn } from './agentTurnSchema';
 
 export interface LlmConfig {
     baseUrl: string;
@@ -37,6 +37,8 @@ export interface LlmDiagnostics {
 export interface AgentTurnResponse {
     response: string;
     memory_operations: MemoryOperation[];
+    social?: {action:'speak'|'decline';recipient_id:string|null};
+    task_decision?: {amount:number};
 }
 export class LlmError extends Error {
     constructor(message: string, public readonly diagnostics: LlmDiagnostics) { super(message); }
@@ -91,7 +93,7 @@ export class LlmAdapter {
         return data.data.map((m: any) => ({ id: m.id }));
     }
 
-    async generateTurn(systemPrompt: string, messages: { role: string; content: string }[], inputCharLimit?: number): Promise<AgentTurnResponse> {
+    async generateTurn(systemPrompt: string, messages: { role: string; content: string }[], inputCharLimit?: number, social = false): Promise<AgentTurnResponse> {
         this.lastRequest = undefined;
         this.lastDiagnostics = undefined;
         this.lastRawContent = undefined;
@@ -104,7 +106,7 @@ export class LlmAdapter {
             model: this.config.model,
             messages: [ { role: 'system', content: systemPrompt }, ...messages,
                 // Format instruction only; identity/personality instructions are unchanged.
-                ...(this.config.outputMode === 'json_only' ? [{ role: 'system', content: 'Return only a JSON object with response (string) and memory_operations (array, empty when no changes). Memory operations follow the agent-turn schema: action (add/update/retire/consolidate/contradict), type (episodic/belief/self_description/relationship/stat), content, reason, optional target_id or target_ids, confidence (0–1), importance (0–1), and relationship_agent_id for relationships. Do not use Markdown fences.' }] : [])
+                ...(this.config.outputMode === 'json_only' ? [{ role: 'system', content: 'Return only a JSON object with response (string) and memory_operations (array, empty when no changes). Memory operations follow the agent-turn schema: action (add/update/retire/consolidate/contradict), type (episodic/belief/self_description/relationship/stat), content, reason, optional target_id or target_ids, confidence (0–1), importance (0–1), and relationship_agent_id for relationships. Do not use Markdown fences.' + (social ? ' Include social with action (speak/decline) and recipient_id (another participant ID or null); include task_decision.amount only when the configured task requires a speaking decision. Follow the recorded social/task protocol.' : '') }] : [])
             ],
             temperature: this.config.temperature,
             ...(this.config.topP === undefined ? {} : { top_p: this.config.topP }),
@@ -112,7 +114,7 @@ export class LlmAdapter {
             max_tokens: this.config.maxTokens,
             response_format: this.config.outputMode === 'json_only'
                 ? { type: 'json_object' }
-                : { type: 'json_schema', json_schema: { name: 'agent_turn', schema: agentTurnSchema } }
+                : { type: 'json_schema', json_schema: { name: 'agent_turn', schema: social ? socialTurnSchema : agentTurnSchema } }
         };
         this.lastRequest = structuredClone(payload);
         const fail = (message: string): never => { throw new LlmError(message, diagnostics); };
@@ -154,7 +156,7 @@ export class LlmAdapter {
             if (typeof content !== 'string' || !content.trim()) return fail('LLM response is missing nonempty choices[0].message.content');
             let parsed: unknown;
             try { parsed = JSON.parse(content); } catch { return fail('Invalid JSON response from LLM; inspect diagnostics for truncation or output-format incompatibility'); }
-            try { validateAgentTurn(parsed); } catch (error: any) { return fail(error.message); }
+            try { validateAgentTurn(parsed, social); } catch (error: any) { return fail(error.message); }
             return parsed as AgentTurnResponse;
         } catch (error) {
             if (error instanceof LlmError) throw error;

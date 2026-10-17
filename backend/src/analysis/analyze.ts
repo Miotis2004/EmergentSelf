@@ -1,3 +1,5 @@
+import { analyzeSocial } from '../social/analysis';
+import { resolveEnvironment } from '../social/environment';
 import { hash } from '../research/protocol';
 import { METRICS, METRIC_VERSION, CUES, RUBRIC, STOPWORDS } from './definitions';
 import { measure, similarity } from './metrics';
@@ -20,7 +22,7 @@ function means(observations:any[]) {
 }
 function design(config:any,baseline:any) {
     const {mode,...memory}=config.memoryConfig||{};
-    return hash({llm:config.llmConfig,topic:config.initialTopic??'',participants:config.agentIds,maxTurns:config.maxTurns,memory,
+    return hash({environment:resolveEnvironment(config),llm:config.llmConfig,topic:config.initialTopic??'',participants:config.agentIds,maxTurns:config.maxTurns,memory,
         system:config.protocol?.systemPrompt,turn:config.protocol?.turnPrompt,inputLimit:config.protocol?.inputCharLimit,
         attributes:config.protocol?.attributeMode,roles:config.protocol?.roles,
         initialState:config.protocol?.initialStateHash??(baseline?.states?hash(baseline.states):`unknown:${config.runId}`),
@@ -195,7 +197,7 @@ export function analyzeBundles(bundles:any[],options:any={}) {
     }
     const report={schemaVersion:4,metricVersion:METRIC_VERSION,options:{windowSize,bootstrapSamples,seed},definitions:METRICS,lexicons:CUES,stopwords:[...STOPWORDS],tokenization:'Unicode NFKC lowercase; curly apostrophes normalized; contiguous Unicode letters/numbers; complete contiguous phrase matching.',rubric:RUBRIC,
         aggregation:'Per-response metrics → per-agent means → per-run means → equal-weight condition means. 95% percentile bootstrap resamples independent runs; CI unavailable for fewer than two runs. Grouped by design, stream and probe item/arm.',
-        sources,benchmarkOutcomes:bundles.flatMap(bundle=>bundle.benchmarkOutcomes??[]),observations,units:units.map(({observations,...rest})=>rest),groups,comparisons,memoryDependence,human,
+        social:analyzeSocial(bundles,windowSize),sources,benchmarkOutcomes:bundles.flatMap(bundle=>bundle.benchmarkOutcomes??[]),observations,units:units.map(({observations,...rest})=>rest),groups,comparisons,memoryDependence,human,
         totals:{runs:bundles.length,successfulResponses:observations.filter(o=>o.status==='success').length,failedAttempts:observations.filter(o=>o.status==='failed').length,humanRatings:ratings.size}};
     return {...report,reportHash:hash(report)};
 }

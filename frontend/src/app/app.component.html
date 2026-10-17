@@ -137,6 +137,7 @@
             </details>
         </fieldset>
 
+        <app-social-controls [social]="socialConfig" [task]="taskConfig" [feedback]="feedbackConfig" [locked]="configurationLocked" [running]="experimentStatus === 'running'" [runId]="savedAgentIds ? runId : ''" (recorded)="handleServerEvent({type:'environment_event',data:$event})"></app-social-controls>
         <app-analysis-panel [running]="experimentStatus === 'running'"></app-analysis-panel>
         <app-research-panel [configuration]="researchConfiguration" [running]="experimentStatus === 'running'" (agentsChanged)="loadAgents()"></app-research-panel>
 
@@ -146,6 +147,7 @@
             <div class="turn" *ngFor="let turn of turns">
                 <div class="turn-header">
                     [Turn {{turn.turnRecord.turnIndex}}] {{turn.turnRecord.agentName}}
+                    <span *ngIf="turn.turnRecord.social">{{turn.turnRecord.social.action === 'decline' ? 'declined to speak' : '→ ' + (turn.turnRecord.social.recipient_id || 'all')}}</span>
                     <span style="color: #888; font-weight: normal; font-size: 0.8em; float: right;">
                         {{turn.turnRecord.timestamp | date:'mediumTime'}}
                     </span>

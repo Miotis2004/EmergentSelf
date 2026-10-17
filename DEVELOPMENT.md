@@ -137,10 +137,12 @@ No database, online model retraining, reward/punishment, external web access for
 
 ### Acceptance criteria
 
-- [ ] Feedback can be disabled for a clean baseline condition.
-- [ ] A researcher can explain precisely how each reward or penalty was calculated.
-- [ ] The system can compare changes under feedback versus no-feedback conditions.
-- [ ] Task optimization and moral understanding are not treated as equivalent.
+- [x] Feedback can be disabled for a clean baseline condition.
+- [x] A researcher can explain precisely how each reward or penalty was calculated.
+- [x] The system can compare changes under feedback versus no-feedback conditions.
+- [x] Task optimization and moral understanding are not treated as equivalent.
+
+**Implementation evidence:** Explicit social decisions, sequential multi-agent tasks, versioned payout rules, visibility/timing-controlled feedback, matched feedback-off batches, journaled outcomes/recovery, and exported longitudinal comparisons are covered by backend/API and Angular regression tests. See [PHASE_V.md](PHASE_V.md) for rules, study procedures and interpretation limits. Fixtures validate the application; substantive local-model experiments remain a separate research step.
 
 ## Phase VI: Identity continuity, branching, and intervention
 

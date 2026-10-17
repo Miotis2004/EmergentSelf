@@ -90,6 +90,9 @@ export class JsonlStorage {
     async projectTurn(runId: string, record: any, storage: JsonStorage) {
         if (record.stateScope === 'trial') storage = this.trialStorage(runId);
         if (record.memoryMode !== 'none' && record.memoryMode !== 'history') await storage.saveWorkingState(record.agentId, record.stateAfter);
+        const existingEvents = await this.getEventHistory(runId);
+        const recorded = new Set(existingEvents.map(event=>event.id));
+        for (const event of record.environmentEvents ?? []) if (!recorded.has(event.id)) await this.appendEvent(runId, event);
         await this.appendEvent(runId, {
             schemaVersion: 2, id: record.eventId, type: 'memory_update',
             turnIndex: record.turnIndex, agentId: record.agentId, timestamp: record.timestamp,
@@ -134,11 +137,11 @@ export class JsonlStorage {
         try { return (await fs.readdir(path.join(this.baseDir, 'experiments'), {withFileTypes:true})).filter(entry => entry.isDirectory()).map(entry => entry.name).sort(); }
         catch (error: any) { if (error.code === 'ENOENT') return []; throw error; }
     }
-    async appendResearch(runId: string, stream: 'probes' | 'interventions' | 'benchmarks', record: any) {
+    async appendResearch(runId: string, stream: 'probes' | 'interventions' | 'benchmarks' | 'feedback', record: any) {
         const dir = this.getExperimentDir(runId); await this.ensureDir(dir);
         await this.appendJsonl(path.join(dir, `${stream}.jsonl`), record);
     }
-    async readResearch(runId: string, stream: 'probes' | 'interventions' | 'benchmarks'): Promise<any[]> {
+    async readResearch(runId: string, stream: 'probes' | 'interventions' | 'benchmarks' | 'feedback'): Promise<any[]> {
         return this.readJsonl(path.join(this.getExperimentDir(runId), `${stream}.jsonl`));
     }
 

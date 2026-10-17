@@ -46,11 +46,12 @@ import { ExperimentService } from './services/experiment.service';
         <label><input type="checkbox" [(ngModel)]="includeNone">No memory</label>
         <label><input type="checkbox" [(ngModel)]="includeHistory">Conversation history only</label>
         <label><input type="checkbox" [(ngModel)]="includeStructured">Structured editable memory</label>
+        <label><input type="checkbox" [(ngModel)]="feedbackControl">Include matched feedback-off and configured-feedback arms (requires feedback-enabled saved template)</label>
         <button (click)="prepareBatch()">Prepare batch</button>
         <label>Load saved batch <input list="saved-batches" [(ngModel)]="batchId"></label><button (click)="loadBatch()">Load batch</button>
         <p>Trials use isolated working state and the same frozen starting snapshot. Sampling settings and budgets are held fixed.</p>
         <div *ngFor="let trial of manifest?.trials">
-          <strong>{{trial.runId}}</strong> · repeat {{trial.protocol.repeatIndex + 1}} · {{conditionLabel(trial.memoryConfig.mode)}}
+          <strong>{{trial.runId}}</strong> · repeat {{trial.protocol.repeatIndex + 1}} · {{conditionLabel(trial.memoryConfig.mode)}} · feedback {{trial.feedbackConfig?.enabled ? 'configured' : 'off'}}
           <button (click)="startTrial(trial.runId)">Start trial</button>
         </div>
       </fieldset>
@@ -94,6 +95,7 @@ export class ResearchPanelComponent implements OnInit,OnChanges {
     useSeed=false;seedSupported=false;samplingSeed=42;
     attributeMode='numeric';roles:Record<string,string>={};systemPrompt='';turnPrompt='';inputCharLimit=24000;
     batchId='';repeats=1;randomizationSeed=42;randomizeParticipants=false;includeNone=true;includeHistory=true;includeStructured=true;
+    feedbackControl=false;
     manifest:any=null;targetRunId='';turnIndex=-1;actor='';reason='';snapshotId='';agentId='';cloneId='';probeId='';probePrompts='';probeResults:any[]=[];
     leftRun='';rightRun='';comparison:any=null;
     private latestConfigRunId='';
@@ -121,7 +123,7 @@ export class ResearchPanelComponent implements OnInit,OnChanges {
             inputCharLimit:this.inputCharLimit,attributeMode:this.attributeMode,roles:this.attributeMode==='role'?{...this.roles}:{},...(this.startingSnapshot?{snapshotId:this.startingSnapshot}:{})}};
     }
     saveTemplate(){this.act('POST','/templates',{templateId:this.templateId,configuration:this.templateConfiguration()},()=>this.selectedTemplate=this.templateId);}
-    prepareBatch(){const conditions=[...(this.includeNone?['none']:[]),...(this.includeHistory?['history']:[]),...(this.includeStructured?['enabled']:[])];this.act('POST','/batches',{batchId:this.batchId,templateId:this.selectedTemplate,repeats:this.repeats,conditions,randomizationSeed:this.randomizationSeed,randomizeParticipants:this.randomizeParticipants},value=>this.manifest=value);}
+    prepareBatch(){const conditions=[...(this.includeNone?['none']:[]),...(this.includeHistory?['history']:[]),...(this.includeStructured?['enabled']:[])];this.act('POST','/batches',{batchId:this.batchId,templateId:this.selectedTemplate,repeats:this.repeats,conditions,randomizationSeed:this.randomizationSeed,randomizeParticipants:this.randomizeParticipants,...(this.feedbackControl?{feedbackConditions:['off','configured']}:{})},value=>this.manifest=value);}
     loadBatch(){this.act('GET',`/batches/${encodeURIComponent(this.batchId)}`,undefined,value=>this.manifest=value);}
     startTrial(runId:string){this.act('POST',`/batches/${encodeURIComponent(this.manifest?.batchId || this.batchId)}/start`,{runId},()=>this.targetRunId=runId);}
     note(){this.act('POST',`/runs/${encodeURIComponent(this.targetRunId)}/interventions`,{actor:this.actor,reason:this.reason});}
