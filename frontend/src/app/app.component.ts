@@ -16,6 +16,27 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
   @ViewChild('transcriptContainer') private transcriptContainer!: ElementRef;
 
   availableAgents: AgentIdentity[] = [];
+  selectedAgentIds = new Set<string>();
+  savedAgentIds: string[] | null = null;
+  initialTopic = '';
+
+  get configurationLocked(): boolean { return this.requestPending || this.experimentStatus !== 'idle'; }
+
+  get nextParticipantIds(): string[] {
+      // Stable ID ordering is independent of click order and filesystem listing order.
+      return this.availableAgents.filter(agent => this.selectedAgentIds.has(agent.id)).map(agent => agent.id);
+  }
+
+  setAgentIncluded(id: string, included: boolean) {
+      if (this.configurationLocked) return;
+      if (included) this.selectedAgentIds.add(id);
+      else this.selectedAgentIds.delete(id);
+  }
+
+  participantLabel(id: string): string {
+      const agent = this.availableAgents.find(agent => agent.id === id);
+      return agent ? `${agent.name} (${id})` : id;
+  }
 
   newAgent = {
       id: '',
@@ -88,7 +109,15 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
 
   loadAgents() {
       this.agentService.getAgents().subscribe({
-          next: (agents) => this.availableAgents = agents,
+          next: (agents) => {
+              const known = new Set(this.availableAgents.map(agent => agent.id));
+              this.availableAgents = [...agents].sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+              if (this.savedAgentIds) this.selectedAgentIds = new Set(this.savedAgentIds);
+              else for (const agent of agents) {
+                  // New discoveries default to included; preserve explicit unchecked choices.
+                  if (!known.has(agent.id)) this.selectedAgentIds.add(agent.id);
+              }
+          },
           error: (err) => console.error('Failed to load agents', err)
       });
   }
@@ -116,14 +145,19 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
   }
 
   startExperiment() {
-      if (this.availableAgents.length < 2) {
-          this.diagnostic = "Need at least 2 agents to start.";
+      if (this.requestPending || (this.experimentStatus !== 'idle' && this.experimentStatus !== 'stopped')) return;
+      const agentIds = this.experimentStatus === 'stopped' && this.savedAgentIds ? [...this.savedAgentIds] : this.nextParticipantIds;
+      if (agentIds.length < 2) {
+          this.diagnostic = "Select at least two agents to start.";
           return;
       }
 
+      const initialTopic = this.initialTopic.trim();
+      if (initialTopic.length > 1000) { this.diagnostic = 'Conversation topic must be at most 1,000 characters'; return; }
       const config = {
           runId: this.runId,
-          agentIds: this.availableAgents.slice(0, 2).map(a => a.id),
+          agentIds,
+          initialTopic,
           maxTurns: this.maxTurns,
           llmConfig: {
               baseUrl: this.llmBaseUrl,
@@ -168,12 +202,17 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
       this.activeTurnAgent = state.activeAgentId ?? null;
       this.diagnostic = state.error?.message || '';
       if (state.config) {
+          this.savedAgentIds = [...state.config.agentIds];
+          this.selectedAgentIds = new Set(this.savedAgentIds);
+          this.initialTopic = state.config.initialTopic ?? '';
           this.runId = state.config.runId;
           this.maxTurns = state.config.maxTurns;
           this.llmBaseUrl = state.config.llmConfig.baseUrl;
           this.selectedModel = state.config.llmConfig.model;
           this.maxTokens = state.config.llmConfig.maxTokens;
           this.outputMode = state.config.llmConfig.outputMode;
+      } else {
+          this.savedAgentIds = null;
       }
   }
 

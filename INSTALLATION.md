@@ -140,3 +140,40 @@ This creates isolated Bob/Sara states with numeric attributes, runs 100 real tur
 using the unchanged application identity prompts, and preserves the resulting
 conversation, metadata and audit files in the printed temporary directory. It
 stops with a failure on invalid inference output and never substitutes dialogue.
+
+## Participants and conversation topics
+
+Each available agent has an **Include in Next Experiment** checkbox. Agents
+initially default to included. Uncheck anyone who should not participate; at least
+two selected agents are required. The dashboard submits checked IDs in ascending
+ID order, which becomes the fixed round-robin turn order. More than two agents
+are supported. Only participating agents receive turns or memory/stat changes.
+
+**Conversation Topic** is optional multiline text, trimmed before saving and
+limited to 1,000 characters. A nonempty topic is the user-message stimulus for
+turn zero only. It is not inserted into the identity system prompt or repeatedly
+reintroduced on later turns. Agents may move to other subjects naturally. Empty
+or missing topics retain the original open-ended first-turn message.
+
+Participants and topic are saved with the immutable run configuration and shown
+when that run is loaded. Controls remain locked for running, paused, stopped and
+completed runs. Resume uses the original configuration; to prepare another run,
+Reset and choose a new Run ID. Existing runs without `initialTopic` are treated as
+having an empty topic, without rewriting their configuration or research logs.
+Apply this enhancement locally after any ongoing stability experiment finishes;
+there is no automatic restart or migration of an active run.
+
+Regression checks:
+
+```bash
+cd backend
+npm test
+cd ../frontend
+npm test -- --watch=false --browsers=ChromeHeadless
+npm run build
+```
+
+The frontend tests require Chrome/Chromium (set `CHROME_BIN` if necessary).
+Backend tests use isolated temporary storage and controlled inference responses,
+including participant isolation, multi-agent order, topic delivery, legacy data
+compatibility, and pause/resume/restart preservation.

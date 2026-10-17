@@ -47,9 +47,11 @@ test('HTTP endpoints: independent SSE subscribers, inline error data, retry, and
   await new Promise(r => api.listen(0, '127.0.0.1', r));
   const base = `http://127.0.0.1:${api.address().port}`;
   let requests = 0;
+  const prompts = [];
   const model = http.createServer(async (req, res) => {
     if (req.url.endsWith('/models')) return res.end(JSON.stringify({ data: [{ id: 'local-model' }] }));
-    for await (const _ of req) {}
+    let raw = ''; for await (const chunk of req) raw += chunk;
+    prompts.push(JSON.parse(raw));
     const n = requests++;
     const content = n === 1 ? 'not JSON' : JSON.stringify({ response: `Original text ${n}`, memory_operations: [] });
     res.end(JSON.stringify({ model: 'local-model', choices: [{ finish_reason: 'stop', message: { content } }] }));
@@ -75,7 +77,7 @@ test('HTTP endpoints: independent SSE subscribers, inline error data, retry, and
   const llmBase = `http://127.0.0.1:${model.address().port}/v1`;
   const discovered = await (await fetch(`${base}/api/llm/models?baseUrl=${encodeURIComponent(llmBase)}`)).json();
   assert.deepEqual(discovered, [{ id: 'local-model' }]);
-  await post('/api/experiment/start', { runId: 'sse-run', agentIds: ['bob','sara'], maxTurns: 3, llmConfig: { baseUrl: llmBase, model: 'local-model' } });
+  await post('/api/experiment/start', { runId: 'sse-run', initialTopic: '  Starting topic  ', agentIds: ['bob','sara'], maxTurns: 3, llmConfig: { baseUrl: llmBase, model: 'local-model' } });
   await until(() => b.events.some(e => e.type === 'status_changed' && e.data.status === 'paused'));
   assert.equal(b.events.filter(e => e.type === 'turn_completed').length, 1);
   const error = b.events.find(e => e.type === 'experiment_error').data;
@@ -93,4 +95,8 @@ test('HTTP endpoints: independent SSE subscribers, inline error data, retry, and
   assert.equal(snapshot.events.filter(e => e.type === 'memory_update').length, 3);
   assert.equal(snapshot.events.filter(e => e.type === 'experiment_error').length, 1);
   assert.equal(snapshot.config.llmConfig.model, 'local-model');
+  assert.equal(snapshot.config.initialTopic, 'Starting topic');
+  assert.deepEqual(snapshot.config.agentIds, ['bob','sara']);
+  assert.equal(prompts[0].messages[1].content, 'Starting topic');
+  for (const prompt of prompts.slice(1)) assert.ok(!prompt.messages.some(message => message.content === 'Starting topic'));
 });

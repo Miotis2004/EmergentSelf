@@ -95,3 +95,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .model-config { margin-bottom: 12px; display: grid; gap: 5px; }
 .model-config input, .model-config select { min-width: 0; width: 100%; box-sizing: border-box; }
 .turn-content { white-space: pre-wrap; }
+
+.participation-choice { display: block; margin-top: 8px; font-size: 0.85em; }
+.form-group textarea { width: 100%; box-sizing: border-box; padding: 6px; resize: vertical; }
+.saved-participants ol { margin: 4px 0 12px; }

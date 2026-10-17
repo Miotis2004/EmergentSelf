@@ -25,12 +25,12 @@ export class JsonlStorage {
     }
 
     /**
-     * Saves experimental configuration.
+     * Creates immutable experimental configuration; never replaces an existing file.
      */
     async saveConfig(runId: string, config: any): Promise<void> {
         const expDir = this.getExperimentDir(runId);
         await this.ensureDir(expDir);
-        await fs.writeFile(path.join(expDir, 'config.json'), JSON.stringify(config, null, 2), 'utf-8');
+        await fs.writeFile(path.join(expDir, 'config.json'), JSON.stringify(config, null, 2), { encoding: 'utf-8', flag: 'wx' });
     }
 
     async loadConfig(runId: string): Promise<any | null> {
