@@ -34,7 +34,7 @@ test('100 alternating turns with schema validation, exact text, audit events and
 });
 
 test('invalid response pauses, clears thinking, logs diagnostics and Resume retries only the failed turn', async t => {
-  const f = await fixture(t, async n => n === 1 ? 'bad JSON' : JSON.stringify({ response: `reply ${n}` }));
+  const f = await fixture(t, async n => n === 1 ? 'bad JSON' : JSON.stringify({ response: `reply ${n}`, memory_operations: [] }));
   f.config.maxTurns = 3;
   await f.controller.start(f.config);
   await until(() => f.controller.getStatus() === 'paused');
@@ -59,7 +59,7 @@ test('invalid response pauses, clears thinking, logs diagnostics and Resume retr
 test('Pause/Resume races and reset wait for in-flight inference and preserve completed turns', async t => {
   let release;
   const gate = new Promise(r => release = r);
-  const f = await fixture(t, async n => { if (n === 0) await gate; return JSON.stringify({ response: `turn ${n}` }); });
+  const f = await fixture(t, async n => { if (n === 0) await gate; return JSON.stringify({ response: `turn ${n}`, memory_operations: [] }); });
   f.config.maxTurns = 4;
   await f.controller.start(f.config);
   await until(() => f.stats().requests === 1);
@@ -91,7 +91,7 @@ test('rejects invalid stat operations and targets while preserving immutable ini
 test('Reset drains an active turn before accepting a new start; metadata survives restart', async t => {
   let release;
   const gate = new Promise(r => release = r);
-  const f = await fixture(t, async n => { if (n === 0) await gate; return JSON.stringify({ response: `retained ${n}` }); });
+  const f = await fixture(t, async n => { if (n === 0) await gate; return JSON.stringify({ response: `retained ${n}`, memory_operations: [] }); });
   f.config.maxTurns = 2;
   const starts = await Promise.allSettled([f.controller.start(f.config), f.controller.start(f.config)]);
   assert.deepEqual(starts.map(s => s.status), ['fulfilled', 'rejected']);

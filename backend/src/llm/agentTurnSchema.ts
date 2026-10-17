@@ -23,24 +23,29 @@ export const agentTurnSchema = {
             }
         }
     },
-    required: ['response']
+    required: ['response', 'memory_operations']
 };
 export const socialTurnSchema = {
     ...agentTurnSchema,
     properties: {...agentTurnSchema.properties,
         social: {type:'object',additionalProperties:false,properties:{action:{enum:['speak','decline']},recipient_id:{type:['string','null']}},required:['action','recipient_id']},
-        task_decision: {type:'object',additionalProperties:false,properties:{amount:{type:'integer',minimum:0,maximum:100}},required:['amount']}
-    }, required:['response','social']
+        task_decision: {description:'Required when social.action is speak in task-enabled requests; omit when declining.',type:'object',additionalProperties:false,properties:{amount:{type:'integer',minimum:0,maximum:100}},required:['amount']}
+    }, required:[...agentTurnSchema.required,'social']
 };
-const ajv = new Ajv({ strict: false, strictNumbers: true });
-const validators = [ajv.compile(agentTurnSchema), ajv.compile(socialTurnSchema)];
+const {task_decision, ...socialOnlyProperties} = socialTurnSchema.properties;
+const socialOnlySchema = {...socialTurnSchema, properties:socialOnlyProperties};
 
-export function validateAgentTurn(value: unknown, social = false): asserts value is import('./LlmAdapter').AgentTurnResponse {
-    const validate = validators[social ? 1 : 0];
+export function responseSchema(social = false, task = false) {
+    if (task && !social) throw new Error('Task output requires social capability');
+    return social ? (task ? socialTurnSchema : socialOnlySchema) : agentTurnSchema;
+}
+const ajv = new Ajv({ strict: false, strictNumbers: true });
+const validators = [ajv.compile(agentTurnSchema), ajv.compile(socialOnlySchema), ajv.compile(socialTurnSchema)];
+
+export function validateAgentTurn(value: unknown, social = false, task = false): asserts value is import('./LlmAdapter').AgentTurnResponse {
+    const validate = validators[social ? (task ? 2 : 1) : 0];
     if (!validate(value)) {
         // Paths and validator keywords are safe; never include model-generated values.
         throw new Error(`Invalid agent-turn schema: ${validate.errors?.map(e => `${e.instancePath || '/'} ${e.keyword}`).join(', ')}`);
     }
-    const turn = value as unknown as import('./LlmAdapter').AgentTurnResponse;
-    turn.memory_operations ??= [];
 }

@@ -99,11 +99,24 @@ Backend environment defaults (set in the shell or ignored `backend/.env`):
 
 JSON Schema mode sends the agent-turn schema to the server and independently
 validates every returned object with the same schema. JSON-only mode sends
-`response_format: {"type":"json_object"}` plus a format-only instruction; the
+`response_format: {"type":"json_object"}`; the
 same independent schema validation still applies. There is no automatic mode
 switch, JSON repair, Markdown stripping, dialogue rewriting or invented response.
-If a server rejects a mode, configure a supported one for a new run. Missing
-`memory_operations` is normalized to `[]`; malformed operations are rejected.
+If a server rejects a mode, configure a supported one for a new run.
+
+Every request in both modes includes a dedicated system message containing the
+applicable response schema and transport-only JSON instructions, separate from the
+original agent prompt and conversation. Required fields must be present, including
+`memory_operations: []` when no changes are proposed; missing fields and malformed
+operations are rejected without defaults. Social/task schema fields apply only
+when their capabilities are enabled. Literal echoes of the reserved transport
+marker or complete schema into dialogue or memory proposals are rejected.
+The input character budget includes this formatting message.
+
+Successful and failed inference audit records retain the original prompt, actual
+request, raw model content (when returned), diagnostics, and validation outcome
+with the contract version and schema hash. Formatting compliance still depends
+on the local model; invalid output pauses the run rather than being repaired.
 Stat updates must target an existing stat, use `update`, and contain a finite
 number in the dashboard's 0–10 range. Initial stat values never change.
 
