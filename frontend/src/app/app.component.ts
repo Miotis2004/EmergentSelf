@@ -8,7 +8,7 @@ import { ResearchPanelComponent } from './research-panel.component';
 import { MemoryInspectorComponent } from './memory-inspector.component';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { AgentService, AgentIdentity } from './services/agent.service';
+import { AgentService, AgentIdentity, DemeanorOption } from './services/agent.service';
 import { ExperimentService } from './services/experiment.service';
 import { Subscription } from 'rxjs';
 
@@ -75,6 +75,15 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
       return agent ? `${agent.name} (${id})` : id;
   }
 
+  demeanorOptions: DemeanorOption[] = [];
+  demeanorType = '';
+  customDemeanor = '';
+  agentCreationError = '';
+
+  demeanorLabel(type: string) {
+      return this.demeanorOptions.find(option => option.type === type)?.label ?? type;
+  }
+
   newAgent = {
       id: '',
       name: '',
@@ -111,6 +120,10 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
   ngOnInit() {
       if (this.reviewMode) return;
       this.loadAgents();
+      this.agentService.getDemeanors().subscribe({
+          next: options => this.demeanorOptions = options,
+          error: () => this.agentCreationError = 'Could not load starting demeanor options.'
+      });
 
       this.experimentService.getLlmDefaults().subscribe({
           next: defaults => {
@@ -161,11 +174,18 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
   }
 
   createAgent() {
-      if (!this.newAgent.id || !this.newAgent.name) return;
-
+      this.agentCreationError = '';
+      if (!this.newAgent.id || !this.newAgent.name) { this.agentCreationError = 'Provide an agent ID and name.'; return; }
+      const option = this.demeanorOptions.find(item => item.type === this.demeanorType);
+      const description = this.demeanorType === 'custom' ? this.customDemeanor.trim() : option?.description;
+      if (this.demeanorType && (!option || !description || description.length > 1000)) {
+          this.agentCreationError = 'Select a starting demeanor; custom descriptions require 1–1,000 characters.';
+          return;
+      }
       const payload = {
           id: this.newAgent.id,
           name: this.newAgent.name,
+          ...(option ? {startingDemeanor:{type:option.type,description:description!}} : {}),
           stats: {
               curiosity: { initial: this.newAgent.stats.curiosity, current: this.newAgent.stats.curiosity },
               sociability: { initial: this.newAgent.stats.sociability, current: this.newAgent.stats.sociability }
@@ -177,8 +197,10 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
               this.loadAgents();
               this.newAgent.id = '';
               this.newAgent.name = '';
+              this.demeanorType = '';
+              this.customDemeanor = '';
           },
-          error: (err) => console.error('Create agent failed', err)
+          error: (err) => this.agentCreationError = err.error?.error || 'Could not create agent.'
       });
   }
 

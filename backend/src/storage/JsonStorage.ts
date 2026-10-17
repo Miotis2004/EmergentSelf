@@ -2,6 +2,8 @@ import fs from 'fs/promises';
 import path from 'path';
 import { WorkingState, importLegacy } from '../memory/types';
 import { randomUUID } from 'crypto';
+import { isDeepStrictEqual } from 'util';
+import { StartingDemeanor, validateStartingDemeanor } from '../agents/startingDemeanor';
 
 /**
  * Interface representing the structure of an agent's persistent state.
@@ -15,6 +17,7 @@ export interface AgentState {
             current: number;
         };
     };
+    startingDemeanor?: StartingDemeanor;
     memories: any[]; // Editable working memories
     beliefs: any[]; // Beliefs about the world or other agents
 }
@@ -67,6 +70,7 @@ export class JsonStorage {
      * Saves the agent's identity state.
      */
     async saveAgentIdentity(agentId: string, state: AgentState): Promise<void> {
+        await this.assertDemeanorUnchanged(agentId, state);
         const agentDir = this.getAgentDir(agentId);
         await this.ensureDir(agentDir);
         const current = await this.readJson<WorkingState>(path.join(agentDir, 'state.json'));
@@ -133,8 +137,16 @@ export class JsonStorage {
         return importLegacy(identity, await this.readJson<any[]>(path.join(dir, 'memory.json')) || [], await this.readJson<any[]>(path.join(dir, 'beliefs.json')) || []);
     }
 
+    private async assertDemeanorUnchanged(agentId: string, identity: AgentState): Promise<void> {
+        const normalized = validateStartingDemeanor(identity.startingDemeanor);
+        if (!isDeepStrictEqual(normalized, identity.startingDemeanor)) throw new Error('Starting demeanor must use its canonical description');
+        const existing = await this.loadAgentIdentity(agentId);
+        if (existing && !isDeepStrictEqual(existing.startingDemeanor, identity.startingDemeanor)) throw new Error('Starting demeanor is immutable creation metadata; create a new agent to change it');
+    }
+
     async createClone(agentId: string, state: WorkingState): Promise<void> {
         if (state.identity.id !== agentId) throw new Error('Invalid clone identity');
+        validateStartingDemeanor(state.identity.startingDemeanor);
         const dir = this.getAgentDir(agentId);
         await this.ensureDir(path.dirname(dir));
         await fs.mkdir(dir); // Exclusive reservation: never overwrite any existing agent.
@@ -144,6 +156,7 @@ export class JsonStorage {
 
     async saveWorkingState(agentId: string, state: WorkingState): Promise<void> {
         if (state.identity.id !== agentId || state.schemaVersion !== 2) throw new Error('Invalid working state identity/version');
+        await this.assertDemeanorUnchanged(agentId, state.identity);
         const dir = this.getAgentDir(agentId);
         await this.ensureDir(dir);
         await this.atomicWrite(path.join(dir, 'state.json'), state);

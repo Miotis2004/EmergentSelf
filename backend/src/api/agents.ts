@@ -1,8 +1,11 @@
 import { Router, Request, Response } from 'express';
 import { JsonStorage, AgentState } from '../storage/JsonStorage';
+import { DEMEANORS, validateStartingDemeanor } from '../agents/startingDemeanor';
 
 export function createAgentsRouter(storage: JsonStorage): Router {
     const router = Router();
+
+    router.get('/demeanors', (_req, res) => res.json(DEMEANORS));
 
     // List all agents
     router.get('/', async (req: Request, res: Response) => {
@@ -38,7 +41,10 @@ export function createAgentsRouter(storage: JsonStorage): Router {
                 return res.status(409).json({ error: 'Agent already exists' });
             }
 
-            const identity: AgentState = { id, name, stats, memories: [], beliefs: [] };
+            let startingDemeanor;
+            try { startingDemeanor = validateStartingDemeanor(req.body.startingDemeanor); }
+            catch (error: any) { return res.status(400).json({error:error.message}); }
+            const identity: AgentState = { id, name, stats, memories: [], beliefs: [], ...(startingDemeanor ? {startingDemeanor} : {}) };
             await storage.saveAgentIdentity(id, identity);
             await storage.saveAgentMemory(id, []);
             await storage.saveAgentBeliefs(id, []);

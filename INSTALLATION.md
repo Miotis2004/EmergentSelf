@@ -162,6 +162,30 @@ two selected agents are required. The dashboard submits checked IDs in ascending
 ID order, which becomes the fixed round-robin turn order. More than two agents
 are supported. Only participating agents receive turns or memory/stat changes.
 
+**Starting Demeanor** in Agent Setup is optional. Choose Helpful and Cooperative,
+Solitary and Reserved, Analytical and Scientific, Ritualistic and Tradition-Oriented,
+Skeptical and Questioning, Assertive and Competitive, or Custom. Custom descriptions
+are trimmed and must contain 1–1,000 characters. Leaving the selector unspecified
+preserves the original behavior. Curiosity and sociability remain independent.
+
+Demeanor is immutable creation metadata in the canonical identity, separate from
+learned self-descriptions and current attributes. Create a new agent to choose a
+different initial demeanor; saving an existing identity or working state cannot
+add, remove, or replace it. Existing agents and historical data are not migrated.
+
+Both standard and Phase III protocol prompts include this initial context only
+for agents that have it, without interpreting template placeholders inside the
+description. It is an initial tendency rather than a permanent constraint;
+researcher-assigned roles and task instructions take precedence. It is separate
+from conversation topics, memory retrieval, and the JSON transport contract.
+
+Run baselines and frozen starting snapshots retain the demeanor used at run
+start. Clones, branches, restored working states, and research exports preserve
+it alongside the rest of the identity. The Memory & self-model inspector displays
+initial demeanor and initial/current attributes next to learned self-descriptions,
+so comparisons use saved run state rather than today's agent list. No automatic
+personality classification, adjustment, or development events are added.
+
 **Conversation Topic** is optional multiline text, trimmed before saving and
 limited to 1,000 characters. A nonempty topic is the user-message stimulus for
 turn zero only. It is not inserted into the identity system prompt or repeatedly

@@ -1,3 +1,4 @@
+import { demeanorContext } from '../agents/startingDemeanor';
 import { inheritedContext } from '../branches/context';
 import { verifiedBranch } from '../branches/interventions';
 import { JsonStorage } from '../storage/JsonStorage';
@@ -315,7 +316,7 @@ export class ExperimentController {
         const stats = Object.entries(identity.stats).map(([key, value]) => `- ${key}: ${config.mode !== 'enabled' ? value.initial : value.current}`).join('\n');
         const system = `You are an agent with the following identity:
 ID: ${identity.id}
-Name: ${identity.name}
+Name: ${identity.name}${demeanorContext(identity)}
 
 Current Stats:
 ${stats}
