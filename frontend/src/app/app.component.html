@@ -1,3 +1,5 @@
+<router-outlet *ngIf="reviewMode"></router-outlet>
+<ng-container *ngIf="!reviewMode">
 <div class="container">
 
     <!-- Left: Setup & Agent Management -->
@@ -135,6 +137,7 @@
             </details>
         </fieldset>
 
+        <app-analysis-panel [running]="experimentStatus === 'running'"></app-analysis-panel>
         <app-research-panel [configuration]="researchConfiguration" [running]="experimentStatus === 'running'" (agentsChanged)="loadAgents()"></app-research-panel>
 
         <div class="transcript" #transcriptContainer>
@@ -183,3 +186,5 @@
         </div>
     </div>
 </div>
+
+</ng-container>

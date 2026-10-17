@@ -48,6 +48,7 @@ export class ExperimentController {
     private readonly writerId = randomUUID();
     private currentAttempt: any = null;
     private activeStorage: JsonStorage;
+    private researchLease = false;
 
     constructor(jsonStorage: JsonStorage, jsonlStorage: JsonlStorage, llmAdapter: LlmAdapter) {
         this.jsonStorage = jsonStorage;
@@ -95,11 +96,16 @@ export class ExperimentController {
             await this.jsonlStorage.acquireWriter(this.writerId);
             try {
                 await this.jsonlStorage.recoverPendingTurns(this.jsonStorage);
+                this.researchLease = true;
                 return await work();
-            } finally { if (!alreadyOwned) await this.jsonlStorage.releaseWriter(this.writerId); }
+            } finally { this.researchLease = false; if (!alreadyOwned) await this.jsonlStorage.releaseWriter(this.writerId); }
         });
         this.commands = result.catch(() => {});
         return result;
+    }
+
+    assertResearchLease() {
+        if (!this.researchLease || !this.jsonlStorage.ownsWriter(this.writerId)) throw new Error('Research operation requires the shared inference/write lease');
     }
 
     private async recordControl(action: string) {
