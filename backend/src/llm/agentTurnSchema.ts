@@ -25,9 +25,18 @@ export const agentTurnSchema = {
     },
     required: ['response']
 };
-const validate = new Ajv({ strict: false, strictNumbers: true }).compile(agentTurnSchema);
+export const socialTurnSchema = {
+    ...agentTurnSchema,
+    properties: {...agentTurnSchema.properties,
+        social: {type:'object',additionalProperties:false,properties:{action:{enum:['speak','decline']},recipient_id:{type:['string','null']}},required:['action','recipient_id']},
+        task_decision: {type:'object',additionalProperties:false,properties:{amount:{type:'integer',minimum:0,maximum:100}},required:['amount']}
+    }, required:['response','social']
+};
+const ajv = new Ajv({ strict: false, strictNumbers: true });
+const validators = [ajv.compile(agentTurnSchema), ajv.compile(socialTurnSchema)];
 
-export function validateAgentTurn(value: unknown): asserts value is import('./LlmAdapter').AgentTurnResponse {
+export function validateAgentTurn(value: unknown, social = false): asserts value is import('./LlmAdapter').AgentTurnResponse {
+    const validate = validators[social ? 1 : 0];
     if (!validate(value)) {
         // Paths and validator keywords are safe; never include model-generated values.
         throw new Error(`Invalid agent-turn schema: ${validate.errors?.map(e => `${e.instancePath || '/'} ${e.keyword}`).join(', ')}`);

@@ -11,7 +11,7 @@ export function createResearchRouter(research: ResearchService) {
     router.get('/defaults', (req,res)=>res.json({systemPrompt:DEFAULT_SYSTEM_PROMPT,turnPrompt:'It is your turn to speak, {name}.',inputCharLimit:24000}));
     router.get('/catalog',handle(()=>research.catalog()));
     router.post('/templates',handle(req=>research.template(req.body.templateId,req.body.configuration)));
-    router.post('/batches',handle(req=>research.batch(req.body.batchId,req.body.templateId,req.body.repeats,req.body.conditions,req.body.randomizationSeed,req.body.randomizeParticipants)));
+    router.post('/batches',handle(req=>research.batch(req.body.batchId,req.body.templateId,req.body.repeats,req.body.conditions,req.body.randomizationSeed,req.body.randomizeParticipants,req.body.feedbackConditions)));
     router.get('/batches/:batchId',handle(req=>research.batchManifest(req.params.batchId)));
     router.post('/batches/:batchId/start',handle(req=>research.startTrial(req.params.batchId,req.body.runId)));
     router.get('/compare',handle(req=>research.compare(req.query.left,req.query.right)));

@@ -13,6 +13,15 @@
   </fieldset>
   <section *ngIf="report">
     <p>{{report.metricVersion}} · {{report.totals.runs}} runs · {{report.totals.successfulResponses}} successful responses · {{report.totals.failedAttempts}} failed attempts · {{report.totals.humanRatings}} human ratings</p>
+    <details *ngIf="report.social"><summary>Social decisions, task scores & feedback conditions</summary>
+      <p>{{report.social.interpretation}}</p>
+      <table><thead><tr><th>Feedback condition / matched design</th><th>Runs</th><th>Address / decline fraction</th><th>Mean amount / score</th><th>Within-agent amount change</th></tr></thead><tbody><tr *ngFor="let g of report.social.groups"><td>{{g.condition}} / {{g.designHash.slice(0,12)}}</td><td>{{g.runCount}}</td><td>{{format(g.metrics.addressed.mean)}} / {{format(g.metrics.declined.mean)}}</td><td>{{format(g.metrics.amount.mean)}} / {{format(g.metrics.meanTaskScore.mean)}}</td><td>{{format(g.metrics.amountChange.mean)}}</td></tr></tbody></table>
+      <p *ngFor="let c of report.social.comparisons">{{c.right}} minus {{c.left}} ({{c.designHash.slice(0,12)}}): {{c.differences | json}}</p>
+      <div *ngFor="let run of report.social.runs"><h4>{{run.runId}} · {{run.condition}}</h4><p>{{run.unsettledDecisions}} task decisions await a complete round.</p>
+        <p *ngFor="let a of run.agents">{{a.agentId}}: {{a.turns}} turns, {{a.exposedTurns}} with delivered feedback, {{a.settledDecisions}} settled decisions. Mean task score {{format(a.meanTaskScore)}}.</p>
+        <details><summary>Agent task-amount windows and scoring evidence</summary><pre>{{run.agents | json}}</pre><pre>{{run.taskOutcomes | json}}</pre><pre>{{run.feedback | json}}</pre></details>
+      </div>
+    </details>
     <button (click)="download()">Download reproducible analysis JSON</button>
     <label>Measure <select [(ngModel)]="metric"><option *ngFor="let m of definitions.metrics" [value]="m.id">{{m.label}}</option></select></label>
     <p>{{selectedDefinition?.definition}}</p><p>{{report.aggregation}}</p>

@@ -118,6 +118,16 @@ describe('Experiment participants and initial topic', () => {
         expect(component.memoryConfig.retrievalEntries).toBe(24);
     });
 
+    it('preserves saved social rules, displays declines and receives source-linked environmental events',()=>{
+        const config={...savedConfig,socialConfig:{enabled:true},taskConfig:{kind:'public_goods',endowment:8,multiplier:2,prize:10},feedbackConfig:{enabled:true,source:'task',timing:'delayed',delayTurns:3,visibility:'public',positiveScore:1,negativeScore:-1,maxVisible:20}};
+        events.next({type:'snapshot',data:{status:'paused',config,turns:[{turnIndex:0,agentName:'BOB',social:{action:'decline',recipient_id:null},response:''}],events:[]}});
+        fixture.detectChanges();expect(component.configurationLocked).toBeTrue();expect(component.feedbackConfig.delayTurns).toBe(3);
+        expect(fixture.nativeElement.textContent).toContain('declined to speak');
+        const event={id:'reward',type:'feedback',turnIndex:0,score:2};events.next({type:'environment_event',data:event});events.next({type:'environment_event',data:event});
+        expect(component.auditEvents.filter(e=>e.id==='reward').length).toBe(1);
+        component.resumeExperiment();expect(experiments.resumeExperiment).toHaveBeenCalledWith();
+    });
+
     it('Resume sends no replacement configuration; legacy topics display as empty', () => {
         const { initialTopic, ...legacy } = savedConfig;
         events.next({ type: 'status_changed', data: { status: 'paused', config: legacy } });

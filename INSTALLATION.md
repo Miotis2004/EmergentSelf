@@ -451,3 +451,7 @@ memory instead of implying equal conditions. Snapshot-backed protocols require
 ## Phase IV behavioral analysis
 
 No additional services or dependencies are required. Run the backend and Angular dashboard as above, pause or complete an experiment, then open **Behavioral measures & longitudinal analysis**. The separate `/review` page serves metadata-blinded human evaluation. [PHASE_IV.md](PHASE_IV.md) documents benchmarks, memory tests, scoring rubrics, API endpoints and offline JSON/CSV analysis.
+
+## Phase V social interaction and feedback
+
+No additional services or dependencies are required. Use **Social interaction, tasks & feedback** to configure the next run. Freeze a feedback-enabled template and include matched feedback-off arms for controlled batches. [PHASE_V.md](PHASE_V.md) describes exact payoff rules, feedback delivery, recovery, API fields and analysis.

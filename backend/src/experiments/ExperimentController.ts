@@ -6,6 +6,7 @@ import { isDeepStrictEqual } from 'util';
 import { MemoryManager, MemoryValidationError } from '../agents/MemoryManager';
 import { MemoryConfig, resolveMemoryConfig } from '../memory/types';
 import { Protocol, ProtocolError, normalizeProtocol, renderProtocol, hash } from '../research/protocol';
+import { SocialConfig, TaskConfig, FeedbackConfig, resolveEnvironment, validateDecision, socialInstructions, settleRound, visibleFeedback, feedbackContext } from '../social/environment';
 import { retrieveMemory, boundedTranscript } from '../memory/retrieval';
 
 export type RunStatus = 'idle' | 'running' | 'paused' | 'stopped' | 'completed';
@@ -16,6 +17,9 @@ export interface ExperimentConfig {
     memoryConfig?: Partial<MemoryConfig>;
     protocol?: Partial<Protocol>;
     initialTopic?: string; // Legacy configurations omit this field.
+    socialConfig?: Partial<SocialConfig>;
+    taskConfig?: Partial<TaskConfig>;
+    feedbackConfig?: Partial<FeedbackConfig>;
     maxTurns: number;
     llmConfig: LlmConfig;
 }
@@ -49,6 +53,7 @@ export class ExperimentController {
     private currentAttempt: any = null;
     private activeStorage: JsonStorage;
     private researchLease = false;
+    private configHash = '';
 
     constructor(jsonStorage: JsonStorage, jsonlStorage: JsonlStorage, llmAdapter: LlmAdapter) {
         this.jsonStorage = jsonStorage;
@@ -78,8 +83,12 @@ export class ExperimentController {
         const runId = this.config?.runId;
         const state = this.getState();
         const turns = runId ? await this.jsonlStorage.getConversationHistory(runId) : [];
-        const events = runId ? await this.jsonlStorage.getEventHistory(runId) : [];
+        const events = runId ? [...await this.jsonlStorage.getEventHistory(runId), ...await this.jsonlStorage.readResearch(runId, 'feedback')] : [];
         return { ...state, turns, events };
+    }
+    notifyEnvironmentEvent(event:any) {
+        this.assertResearchLease();
+        if(event.runId === this.config?.runId)this.emit('environment_event',event);
     }
     private publishStatus() { this.emit('status_changed', this.getState()); }
     // Lifecycle commands are serialized, including discovery and disk I/O in start().
@@ -128,6 +137,7 @@ export class ExperimentController {
             if (!/^[A-Za-z0-9_-]+$/.test(config.runId) || !Number.isSafeInteger(config.maxTurns) || config.maxTurns < 1 ||
                 !Array.isArray(config.agentIds) || config.agentIds.length < 2 || new Set(config.agentIds).size !== config.agentIds.length ||
                 !config.agentIds.every(id => typeof id === 'string' && /^[A-Za-z0-9_-]+$/.test(id))) throw new Error('Invalid run ID, agent IDs or turn limit');
+            const environment = resolveEnvironment(config);
             const initialTopic = normalizeInitialTopic(config.initialTopic);
             const memoryConfig = resolveMemoryConfig(config.memoryConfig);
             const protocol = config.protocol === undefined ? undefined : normalizeProtocol(config.protocol, memoryConfig.mode);
@@ -167,10 +177,10 @@ export class ExperimentController {
                     if (protocol.initialStateHash && protocol.initialStateHash !== initialHash) throw new Error('Shared starting-state hash mismatch');
                     protocol.initialStateHash = initialHash;
                 }
-                const resolved = { ...config, agentIds: [...config.agentIds], initialTopic, llmConfig, memoryConfig, ...(protocol ? { protocol } : {}) };
-                if (existing && !isDeepStrictEqual({ ...existing, initialTopic: normalizeInitialTopic(existing.initialTopic), memoryConfig: resolveMemoryConfig(existing.memoryConfig) }, resolved)) throw new Error('Run ID already has different metadata; use a new run ID to change participants, topic, model or settings');
+                const resolved = { ...config, agentIds: [...config.agentIds], initialTopic, llmConfig, memoryConfig, ...((config.socialConfig || config.taskConfig || config.feedbackConfig) ? environment : {}), ...(protocol ? { protocol } : {}) };
+                if (existing && !isDeepStrictEqual({ ...existing, initialTopic: normalizeInitialTopic(existing.initialTopic), memoryConfig: resolveMemoryConfig(existing.memoryConfig), ...resolveEnvironment(existing) }, { ...resolved, ...environment })) throw new Error('Run ID already has different metadata; use a new run ID to change participants, topic, model or settings');
                 const history = await this.jsonlStorage.getConversationHistory(config.runId);
-                const events = await this.jsonlStorage.getEventHistory(config.runId);
+                const events = [...await this.jsonlStorage.getEventHistory(config.runId), ...await this.jsonlStorage.readResearch(config.runId,'feedback')];
                 if (!existing && (history.length || events.length)) throw new Error('Run already has research logs without configuration; use a new run ID');
                 if (!existing) await this.jsonlStorage.saveConfig(config.runId, resolved);
                 if (startingStates) for (const id of config.agentIds) {
@@ -182,6 +192,7 @@ export class ExperimentController {
                     await this.jsonlStorage.ensureMemoryBaseline(config.runId, history.length - 1, states);
                 }
                 this.config = resolved;
+                this.configHash = hash(existing ?? resolved);
                 this.llmAdapter.updateConfig(llmConfig);
                 this.currentTurnIndex = history.length;
                 this.shouldPause = false;
@@ -324,10 +335,16 @@ ${transcript || '(No conversation supplied)'}`;
     private async executeTurn(agentId: string) {
         this.emit('turn_started', { agentId, turnIndex: this.currentTurnIndex });
         const prompt = await this.buildPrompt(agentId);
+        const environment = resolveEnvironment(this.config!);
+        const pastEvents = [...await this.jsonlStorage.getEventHistory(this.config!.runId), ...await this.jsonlStorage.readResearch(this.config!.runId, 'feedback')];
+        const feedback = visibleFeedback(this.config!, agentId, this.currentTurnIndex, pastEvents);
+        prompt.system += socialInstructions(this.config!, this.currentTurnIndex) + feedbackContext(feedback);
+        (prompt.retrieval as any).feedbackIds = feedback.map(event=>event.id);
         this.currentAttempt = { startedAt: new Date().toISOString(), prompt: { system: prompt.system, messages: prompt.messages }, retrieval: prompt.retrieval };
         this.llmAdapter.updateConfig(this.config!.llmConfig);
-        const response = await this.llmAdapter.generateTurn(prompt.system, prompt.messages, this.config!.protocol?.inputCharLimit);
+        const response = await this.llmAdapter.generateTurn(prompt.system, prompt.messages, this.config!.protocol?.inputCharLimit, environment.socialConfig.enabled);
         this.currentAttempt.parsedResponse = response;
+        validateDecision(response, this.config!, agentId);
         const eventId = randomUUID();
         const config = resolveMemoryConfig(this.config!.memoryConfig);
         const prepared = this.memoryManager.prepareOperations(prompt.state, response.memory_operations, {
@@ -335,8 +352,10 @@ ${transcript || '(No conversation supplied)'}`;
             participants: this.config!.agentIds, config
         });
         const record = {
-            schemaVersion: 2, eventId, stateScope: this.config!.protocol?.stateScope ?? 'shared', configHash: hash(this.config), runId: this.config!.runId,
+            schemaVersion: 2, eventId, stateScope: this.config!.protocol?.stateScope ?? 'shared', configHash: this.configHash, runId: this.config!.runId,
             turnIndex: this.currentTurnIndex, agentId, agentName: prompt.state.identity.name,
+            ...(environment.socialConfig.enabled ? {social:response.social,taskDecision:response.task_decision} : {}),
+            environmentEvents: [] as any[],
             response: response.response, timestamp: new Date().toISOString(),
             auditTrail: prepared.auditTrail, stateBefore: prompt.state, stateAfter: prepared.state,
             memoryMode: config.mode, retrieval: prompt.retrieval,
@@ -345,6 +364,10 @@ ${transcript || '(No conversation supplied)'}`;
             request: this.llmAdapter.lastRequest, parsedResponse: response, rawResponse: this.llmAdapter.lastRawContent,
             diagnostics: this.llmAdapter.lastDiagnostics
         };
+        if (environment.taskConfig.kind !== 'none' && (this.currentTurnIndex + 1) % this.config!.agentIds.length === 0) {
+            const previous = await this.jsonlStorage.getConversationHistory(this.config!.runId);
+            record.environmentEvents = settleRound(this.config!, [...previous.slice(-(this.config!.agentIds.length - 1)), record]);
+        }
         // Commit before touching editable state. Recovery reapplies this exact state,
         // never the model's operations, so retries cannot duplicate adds or inference.
         await this.jsonlStorage.appendConversationTurn(this.config!.runId, record);
@@ -352,6 +375,7 @@ ${transcript || '(No conversation supplied)'}`;
         try { await this.jsonlStorage.projectTurn(this.config!.runId, record, this.jsonStorage); }
         catch { throw new TurnProjectionError('Turn is committed, but its working-state/audit update failed. Resume will repair it before the next inference'); }
         const { stateBefore, stateAfter, prompt: renderedPrompt, parsedResponse, rawResponse, ...turnRecord } = record;
+        for (const event of record.environmentEvents) this.emit('environment_event', event);
         this.emit('turn_completed', { turnRecord, auditTrail: prepared.auditTrail });
     }
 }

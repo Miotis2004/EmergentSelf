@@ -1,3 +1,4 @@
+import { resolveEnvironment } from '../social/environment';
 import { randomUUID } from 'crypto';
 import type { ExperimentConfig, ExperimentController } from '../experiments/ExperimentController';
 import { normalizeInitialTopic } from '../experiments/ExperimentController';
@@ -62,6 +63,7 @@ export class ResearchService {
             const models = await new LlmAdapter(llmConfig).getModels();
             if (!models.some(model => model.id === llmConfig.model)) throw new Error('Selected model is not loaded');
             const memoryConfig = resolveMemoryConfig(input.memoryConfig);
+            const environment = resolveEnvironment(input);
             const states: Record<string, WorkingState> = Object.create(null);
             let source: any = {sourceRunId:null,sourceTurnIndex:null};
             if (input.protocol?.snapshotId) {
@@ -73,14 +75,14 @@ export class ResearchService {
             const snapshotId = `${templateId}-start`; id(snapshotId);
             const protocol = normalizeProtocol({...input.protocol, stateScope:'trial', snapshotId, initialStateHash:hash(states),templateId},memoryConfig.mode);
             if (protocol.attributeMode === 'role' && input.agentIds.some(agentId => !Object.hasOwn(protocol.roles, agentId))) throw new Error('Each participant requires a role description');
-            const { runId, ...configuration } = { ...input, agentIds:[...input.agentIds], initialTopic:normalizeInitialTopic(input.initialTopic), llmConfig, memoryConfig, protocol };
+            const { runId, ...configuration } = { ...input, agentIds:[...input.agentIds], initialTopic:normalizeInitialTopic(input.initialTopic), llmConfig, memoryConfig, ...((input.socialConfig || input.taskConfig || input.feedbackConfig) ? environment : {}), protocol };
             const template = {schemaVersion:3,templateId,createdAt:new Date().toISOString(),configuration,configurationHash:hash(configuration)};
             // Snapshot-first failures leave an explicit artifact, never overwrite data.
             await this.saveSnapshot(snapshotId,states,source);
             await this.logs.saveArtifact('templates',templateId,template); return template;
         });
     }
-    batch(batchId: string, templateId: string, repeats: number, conditions: string[], randomizationSeed: number, randomizeParticipants = false) {
+    batch(batchId: string, templateId: string, repeats: number, conditions: string[], randomizationSeed: number, randomizeParticipants = false, feedbackConditions?: ('off'|'configured')[]) {
         return this.controller.researchAction(async () => {
             id(batchId); seed(randomizationSeed);
             if ((await this.logs.listArtifacts('batches')).includes(batchId)) throw Object.assign(new Error('EEXIST: batch ID already exists'),{code:'EEXIST'});
@@ -88,18 +90,22 @@ export class ResearchService {
             if (typeof randomizeParticipants !== 'boolean') throw new Error('Participant randomization must be a boolean');
             const template = await this.logs.loadArtifact('templates',id(templateId));
             if (hash(template.configuration) !== template.configurationHash) throw new Error('Template hash mismatch');
-            const assignments = shuffled(Array.from({length:repeats},(_,repeatIndex)=>conditions.map(condition=>({condition,repeatIndex}))).flat(),randomizationSeed);
-            const trials = assignments.map(({condition,repeatIndex},trialIndex)=> {
+            const feedbackArms = feedbackConditions ?? ['configured'];
+            if(!Array.isArray(feedbackArms)||!feedbackArms.length||new Set(feedbackArms).size!==feedbackArms.length||feedbackArms.some(arm=>!['off','configured'].includes(arm))||repeats*conditions.length*feedbackArms.length>100)throw new Error('Select distinct feedback arms and at most 100 total trials');
+            if(feedbackConditions?.includes('configured')&&!resolveEnvironment(template.configuration).feedbackConfig.enabled)throw new Error('Configured feedback arm requires a feedback-enabled template');
+            const assignments = shuffled(Array.from({length:repeats},(_,repeatIndex)=>conditions.flatMap(condition=>feedbackArms.map(feedbackArm=>({condition,repeatIndex,feedbackArm})))).flat(),randomizationSeed);
+            const trials = assignments.map(({condition,repeatIndex,feedbackArm},trialIndex)=> {
                 const configuration = structuredClone(template.configuration);
                 const runId = id(`${batchId}-${trialIndex+1}`);
                 configuration.memoryConfig.mode = condition;
+                if(feedbackConditions)configuration.feedbackConfig={...resolveEnvironment(configuration).feedbackConfig,enabled:feedbackArm==='configured'};
                 configuration.agentIds = randomizeParticipants ? shuffled(configuration.agentIds,(randomizationSeed+repeatIndex)>>>0) : configuration.agentIds;
                 configuration.protocol = normalizeProtocol({...configuration.protocol, condition, batchId,trialIndex,repeatIndex,randomizationSeed},condition as any);
                 return {runId,...configuration};
             });
             // Preflight all IDs before making the immutable manifest.
             for (const trial of trials) if (await this.logs.loadConfig(trial.runId) || (await this.logs.getConversationHistory(trial.runId)).length || (await this.logs.getEventHistory(trial.runId)).length) throw new Error(`Run ID already exists: ${trial.runId}`);
-            const manifest = {schemaVersion:3,batchId,templateId,randomizationSeed,randomizeParticipants,createdAt:new Date().toISOString(),trials};
+            const manifest = {schemaVersion:3,batchId,templateId,randomizationSeed,randomizeParticipants,...(feedbackConditions?{feedbackConditions}:{}),createdAt:new Date().toISOString(),trials};
             await this.logs.saveArtifact('batches',batchId,manifest);
             return manifest;
         });
@@ -179,6 +185,7 @@ export class ResearchService {
         if(config.protocol?.templateId) bundle.template=await this.logs.loadArtifact('templates',config.protocol.templateId);
         if(config.protocol?.batchId) bundle.batch=await this.logs.loadArtifact('batches',config.protocol.batchId);
         bundle.probeDefinitions=await Promise.all([...new Set(bundle.probes.map((p:any)=>p.probeId))].map(probeId=>this.logs.loadArtifact('probe-definitions',String(probeId))));
+        bundle.feedback=await this.logs.readResearch(runId,'feedback');
         bundle.benchmarkOutcomes=await this.logs.readResearch(runId,'benchmarks');
         bundle.benchmarkSessions=(await Promise.all((await this.logs.listArtifacts('benchmark-sessions')).map(sessionId=>this.logs.loadArtifact('benchmark-sessions',sessionId)))).filter(session=>session.runId===runId);
         bundle.benchmarkDefinitions=await Promise.all([...new Set(bundle.benchmarkSessions.map((record:any)=>record.benchmarkId))].map(benchmarkId=>this.logs.loadArtifact('benchmarks',String(benchmarkId))));

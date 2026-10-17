@@ -7,6 +7,9 @@ export interface ExperimentConfig {
     agentIds: string[];
     initialTopic?: string;
     memoryConfig?: Record<string, string | number>;
+    socialConfig?: any;
+    taskConfig?: any;
+    feedbackConfig?: any;
     maxTurns: number;
     llmConfig: {
         baseUrl: string;
@@ -77,7 +80,7 @@ export class ExperimentService {
   connectEvents() {
     if (this.eventSource) return;
     this.eventSource = new EventSource('http://localhost:3000/api/events');
-    for (const type of ['snapshot', 'status_changed', 'turn_started', 'turn_completed', 'experiment_error', 'connection_error']) {
+    for (const type of ['snapshot', 'status_changed', 'turn_started', 'turn_completed', 'experiment_error', 'environment_event', 'connection_error']) {
         this.eventSource.addEventListener(type, (event: MessageEvent) => {
             this.zone.run(() => {
                 try { this.events$.next({ type, data: JSON.parse(event.data) }); }
