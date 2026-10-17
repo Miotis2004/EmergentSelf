@@ -141,10 +141,12 @@ See [DEVELOPMENT.md](DEVELOPMENT.md) for milestones and acceptance criteria, pro
 
 ## Project status
 
-**Phase I application, Phase II memory evolution, Phase III experimental controls, Phase IV behavioral analysis, Phase V social interaction/feedback, and Phase VI identity branching/intervention implemented.** The conceptual layout above is historical design context; the actual application lives in `backend/` and `frontend/`. See [INSTALLATION.md](INSTALLATION.md) for setup, participant/topic selection, memory conditions, historical state inspection, reproducible trial templates/batches, probes, analysis exports, and local-model validation. Automated regression checks use controlled inference responses; real-model stability and research conclusions require local experiments.
+**Phase I application, Phase II memory evolution, Phase III experimental controls, Phase IV behavioral analysis, Phase V social interaction/feedback, Phase VI identity branching/intervention, and Phase VII research synthesis implemented.** The conceptual layout above is historical design context; the actual application lives in `backend/` and `frontend/`. See [INSTALLATION.md](INSTALLATION.md) for setup, participant/topic selection, memory conditions, historical state inspection, reproducible trial templates/batches, probes, analysis exports, and local-model validation. Automated regression checks use controlled inference responses; real-model stability and research conclusions require local experiments.
 
 Phase IV adds versioned behavioral proxies, agent timelines, matched-design condition summaries, benchmark conversations, read-only withheld/restored-memory tests, and a separate blinded review page. See [PHASE_IV.md](PHASE_IV.md) for definitions, rubrics, offline analysis commands and limits on interpretation.
 
 Phase V adds explicit addressing/abstention, cooperative and competitive tasks, private/public immediate/delayed feedback, matched feedback-off controls, and source-linked task comparisons. See [PHASE_V.md](PHASE_V.md) for scoring rules and experiment procedures.
 
 Phase VI adds isolated full-state branches, inherited conversation context, reversible memory/attribute/history interventions, explicit model variants and paired pre/post probes. See [PHASE_VI.md](PHASE_VI.md) for lineage, recovery and continuity-analysis procedures.
+
+Phase VII adds immutable study protocols, source-linked statistical contrasts and sensitivity, publication packages with archived analysis code, and anonymous synthetic reproduction data. See [PHASE_VII.md](PHASE_VII.md) for the local replication command, dictionary, validity limits and sharing profiles. Cite the exact commit and artifact hash; [CITATION.cff](CITATION.cff) provides software citation metadata.

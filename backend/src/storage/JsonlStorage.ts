@@ -120,7 +120,7 @@ export class JsonlStorage {
     async loadBaseline(runId: string): Promise<any> {
         return JSON.parse(await fs.readFile(path.join(this.getExperimentDir(runId), 'memory-baseline.json'), 'utf8'));
     }
-    async saveArtifact(kind: 'templates' | 'snapshots' | 'batches' | 'probe-definitions' | 'benchmarks' | 'benchmark-sessions' | 'evaluations-private' | 'ratings' | 'branches' | 'branch-comparisons', artifactId: string, value: any) {
+    async saveArtifact(kind: 'templates' | 'snapshots' | 'batches' | 'probe-definitions' | 'benchmarks' | 'benchmark-sessions' | 'evaluations-private' | 'ratings' | 'branches' | 'branch-comparisons' | 'studies' | 'publications', artifactId: string, value: any) {
         if (!/^[A-Za-z0-9_-]{1,120}$/.test(artifactId)) throw new Error('Invalid artifact ID');
         const dir = path.join(this.baseDir, kind);
         await this.ensureDir(dir);
@@ -132,11 +132,11 @@ export class JsonlStorage {
             await fs.link(temporary, target);
         } finally { await fs.rm(temporary, {force:true}); }
     }
-    async loadArtifact(kind: 'templates' | 'snapshots' | 'batches' | 'probe-definitions' | 'benchmarks' | 'benchmark-sessions' | 'evaluations-private' | 'ratings' | 'branches' | 'branch-comparisons', artifactId: string): Promise<any> {
+    async loadArtifact(kind: 'templates' | 'snapshots' | 'batches' | 'probe-definitions' | 'benchmarks' | 'benchmark-sessions' | 'evaluations-private' | 'ratings' | 'branches' | 'branch-comparisons' | 'studies' | 'publications', artifactId: string): Promise<any> {
         if (!/^[A-Za-z0-9_-]{1,120}$/.test(artifactId)) throw new Error('Invalid artifact ID');
         return JSON.parse(await fs.readFile(path.join(this.baseDir, kind, `${artifactId}.json`), 'utf8'));
     }
-    async listArtifacts(kind: 'templates' | 'snapshots' | 'batches' | 'probe-definitions' | 'benchmarks' | 'benchmark-sessions' | 'evaluations-private' | 'ratings' | 'branches' | 'branch-comparisons') {
+    async listArtifacts(kind: 'templates' | 'snapshots' | 'batches' | 'probe-definitions' | 'benchmarks' | 'benchmark-sessions' | 'evaluations-private' | 'ratings' | 'branches' | 'branch-comparisons' | 'studies' | 'publications') {
         try { return (await fs.readdir(path.join(this.baseDir, kind))).filter(file => file.endsWith('.json')).map(file => file.slice(0,-5)).sort(); }
         catch (error: any) { if (error.code === 'ENOENT') return []; throw error; }
     }

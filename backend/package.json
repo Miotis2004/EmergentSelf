@@ -9,7 +9,11 @@
     "dev": "nodemon src/index.ts",
     "start": "node dist/index.js",
     "test:local-model": "npm run build && node scripts/local-model-check.cjs",
-    "analyze": "npm run build && node scripts/analyze-exports.cjs"
+    "analyze": "npm run build && node scripts/analyze-exports.cjs",
+    "synthesize": "npm run build && node scripts/synthesize-study.cjs",
+    "verify-publication": "npm run build && node scripts/verify-publication.cjs",
+    "example:publication": "npm run build && node scripts/generate-publication-example.cjs",
+    "replicate": "npm run build && node scripts/replicate-study.cjs"
   },
   "keywords": [],
   "author": "",

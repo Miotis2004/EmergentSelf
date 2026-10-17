@@ -1,0 +1,523 @@
+{
+  "schemaVersion": 3,
+  "synthetic": true,
+  "runId": "synthetic-enabled-2",
+  "config": {
+    "runId": "synthetic-enabled-2",
+    "agentIds": [
+      "agent-a",
+      "agent-b"
+    ],
+    "initialTopic": "",
+    "maxTurns": 6,
+    "memoryConfig": {
+      "mode": "enabled",
+      "maxActiveEntries": 200,
+      "maxOperations": 20,
+      "maxEntryChars": 2000,
+      "retrievalEntries": 24,
+      "retrievalChars": 12000,
+      "entryChars": 1000,
+      "summaryChars": 2000,
+      "transcriptTurns": 10,
+      "transcriptChars": 8000,
+      "retrievalRule": "importance"
+    },
+    "llmConfig": {
+      "baseUrl": "http://127.0.0.1:8080/v1",
+      "model": "synthetic-model-not-an-inference-result",
+      "modelVersion": "synthetic-v1",
+      "temperature": 0.7,
+      "maxTokens": 2048,
+      "outputMode": "json_schema"
+    },
+    "protocol": {
+      "stateScope": "trial",
+      "snapshotId": "synthetic-start",
+      "initialStateHash": "482839fc2da88f56ef87b748a28af61d8df04d24978a441e6ac8812d6580dea9",
+      "version": 1,
+      "condition": "enabled",
+      "systemPrompt": "You are an agent with the following identity:\nID: {id}\nName: {name}\n\nAttributes:\n{attributes}\n\nWorking memory:\n{memory}\n\nExtractive digest (excerpts; originals retained):\n{digest}\n\nRecent conversation:\n{transcript}\n\nBased on the conversation, generate a reply. You may propose revisions to your working state.",
+      "turnPrompt": "It is your turn to speak, {name}.",
+      "inputCharLimit": 24000,
+      "attributeMode": "numeric",
+      "roles": {}
+    }
+  },
+  "configHash": "a9085cba6e1455660d5f160d32ae4b27b88e5c83b21ab4d7a00b0ae418b35f00",
+  "baseline": {
+    "atTurn": -1,
+    "states": {
+      "agent-a": {
+        "schemaVersion": 2,
+        "identity": {
+          "id": "agent-a",
+          "name": "agent-a",
+          "stats": {
+            "curiosity": {
+              "initial": 5,
+              "current": 5
+            }
+          },
+          "memories": [],
+          "beliefs": []
+        },
+        "entries": []
+      },
+      "agent-b": {
+        "schemaVersion": 2,
+        "identity": {
+          "id": "agent-b",
+          "name": "agent-b",
+          "stats": {
+            "curiosity": {
+              "initial": 5,
+              "current": 5
+            }
+          },
+          "memories": [],
+          "beliefs": []
+        },
+        "entries": []
+      }
+    }
+  },
+  "turns": [
+    {
+      "schemaVersion": 2,
+      "eventId": "synthetic-enabled-2-turn-0",
+      "runId": "synthetic-enabled-2",
+      "agentId": "agent-a",
+      "agentName": "agent-a",
+      "turnIndex": 0,
+      "response": "Could you explain the evidence?",
+      "timestamp": "2026-01-01T00:00:00.000Z",
+      "parsedResponse": {
+        "response": "Could you explain the evidence?",
+        "memory_operations": []
+      },
+      "rawResponse": "{\"response\":\"Could you explain the evidence?\",\"memory_operations\":[]}",
+      "auditTrail": [],
+      "stateBefore": {
+        "schemaVersion": 2,
+        "identity": {
+          "id": "agent-a",
+          "name": "agent-a",
+          "stats": {
+            "curiosity": {
+              "initial": 5,
+              "current": 5
+            }
+          },
+          "memories": [],
+          "beliefs": []
+        },
+        "entries": []
+      },
+      "stateAfter": {
+        "schemaVersion": 2,
+        "identity": {
+          "id": "agent-a",
+          "name": "agent-a",
+          "stats": {
+            "curiosity": {
+              "initial": 5,
+              "current": 5
+            }
+          },
+          "memories": [],
+          "beliefs": []
+        },
+        "entries": []
+      },
+      "prompt": {
+        "system": "You are an agent with the following identity:\nID: {id}\nName: {name}\n\nAttributes:\n{attributes}\n\nWorking memory:\n{memory}\n\nExtractive digest (excerpts; originals retained):\n{digest}\n\nRecent conversation:\n{transcript}\n\nBased on the conversation, generate a reply. You may propose revisions to your working state.",
+        "messages": [
+          {
+            "role": "user",
+            "content": "A synthetic placeholder stimulus."
+          }
+        ]
+      },
+      "request": {
+        "model": "synthetic-model-not-an-inference-result",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are an agent with the following identity:\nID: {id}\nName: {name}\n\nAttributes:\n{attributes}\n\nWorking memory:\n{memory}\n\nExtractive digest (excerpts; originals retained):\n{digest}\n\nRecent conversation:\n{transcript}\n\nBased on the conversation, generate a reply. You may propose revisions to your working state."
+          },
+          {
+            "role": "user",
+            "content": "A synthetic placeholder stimulus."
+          }
+        ]
+      }
+    },
+    {
+      "schemaVersion": 2,
+      "eventId": "synthetic-enabled-2-turn-1",
+      "runId": "synthetic-enabled-2",
+      "agentId": "agent-b",
+      "agentName": "agent-b",
+      "turnIndex": 1,
+      "response": "Could you explain the evidence?",
+      "timestamp": "2026-01-01T00:00:01.000Z",
+      "parsedResponse": {
+        "response": "Could you explain the evidence?",
+        "memory_operations": []
+      },
+      "rawResponse": "{\"response\":\"Could you explain the evidence?\",\"memory_operations\":[]}",
+      "auditTrail": [],
+      "stateBefore": {
+        "schemaVersion": 2,
+        "identity": {
+          "id": "agent-b",
+          "name": "agent-b",
+          "stats": {
+            "curiosity": {
+              "initial": 5,
+              "current": 5
+            }
+          },
+          "memories": [],
+          "beliefs": []
+        },
+        "entries": []
+      },
+      "stateAfter": {
+        "schemaVersion": 2,
+        "identity": {
+          "id": "agent-b",
+          "name": "agent-b",
+          "stats": {
+            "curiosity": {
+              "initial": 5,
+              "current": 5
+            }
+          },
+          "memories": [],
+          "beliefs": []
+        },
+        "entries": []
+      },
+      "prompt": {
+        "system": "You are an agent with the following identity:\nID: {id}\nName: {name}\n\nAttributes:\n{attributes}\n\nWorking memory:\n{memory}\n\nExtractive digest (excerpts; originals retained):\n{digest}\n\nRecent conversation:\n{transcript}\n\nBased on the conversation, generate a reply. You may propose revisions to your working state.",
+        "messages": [
+          {
+            "role": "user",
+            "content": "A synthetic placeholder stimulus."
+          }
+        ]
+      },
+      "request": {
+        "model": "synthetic-model-not-an-inference-result",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are an agent with the following identity:\nID: {id}\nName: {name}\n\nAttributes:\n{attributes}\n\nWorking memory:\n{memory}\n\nExtractive digest (excerpts; originals retained):\n{digest}\n\nRecent conversation:\n{transcript}\n\nBased on the conversation, generate a reply. You may propose revisions to your working state."
+          },
+          {
+            "role": "user",
+            "content": "A synthetic placeholder stimulus."
+          }
+        ]
+      }
+    },
+    {
+      "schemaVersion": 2,
+      "eventId": "synthetic-enabled-2-turn-2",
+      "runId": "synthetic-enabled-2",
+      "agentId": "agent-a",
+      "agentName": "agent-a",
+      "turnIndex": 2,
+      "response": "I will consider the available evidence.",
+      "timestamp": "2026-01-01T00:00:02.000Z",
+      "parsedResponse": {
+        "response": "I will consider the available evidence.",
+        "memory_operations": []
+      },
+      "rawResponse": "{\"response\":\"I will consider the available evidence.\",\"memory_operations\":[]}",
+      "auditTrail": [],
+      "stateBefore": {
+        "schemaVersion": 2,
+        "identity": {
+          "id": "agent-a",
+          "name": "agent-a",
+          "stats": {
+            "curiosity": {
+              "initial": 5,
+              "current": 5
+            }
+          },
+          "memories": [],
+          "beliefs": []
+        },
+        "entries": []
+      },
+      "stateAfter": {
+        "schemaVersion": 2,
+        "identity": {
+          "id": "agent-a",
+          "name": "agent-a",
+          "stats": {
+            "curiosity": {
+              "initial": 5,
+              "current": 5
+            }
+          },
+          "memories": [],
+          "beliefs": []
+        },
+        "entries": []
+      },
+      "prompt": {
+        "system": "You are an agent with the following identity:\nID: {id}\nName: {name}\n\nAttributes:\n{attributes}\n\nWorking memory:\n{memory}\n\nExtractive digest (excerpts; originals retained):\n{digest}\n\nRecent conversation:\n{transcript}\n\nBased on the conversation, generate a reply. You may propose revisions to your working state.",
+        "messages": [
+          {
+            "role": "user",
+            "content": "A synthetic placeholder stimulus."
+          }
+        ]
+      },
+      "request": {
+        "model": "synthetic-model-not-an-inference-result",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are an agent with the following identity:\nID: {id}\nName: {name}\n\nAttributes:\n{attributes}\n\nWorking memory:\n{memory}\n\nExtractive digest (excerpts; originals retained):\n{digest}\n\nRecent conversation:\n{transcript}\n\nBased on the conversation, generate a reply. You may propose revisions to your working state."
+          },
+          {
+            "role": "user",
+            "content": "A synthetic placeholder stimulus."
+          }
+        ]
+      }
+    },
+    {
+      "schemaVersion": 2,
+      "eventId": "synthetic-enabled-2-turn-3",
+      "runId": "synthetic-enabled-2",
+      "agentId": "agent-b",
+      "agentName": "agent-b",
+      "turnIndex": 3,
+      "response": "I will consider the available evidence.",
+      "timestamp": "2026-01-01T00:00:03.000Z",
+      "parsedResponse": {
+        "response": "I will consider the available evidence.",
+        "memory_operations": []
+      },
+      "rawResponse": "{\"response\":\"I will consider the available evidence.\",\"memory_operations\":[]}",
+      "auditTrail": [],
+      "stateBefore": {
+        "schemaVersion": 2,
+        "identity": {
+          "id": "agent-b",
+          "name": "agent-b",
+          "stats": {
+            "curiosity": {
+              "initial": 5,
+              "current": 5
+            }
+          },
+          "memories": [],
+          "beliefs": []
+        },
+        "entries": []
+      },
+      "stateAfter": {
+        "schemaVersion": 2,
+        "identity": {
+          "id": "agent-b",
+          "name": "agent-b",
+          "stats": {
+            "curiosity": {
+              "initial": 5,
+              "current": 5
+            }
+          },
+          "memories": [],
+          "beliefs": []
+        },
+        "entries": []
+      },
+      "prompt": {
+        "system": "You are an agent with the following identity:\nID: {id}\nName: {name}\n\nAttributes:\n{attributes}\n\nWorking memory:\n{memory}\n\nExtractive digest (excerpts; originals retained):\n{digest}\n\nRecent conversation:\n{transcript}\n\nBased on the conversation, generate a reply. You may propose revisions to your working state.",
+        "messages": [
+          {
+            "role": "user",
+            "content": "A synthetic placeholder stimulus."
+          }
+        ]
+      },
+      "request": {
+        "model": "synthetic-model-not-an-inference-result",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are an agent with the following identity:\nID: {id}\nName: {name}\n\nAttributes:\n{attributes}\n\nWorking memory:\n{memory}\n\nExtractive digest (excerpts; originals retained):\n{digest}\n\nRecent conversation:\n{transcript}\n\nBased on the conversation, generate a reply. You may propose revisions to your working state."
+          },
+          {
+            "role": "user",
+            "content": "A synthetic placeholder stimulus."
+          }
+        ]
+      }
+    },
+    {
+      "schemaVersion": 2,
+      "eventId": "synthetic-enabled-2-turn-4",
+      "runId": "synthetic-enabled-2",
+      "agentId": "agent-a",
+      "agentName": "agent-a",
+      "turnIndex": 4,
+      "response": "I will consider the available evidence.",
+      "timestamp": "2026-01-01T00:00:04.000Z",
+      "parsedResponse": {
+        "response": "I will consider the available evidence.",
+        "memory_operations": []
+      },
+      "rawResponse": "{\"response\":\"I will consider the available evidence.\",\"memory_operations\":[]}",
+      "auditTrail": [],
+      "stateBefore": {
+        "schemaVersion": 2,
+        "identity": {
+          "id": "agent-a",
+          "name": "agent-a",
+          "stats": {
+            "curiosity": {
+              "initial": 5,
+              "current": 5
+            }
+          },
+          "memories": [],
+          "beliefs": []
+        },
+        "entries": []
+      },
+      "stateAfter": {
+        "schemaVersion": 2,
+        "identity": {
+          "id": "agent-a",
+          "name": "agent-a",
+          "stats": {
+            "curiosity": {
+              "initial": 5,
+              "current": 5
+            }
+          },
+          "memories": [],
+          "beliefs": []
+        },
+        "entries": []
+      },
+      "prompt": {
+        "system": "You are an agent with the following identity:\nID: {id}\nName: {name}\n\nAttributes:\n{attributes}\n\nWorking memory:\n{memory}\n\nExtractive digest (excerpts; originals retained):\n{digest}\n\nRecent conversation:\n{transcript}\n\nBased on the conversation, generate a reply. You may propose revisions to your working state.",
+        "messages": [
+          {
+            "role": "user",
+            "content": "A synthetic placeholder stimulus."
+          }
+        ]
+      },
+      "request": {
+        "model": "synthetic-model-not-an-inference-result",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are an agent with the following identity:\nID: {id}\nName: {name}\n\nAttributes:\n{attributes}\n\nWorking memory:\n{memory}\n\nExtractive digest (excerpts; originals retained):\n{digest}\n\nRecent conversation:\n{transcript}\n\nBased on the conversation, generate a reply. You may propose revisions to your working state."
+          },
+          {
+            "role": "user",
+            "content": "A synthetic placeholder stimulus."
+          }
+        ]
+      }
+    },
+    {
+      "schemaVersion": 2,
+      "eventId": "synthetic-enabled-2-turn-5",
+      "runId": "synthetic-enabled-2",
+      "agentId": "agent-b",
+      "agentName": "agent-b",
+      "turnIndex": 5,
+      "response": "I will consider the available evidence.",
+      "timestamp": "2026-01-01T00:00:05.000Z",
+      "parsedResponse": {
+        "response": "I will consider the available evidence.",
+        "memory_operations": []
+      },
+      "rawResponse": "{\"response\":\"I will consider the available evidence.\",\"memory_operations\":[]}",
+      "auditTrail": [],
+      "stateBefore": {
+        "schemaVersion": 2,
+        "identity": {
+          "id": "agent-b",
+          "name": "agent-b",
+          "stats": {
+            "curiosity": {
+              "initial": 5,
+              "current": 5
+            }
+          },
+          "memories": [],
+          "beliefs": []
+        },
+        "entries": []
+      },
+      "stateAfter": {
+        "schemaVersion": 2,
+        "identity": {
+          "id": "agent-b",
+          "name": "agent-b",
+          "stats": {
+            "curiosity": {
+              "initial": 5,
+              "current": 5
+            }
+          },
+          "memories": [],
+          "beliefs": []
+        },
+        "entries": []
+      },
+      "prompt": {
+        "system": "You are an agent with the following identity:\nID: {id}\nName: {name}\n\nAttributes:\n{attributes}\n\nWorking memory:\n{memory}\n\nExtractive digest (excerpts; originals retained):\n{digest}\n\nRecent conversation:\n{transcript}\n\nBased on the conversation, generate a reply. You may propose revisions to your working state.",
+        "messages": [
+          {
+            "role": "user",
+            "content": "A synthetic placeholder stimulus."
+          }
+        ]
+      },
+      "request": {
+        "model": "synthetic-model-not-an-inference-result",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are an agent with the following identity:\nID: {id}\nName: {name}\n\nAttributes:\n{attributes}\n\nWorking memory:\n{memory}\n\nExtractive digest (excerpts; originals retained):\n{digest}\n\nRecent conversation:\n{transcript}\n\nBased on the conversation, generate a reply. You may propose revisions to your working state."
+          },
+          {
+            "role": "user",
+            "content": "A synthetic placeholder stimulus."
+          }
+        ]
+      }
+    }
+  ],
+  "events": [
+    {
+      "id": "synthetic-enabled-2-failure",
+      "type": "experiment_error",
+      "runId": "synthetic-enabled-2",
+      "agentId": "agent-b",
+      "turnIndex": 1,
+      "message": "Synthetic malformed-output failure; later retry succeeded.",
+      "timestamp": "2026-01-01T00:00:00.500Z"
+    }
+  ],
+  "probes": [],
+  "interventions": [],
+  "evaluations": [],
+  "feedback": [],
+  "integrityHash": "f6e435d3d6a056198b906acf883772b03168bf17f3430d0e5625cdf81eae586a"
+}
