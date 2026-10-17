@@ -9,8 +9,12 @@ export interface LlmConfig {
     outputMode?: 'json_schema' | 'json_only';
 }
 export interface MemoryOperation {
-    action: 'add' | 'update' | 'retire';
-    type: 'memory' | 'belief' | 'stat';
+    action: 'add' | 'update' | 'retire' | 'consolidate' | 'contradict';
+    type: 'memory' | 'episodic' | 'belief' | 'stat' | 'self_description' | 'relationship';
+    target_ids?: string[];
+    confidence?: number;
+    importance?: number;
+    relationship_agent_id?: string;
     target_id?: string;
     content: string | number;
     reason: string;
@@ -53,6 +57,7 @@ function excerpt(text: string): string {
 
 export class LlmAdapter {
     private config: LlmConfig;
+    public lastRawContent: string | undefined;
     public lastDiagnostics: LlmDiagnostics | undefined;
     constructor(config: Partial<LlmConfig> = {}) { this.config = resolveLlmConfig(config); }
     updateConfig(config: Partial<LlmConfig>) { this.config = resolveLlmConfig({ ...this.config, ...config }); }
@@ -77,6 +82,7 @@ export class LlmAdapter {
 
     async generateTurn(systemPrompt: string, messages: { role: string; content: string }[]): Promise<AgentTurnResponse> {
         this.lastDiagnostics = undefined;
+        this.lastRawContent = undefined;
         if (!this.config.model) throw new Error('Select a loaded model before running an experiment');
         const diagnostics: LlmDiagnostics = {
             httpStatus: null, requestedModel: this.config.model, model: this.config.model,
@@ -86,7 +92,7 @@ export class LlmAdapter {
             model: this.config.model,
             messages: [ { role: 'system', content: systemPrompt }, ...messages,
                 // Format instruction only; identity/personality instructions are unchanged.
-                ...(this.config.outputMode === 'json_only' ? [{ role: 'system', content: 'Return only a JSON object with response (string) and memory_operations (array, empty when no changes). Memory operations have action (add/update/retire), type (memory/belief/stat), optional target_id, content and reason. Do not use Markdown fences.' }] : [])
+                ...(this.config.outputMode === 'json_only' ? [{ role: 'system', content: 'Return only a JSON object with response (string) and memory_operations (array, empty when no changes). Memory operations follow the agent-turn schema: action (add/update/retire/consolidate/contradict), type (episodic/belief/self_description/relationship/stat), content, reason, optional target_id or target_ids, confidence (0–1), importance (0–1), and relationship_agent_id for relationships. Do not use Markdown fences.' }] : [])
             ],
             temperature: this.config.temperature,
             max_tokens: this.config.maxTokens,
@@ -116,6 +122,7 @@ export class LlmAdapter {
             const content = choice?.message?.content;
             diagnostics.finishReason = typeof choice?.finish_reason === 'string' ? choice.finish_reason : null;
             diagnostics.contentPresent = typeof content === 'string';
+            if (typeof content === 'string') this.lastRawContent = content;
             diagnostics.contentLength = typeof content === 'string' ? content.length : 0;
             diagnostics.excerpt = typeof content === 'string' ? excerpt(content) : '';
             if (data?.usage && typeof data.usage === 'object') {

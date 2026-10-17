@@ -6,13 +6,17 @@ export const agentTurnSchema = {
     properties: {
         response: { type: 'string' },
         memory_operations: {
-            type: 'array', items: {
+            type: 'array', maxItems: 50, items: {
                 type: 'object', additionalProperties: false,
                 properties: {
-                    action: { enum: ['add', 'update', 'retire'] },
-                    type: { enum: ['memory', 'belief', 'stat'] },
+                    action: { enum: ['add', 'update', 'retire', 'consolidate', 'contradict'], description: 'update revises a target_id; contradict supersedes a target_id with an alternative; consolidate summarizes target_ids without deleting originals; retire deactivates a target_id' },
+                    type: { enum: ['memory', 'episodic', 'belief', 'stat', 'self_description', 'relationship'], description: 'memory is a legacy alias for episodic observations; beliefs/opinions, self-description and relationships are separate categories' },
                     target_id: { type: 'string', minLength: 1 },
-                    content: { type: ['string', 'number'] },
+                    target_ids: { type: 'array', minItems: 2, maxItems: 20, uniqueItems: true, items: { type: 'string', minLength: 1 }, description: 'Existing entry IDs to consolidate into one entry of the same category' },
+                    confidence: { type: 'number', minimum: 0, maximum: 1 },
+                    importance: { type: 'number', minimum: 0, maximum: 1 },
+                    relationship_agent_id: { type: 'string', minLength: 1 },
+                    content: { type: ['string', 'number'], maxLength: 8000 },
                     reason: { type: 'string', minLength: 1 }
                 },
                 required: ['action', 'type', 'content', 'reason']

@@ -6,6 +6,7 @@ export interface ExperimentConfig {
     runId: string;
     agentIds: string[];
     initialTopic?: string;
+    memoryConfig?: Record<string, string | number>;
     maxTurns: number;
     llmConfig: {
         baseUrl: string;
@@ -44,6 +45,13 @@ export class ExperimentService {
 
   resetExperiment(): Observable<any> {
       return this.http.post(`${this.apiUrl}/reset`, {});
+  }
+
+  getMemoryHistory(runId: string, agentId: string, turn?: number, compareTo?: number): Observable<any> {
+      const params: Record<string, string> = {};
+      if (turn !== undefined) params['turn'] = String(turn);
+      if (compareTo !== undefined) params['compareTo'] = String(compareTo);
+      return this.http.get(`${this.apiUrl}/runs/${encodeURIComponent(runId)}/agents/${encodeURIComponent(agentId)}/memory`, { params });
   }
 
   getStatus(): Observable<any> {

@@ -1,5 +1,10 @@
 import fs from 'fs/promises';
 import path from 'path';
+import { JsonStorage } from './JsonStorage';
+import { WorkingState } from '../memory/types';
+import { diffStates } from '../memory/history';
+
+export class TurnProjectionError extends Error {}
 
 export class JsonlStorage {
     private baseDir: string;
@@ -9,6 +14,7 @@ export class JsonlStorage {
     }
 
     private getExperimentDir(runId: string): string {
+        if (!/^[A-Za-z0-9_-]+$/.test(runId)) throw new Error('Invalid run ID');
         return path.join(this.baseDir, 'experiments', runId);
     }
 
@@ -40,6 +46,98 @@ export class JsonlStorage {
             if (error.code === 'ENOENT') return null;
             throw error;
         }
+    }
+
+    async ensureMemoryBaseline(runId: string, atTurn: number, states: Record<string, WorkingState>) {
+        const dir = this.getExperimentDir(runId);
+        await this.ensureDir(dir);
+        try {
+            await fs.writeFile(path.join(dir, 'memory-baseline.json'), JSON.stringify({ schemaVersion: 2, atTurn, states }), { encoding: 'utf8', flag: 'wx' });
+        } catch (error: any) { if (error.code !== 'EEXIST') throw error; }
+    }
+
+    async memoryHistory(runId: string, agentId: string, turn?: number, compareTo?: number) {
+        if (!/^[A-Za-z0-9_-]+$/.test(agentId)) throw new Error('Invalid agent ID');
+        const baseline = JSON.parse(await fs.readFile(path.join(this.getExperimentDir(runId), 'memory-baseline.json'), 'utf8'));
+        if (!Object.hasOwn(baseline.states, agentId)) throw new Error('Agent is not a participant in this memory history');
+        const history = await this.getConversationHistory(runId);
+        const last = Math.max(baseline.atTurn, history.length - 1);
+        const stateAt = (index: number): WorkingState => {
+            if (!Number.isSafeInteger(index) || index < baseline.atTurn || index > last) throw new Error(`Historical turn must be between ${baseline.atTurn} and ${last}`);
+            let state = baseline.states[agentId];
+            for (const record of history) {
+                if (record.turnIndex > baseline.atTurn && record.turnIndex <= index && record.agentId === agentId) {
+                    if (!record.stateAfter) throw new Error('Historical state was not recorded for this legacy turn');
+                    state = record.stateAfter;
+                }
+            }
+            return structuredClone(state);
+        };
+        const selected = turn ?? last;
+        const state = stateAt(selected);
+        return {
+            runId, agentId, turnIndex: selected, baselineTurn: baseline.atTurn, lastTurn: last, state,
+            timeline: history.filter(record => record.agentId === agentId && record.schemaVersion === 2).map(record => ({
+                turnIndex: record.turnIndex, eventId: record.eventId, timestamp: record.timestamp,
+                operations: record.auditTrail, retrieval: record.retrieval
+            })),
+            ...(compareTo === undefined ? {} : { compareTo, diff: diffStates(stateAt(compareTo), state) })
+        };
+    }
+
+    // The conversation record is the write-ahead commit. Projection/event writes
+    // are idempotently repaired before any subsequent inference, even after restart.
+    async projectTurn(runId: string, record: any, storage: JsonStorage) {
+        if (record.memoryMode !== 'none') await storage.saveWorkingState(record.agentId, record.stateAfter);
+        await this.appendEvent(runId, {
+            schemaVersion: 2, id: record.eventId, type: 'memory_update',
+            turnIndex: record.turnIndex, agentId: record.agentId, timestamp: record.timestamp,
+            operations: record.auditTrail, retrieval: record.retrieval
+        });
+    }
+
+    async recoverPendingTurns(storage: JsonStorage) {
+        const dir = path.join(this.baseDir, 'experiments');
+        let runs;
+        try { runs = await fs.readdir(dir, { withFileTypes: true }); }
+        catch (error: any) { if (error.code === 'ENOENT') return; throw error; }
+        for (const run of runs.filter(entry => entry.isDirectory())) {
+            const history = await this.getConversationHistory(run.name);
+            const events = await this.getEventHistory(run.name);
+            const projected = new Set(events.filter(e => e.type === 'memory_update').map(e => e.id));
+            for (const record of history) {
+                if (record.schemaVersion === 2 && !projected.has(record.eventId)) await this.projectTurn(run.name, record, storage);
+            }
+        }
+    }
+
+    private lockOwner: string | null = null;
+    async acquireWriter(owner: string): Promise<void> {
+        if (this.lockOwner === owner) return;
+        await this.ensureDir(this.baseDir);
+        const file = path.join(this.baseDir, '.writer.lock');
+        try {
+            await fs.writeFile(file, JSON.stringify({ pid: process.pid, owner }), { flag: 'wx' });
+        } catch (error: any) {
+            if (error.code !== 'EEXIST') throw error;
+            const existing = JSON.parse(await fs.readFile(file, 'utf8'));
+            try { process.kill(existing.pid, 0); }
+            catch (probe: any) {
+                if (probe.code !== 'ESRCH') throw probe;
+                await fs.unlink(file);
+                return this.acquireWriter(owner);
+            }
+            throw new Error('Another experiment writer owns this research store; stop it before starting');
+        }
+        this.lockOwner = owner;
+    }
+    ownsWriter(owner: string) { return this.lockOwner === owner; }
+    async releaseWriter(owner: string) {
+        if (this.lockOwner !== owner) return;
+        const file = path.join(this.baseDir, '.writer.lock');
+        const saved = JSON.parse(await fs.readFile(file, 'utf8'));
+        if (saved.owner === owner) await fs.unlink(file);
+        this.lockOwner = null;
     }
 
     /**

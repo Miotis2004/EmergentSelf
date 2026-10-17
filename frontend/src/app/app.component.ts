@@ -1,4 +1,5 @@
 import { Component, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewChecked } from '@angular/core';
+import { MemoryInspectorComponent } from './memory-inspector.component';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AgentService, AgentIdentity } from './services/agent.service';
@@ -8,7 +9,7 @@ import { Subscription } from 'rxjs';
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, MemoryInspectorComponent],
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.css']
 })
@@ -19,6 +20,26 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
   selectedAgentIds = new Set<string>();
   savedAgentIds: string[] | null = null;
   initialTopic = '';
+  readonly defaultMemoryConfig = {
+      mode: 'enabled', maxActiveEntries: 200, maxOperations: 20, maxEntryChars: 2000,
+      retrievalEntries: 24, retrievalChars: 12000, entryChars: 1000, summaryChars: 2000,
+      transcriptTurns: 10, transcriptChars: 8000, retrievalRule: 'importance'
+  };
+  memoryConfig = { ...this.defaultMemoryConfig };
+  memoryLimits = [
+      {key:'maxActiveEntries', label:'Maximum active entries', min:1, max:1000},
+      {key:'maxOperations', label:'Operations per turn', min:1, max:50},
+      {key:'maxEntryChars', label:'Characters per stored entry', min:1, max:8000},
+      {key:'retrievalEntries', label:'Retrieved entries', min:0, max:100},
+      {key:'retrievalChars', label:'Retrieved memory characters', min:0, max:32000},
+      {key:'entryChars', label:'Characters per retrieved entry', min:1, max:8000},
+      {key:'summaryChars', label:'Extractive digest characters', min:0, max:8000},
+      {key:'transcriptTurns', label:'Recent transcript turns', min:0, max:100},
+      {key:'transcriptChars', label:'Transcript characters', min:0, max:32000}
+  ];
+  memoryLimit(key: string): any { return (this.memoryConfig as any)[key]; }
+  setMemoryLimit(key: string, value: number) { if (!this.configurationLocked) (this.memoryConfig as any)[key] = value; }
+
 
   get configurationLocked(): boolean { return this.requestPending || this.experimentStatus !== 'idle'; }
 
@@ -158,6 +179,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
           runId: this.runId,
           agentIds,
           initialTopic,
+          memoryConfig: { ...this.memoryConfig },
           maxTurns: this.maxTurns,
           llmConfig: {
               baseUrl: this.llmBaseUrl,
@@ -205,6 +227,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
           this.savedAgentIds = [...state.config.agentIds];
           this.selectedAgentIds = new Set(this.savedAgentIds);
           this.initialTopic = state.config.initialTopic ?? '';
+          this.memoryConfig = { ...this.defaultMemoryConfig, ...state.config.memoryConfig };
           this.runId = state.config.runId;
           this.maxTurns = state.config.maxTurns;
           this.llmBaseUrl = state.config.llmConfig.baseUrl;

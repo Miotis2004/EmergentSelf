@@ -1,5 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
+import { WorkingState, importLegacy } from '../memory/types';
+import { randomUUID } from 'crypto';
 
 /**
  * Interface representing the structure of an agent's persistent state.
@@ -25,6 +27,7 @@ export class JsonStorage {
     }
 
     private getAgentDir(agentId: string): string {
+        if (!/^[A-Za-z0-9_-]+$/.test(agentId)) throw new Error('Invalid agent ID');
         return path.join(this.baseDir, 'agents', agentId);
     }
 
@@ -36,9 +39,13 @@ export class JsonStorage {
      * Atomically writes data to a JSON file.
      */
     private async atomicWrite(filePath: string, data: any): Promise<void> {
-        const tempPath = `${filePath}.tmp`;
-        await fs.writeFile(tempPath, JSON.stringify(data, null, 2), 'utf-8');
-        await fs.rename(tempPath, filePath);
+        const tempPath = `${filePath}.${randomUUID()}.tmp`;
+        try {
+            await fs.writeFile(tempPath, JSON.stringify(data, null, 2), 'utf-8');
+            await fs.rename(tempPath, filePath);
+        } finally {
+            await fs.rm(tempPath, { force: true });
+        }
     }
 
     /**
@@ -62,7 +69,9 @@ export class JsonStorage {
     async saveAgentIdentity(agentId: string, state: AgentState): Promise<void> {
         const agentDir = this.getAgentDir(agentId);
         await this.ensureDir(agentDir);
-        await this.atomicWrite(path.join(agentDir, 'identity.json'), state);
+        const current = await this.readJson<WorkingState>(path.join(agentDir, 'state.json'));
+        if (current) { current.identity = state; await this.saveWorkingState(agentId, current); }
+        else await this.atomicWrite(path.join(agentDir, 'identity.json'), state);
     }
 
     /**
@@ -70,7 +79,8 @@ export class JsonStorage {
      */
     async loadAgentIdentity(agentId: string): Promise<AgentState | null> {
         const agentDir = this.getAgentDir(agentId);
-        return this.readJson<AgentState>(path.join(agentDir, 'identity.json'));
+        const state = await this.readJson<WorkingState>(path.join(agentDir, 'state.json'));
+        return state?.identity ?? this.readJson<AgentState>(path.join(agentDir, 'identity.json'));
     }
 
     /**
@@ -79,6 +89,7 @@ export class JsonStorage {
     async saveAgentMemory(agentId: string, memories: any[]): Promise<void> {
         const agentDir = this.getAgentDir(agentId);
         await this.ensureDir(agentDir);
+        if (await this.readJson<WorkingState>(path.join(agentDir, 'state.json'))) throw new Error('Use audited Phase II operations to revise canonical memory');
         await this.atomicWrite(path.join(agentDir, 'memory.json'), memories);
     }
 
@@ -87,7 +98,8 @@ export class JsonStorage {
      */
     async loadAgentMemory(agentId: string): Promise<any[] | null> {
         const agentDir = this.getAgentDir(agentId);
-        return this.readJson<any[]>(path.join(agentDir, 'memory.json'));
+        const state = await this.readJson<WorkingState>(path.join(agentDir, 'state.json'));
+        return state ? state.entries.filter(e => e.type === 'episodic' && e.status === 'active') : this.readJson<any[]>(path.join(agentDir, 'memory.json'));
     }
 
     /**
@@ -96,6 +108,7 @@ export class JsonStorage {
     async saveAgentBeliefs(agentId: string, beliefs: any[]): Promise<void> {
         const agentDir = this.getAgentDir(agentId);
         await this.ensureDir(agentDir);
+        if (await this.readJson<WorkingState>(path.join(agentDir, 'state.json'))) throw new Error('Use audited Phase II operations to revise canonical beliefs');
         await this.atomicWrite(path.join(agentDir, 'beliefs.json'), beliefs);
     }
 
@@ -104,7 +117,27 @@ export class JsonStorage {
      */
     async loadAgentBeliefs(agentId: string): Promise<any[] | null> {
         const agentDir = this.getAgentDir(agentId);
-        return this.readJson<any[]>(path.join(agentDir, 'beliefs.json'));
+        const state = await this.readJson<WorkingState>(path.join(agentDir, 'state.json'));
+        return state ? state.entries.filter(e => e.type === 'belief' && e.status === 'active') : this.readJson<any[]>(path.join(agentDir, 'beliefs.json'));
+    }
+
+    async loadWorkingState(agentId: string): Promise<WorkingState> {
+        const dir = this.getAgentDir(agentId);
+        const current = await this.readJson<WorkingState>(path.join(dir, 'state.json'));
+        if (current) {
+            if (current.schemaVersion !== 2) throw new Error('Unsupported working state schema');
+            return current;
+        }
+        const identity = await this.readJson<AgentState>(path.join(dir, 'identity.json'));
+        if (!identity) throw new Error(`Agent ${agentId} not found`);
+        return importLegacy(identity, await this.readJson<any[]>(path.join(dir, 'memory.json')) || [], await this.readJson<any[]>(path.join(dir, 'beliefs.json')) || []);
+    }
+
+    async saveWorkingState(agentId: string, state: WorkingState): Promise<void> {
+        if (state.identity.id !== agentId || state.schemaVersion !== 2) throw new Error('Invalid working state identity/version');
+        const dir = this.getAgentDir(agentId);
+        await this.ensureDir(dir);
+        await this.atomicWrite(path.join(dir, 'state.json'), state);
     }
 
     /**

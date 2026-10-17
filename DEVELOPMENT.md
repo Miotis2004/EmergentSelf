@@ -65,10 +65,12 @@ No database, online model retraining, reward/punishment, external web access for
 
 ### Acceptance criteria
 
-- [ ] Agents can revise earlier beliefs with identifiable source events.
-- [ ] The application can reconstruct each agent's working state at a selected turn.
-- [ ] Summarization does not erase original events from the audit record.
-- [ ] Memory limits and retrieval rules are configurable and logged.
+- [x] Agents can revise earlier beliefs with identifiable source events.
+- [x] The application can reconstruct each agent's working state at a selected turn.
+- [x] Summarization does not erase original events from the audit record.
+- [x] Memory limits and retrieval rules are configurable and logged.
+
+**Implementation evidence:** Phase II acceptance behavior is covered by automated memory-evolution, history/API, recovery, and Angular explorer tests. Inference fixtures validate the application workflow; actual local-model research runs remain a separate validation step. See [INSTALLATION.md](INSTALLATION.md#phase-ii-memory-and-self-model-evolution) for schemas, memory conditions, limits, and reconstruction semantics.
 
 ## Phase III: Experimental controls and reproducibility
 

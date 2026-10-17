@@ -141,4 +141,4 @@ See [DEVELOPMENT.md](DEVELOPMENT.md) for milestones and acceptance criteria, pro
 
 ## Project status
 
-**Planning / pre-implementation.** The directory layout and schemas above are proposals, not claims that components have already been implemented. Setup and run commands will be added after the initial scaffold exists.
+**Phase I application and Phase II memory workflow implemented.** The conceptual layout above is historical design context; the actual application lives in `backend/` and `frontend/`. See [INSTALLATION.md](INSTALLATION.md) for setup, participant/topic selection, memory conditions, historical state inspection, and local-model validation. Automated regression checks use controlled inference responses; real-model stability and research conclusions require local experiments.

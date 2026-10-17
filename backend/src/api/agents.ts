@@ -59,7 +59,8 @@ export function createAgentsRouter(storage: JsonStorage): Router {
             }
             const memories = await storage.loadAgentMemory(id) || [];
             const beliefs = await storage.loadAgentBeliefs(id) || [];
-            res.json({ identity, memories, beliefs });
+            const state = await storage.loadWorkingState(id);
+            res.json({ identity, memories, beliefs, state });
         } catch (error: any) {
             res.status(500).json({ error: error.message });
         }
