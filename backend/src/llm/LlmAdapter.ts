@@ -87,6 +87,7 @@ function excerpt(text: string): string {
 export class LlmAdapter {
     private config: LlmConfig;
     public lastRequest: any;
+    public lastParsedResponse: unknown;
     public lastRawContent: string | undefined;
     public lastDiagnostics: LlmDiagnostics | undefined;
     public lastValidation: LlmValidation | undefined;
@@ -115,6 +116,7 @@ export class LlmAdapter {
         this.lastRequest = undefined;
         this.lastDiagnostics = undefined;
         this.lastRawContent = undefined;
+        this.lastParsedResponse = undefined;
         this.lastValidation = undefined;
         if (!this.config.model) throw new Error('Select a loaded model before running an experiment');
         const diagnostics: LlmDiagnostics = {
@@ -184,6 +186,7 @@ export class LlmAdapter {
             this.lastValidation.stage = 'response_json';
             let parsed: unknown;
             try { parsed = JSON.parse(content); } catch { return fail('Invalid JSON response from LLM; inspect diagnostics for truncation or output-format incompatibility'); }
+            this.lastParsedResponse = structuredClone(parsed);
             this.lastValidation.stage = 'schema';
             try { validateAgentTurn(parsed, social, task); } catch (error: any) { return fail(error.message); }
             this.lastValidation.stage = 'transport_boundary';

@@ -1,4 +1,15 @@
-import { MemoryConfig, WorkingState } from './types';
+import { MemoryConfig, MemoryKind, WorkingState } from './types';
+
+const categories: {type:MemoryKind; label:string}[] = [
+    {type:'episodic',label:'Episodic observations'}, {type:'belief',label:'Beliefs and opinions'},
+    {type:'self_description',label:'Self-descriptions'}, {type:'relationship',label:'Relationships'}
+];
+function grouped(lines: {type:MemoryKind; text:string}[]): string {
+    return categories.flatMap(category=>{
+        const entries = lines.filter(line=>line.type===category.type);
+        return entries.length ? [`Active ${category.label} (${category.type}):\n${entries.map(line=>line.text).join('\n')}`] : [];
+    }).join('\n\n');
+}
 
 export function retrieveMemory(state: WorkingState, config: MemoryConfig) {
     const active = state.entries.filter(entry => entry.status === 'active');
@@ -11,28 +22,31 @@ export function retrieveMemory(state: WorkingState, config: MemoryConfig) {
         return compare(b.updated_at ?? '', a.updated_at ?? '') || compare(a.id, b.id);
     });
     const selectedIds: string[] = [], summaryIds: string[] = [];
-    const lines: string[] = [];
+    const lines: {type:MemoryKind; text:string}[] = [];
     let used = 0;
     for (const entry of config.mode !== 'enabled' ? [] : ranked) {
         const prefix = `[${entry.id}] ${entry.type}${entry.relationship_agent_id ? ` about ${entry.relationship_agent_id}` : ''} (confidence=${entry.confidence}): `;
         const text = entry.content.slice(0, config.entryChars);
         const line = prefix + text + (text.length < entry.content.length ? ' [excerpt]' : '');
-        if (selectedIds.length < config.retrievalEntries && used + line.length + 1 <= config.retrievalChars) {
-            lines.push(line); selectedIds.push(entry.id); used += line.length + 1;
+        const proposed = [...lines, {type:entry.type,text:line}];
+        if (selectedIds.length < config.retrievalEntries && grouped(proposed).length <= config.retrievalChars) {
+            lines.push({type:entry.type,text:line}); selectedIds.push(entry.id); used = grouped(lines).length;
         }
     }
     // Deterministic extractive digest, never an invented/model-authored recollection.
     // Originals remain in the state and append-only turn record.
     let summary = '';
+    const excerpts: {type:MemoryKind; text:string}[] = [];
     if (config.mode === 'enabled') for (const entry of ranked.filter(e => !selectedIds.includes(e.id))) {
         const prefix = `[${entry.id}] ${entry.type}: `;
-        const remaining = config.summaryChars - summary.length - prefix.length - 1;
+        const remaining = config.summaryChars - grouped([...excerpts,{type:entry.type,text:prefix}]).length;
         if (remaining < 1) break;
         const piece = entry.content.slice(0, Math.min(160, remaining));
-        summary += prefix + piece + '\n'; summaryIds.push(entry.id);
+        excerpts.push({type:entry.type,text:prefix+piece});
+        summary = grouped(excerpts); summaryIds.push(entry.id);
     }
     return {
-        text: lines.join('\n'), summary,
+        text: grouped(lines), summary,
         metadata: { rule: config.retrievalRule, mode: config.mode, selectedIds, summaryIds,
             omittedEntries: active.length - selectedIds.length - summaryIds.length,
             memoryChars: used, summaryChars: summary.length }

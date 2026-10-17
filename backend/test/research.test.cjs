@@ -72,7 +72,7 @@ test('attribute modes are explicit and fixed; arbitrary labels hide named numeri
  await assert.rejects(service(f).template('bad-role',config(f,{protocol:{attributeMode:'role',roles:{bob:'Only one role'}}})),/Each participant/);
  assert.throws(()=>normalizeProtocol({systemPrompt:'Unknown {unsupported}'},'enabled'),/Unknown prompt/);
  const literal=normalizeProtocol({systemPrompt:'{attributes}',attributeMode:'role',roles:{bob:'Literal {memory} text'}},'enabled');
- assert.equal(renderProtocol(state,memory,literal,[]).system,'Literal {memory} text');
+ assert.equal(renderProtocol(state,memory,literal,[]).system,'Literal {memory} text'+require('../dist/memory/operationGuide').memoryOperationGuide(memory));
 });
 
 test('seed support, version and prompt budgets are validated without silent fallback',async t=>{
@@ -180,7 +180,7 @@ test('starting snapshot integrity and immutable configuration are enforced acros
 
 test('probe budget failures do not misattribute the previous request or model response',async t=>{
  const f=await fixture(t,reply);const research=service(f);
- await research.template('budget-probe',config(f,{protocol:{systemPrompt:'{id}',turnPrompt:'{name}',inputCharLimit:20+require('../dist/llm/LlmAdapter').outputContract(require('../dist/llm/agentTurnSchema').responseSchema()).length}}));
+ await research.template('budget-probe',config(f,{protocol:{systemPrompt:'{id}',turnPrompt:'{name}',inputCharLimit:20+require('../dist/memory/operationGuide').memoryOperationGuide({mode:'enabled'}).length+require('../dist/llm/LlmAdapter').outputContract(require('../dist/llm/agentTurnSchema').responseSchema()).length}}));
  const batch=await research.batch('budget-probe-batch','budget-probe',1,['enabled'],2);const runId=batch.trials[0].runId;
  await start(f,research,'budget-probe-batch',runId);await research.defineProbe('budget-probe-definition',['A','B']);
  const before=f.stats().requests;const result=await research.probe(runId,'bob',0,'budget-probe-definition','Researcher','Check a fixed budget');
