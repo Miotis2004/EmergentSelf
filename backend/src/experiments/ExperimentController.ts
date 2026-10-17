@@ -5,6 +5,7 @@ import { randomUUID } from 'crypto';
 import { isDeepStrictEqual } from 'util';
 import { MemoryManager, MemoryValidationError } from '../agents/MemoryManager';
 import { MemoryConfig, resolveMemoryConfig } from '../memory/types';
+import { Protocol, ProtocolError, normalizeProtocol, renderProtocol, hash } from '../research/protocol';
 import { retrieveMemory, boundedTranscript } from '../memory/retrieval';
 
 export type RunStatus = 'idle' | 'running' | 'paused' | 'stopped' | 'completed';
@@ -13,6 +14,7 @@ export interface ExperimentConfig {
     runId: string;
     agentIds: string[]; // Immutable participant order for the sequential scheduler.
     memoryConfig?: Partial<MemoryConfig>;
+    protocol?: Partial<Protocol>;
     initialTopic?: string; // Legacy configurations omit this field.
     maxTurns: number;
     llmConfig: LlmConfig;
@@ -45,9 +47,11 @@ export class ExperimentController {
     private lastError: any = null;
     private readonly writerId = randomUUID();
     private currentAttempt: any = null;
+    private activeStorage: JsonStorage;
 
     constructor(jsonStorage: JsonStorage, jsonlStorage: JsonlStorage, llmAdapter: LlmAdapter) {
         this.jsonStorage = jsonStorage;
+        this.activeStorage = jsonStorage;
         this.jsonlStorage = jsonlStorage;
         this.llmAdapter = llmAdapter;
         this.memoryManager = new MemoryManager(this.jsonStorage);
@@ -83,6 +87,29 @@ export class ExperimentController {
         this.commands = result.catch(() => {});
         return result;
     }
+    researchAction<T>(work: () => Promise<T>): Promise<T> {
+        const result = this.commands.then(async () => {
+            if (this.status === 'running') throw new Error('Pause or stop the experiment before researcher operations');
+            await this.activePromise;
+            const alreadyOwned = this.jsonlStorage.ownsWriter(this.writerId);
+            await this.jsonlStorage.acquireWriter(this.writerId);
+            try {
+                await this.jsonlStorage.recoverPendingTurns(this.jsonStorage);
+                return await work();
+            } finally { if (!alreadyOwned) await this.jsonlStorage.releaseWriter(this.writerId); }
+        });
+        this.commands = result.catch(() => {});
+        return result;
+    }
+
+    private async recordControl(action: string) {
+        if (!this.config?.protocol || !this.jsonlStorage.ownsWriter(this.writerId)) return;
+        await this.jsonlStorage.appendResearch(this.config.runId, 'interventions', {
+            schemaVersion:3,id:randomUUID(),runId:this.config.runId,turnIndex:this.currentTurnIndex-1,
+            actor:'unspecified',action,reason:`Explicit ${action} control`,timestamp:new Date().toISOString(),activeAgentId:this.activeAgentId
+        });
+    }
+
     private launchLoop() {
         if (this.activePromise) throw new Error('A turn loop is still active');
         this.activePromise = this.runLoop().finally(() => { this.activePromise = null; });
@@ -97,13 +124,24 @@ export class ExperimentController {
                 !config.agentIds.every(id => typeof id === 'string' && /^[A-Za-z0-9_-]+$/.test(id))) throw new Error('Invalid run ID, agent IDs or turn limit');
             const initialTopic = normalizeInitialTopic(config.initialTopic);
             const memoryConfig = resolveMemoryConfig(config.memoryConfig);
+            const protocol = config.protocol === undefined ? undefined : normalizeProtocol(config.protocol, memoryConfig.mode);
             await this.jsonlStorage.acquireWriter(this.writerId);
             try {
                 await this.jsonlStorage.recoverPendingTurns(this.jsonStorage);
+                this.activeStorage = protocol?.stateScope === 'trial' ? this.jsonlStorage.trialStorage(config.runId) : this.jsonStorage;
+                let startingStates: any;
+                if (protocol?.stateScope === 'trial') {
+                    const snapshot = await this.jsonlStorage.loadArtifact('snapshots', protocol.snapshotId!);
+                    if (hash(snapshot.states) !== snapshot.stateHash || protocol.initialStateHash !== snapshot.stateHash) throw new Error('Frozen starting snapshot hash mismatch');
+                    if (!isDeepStrictEqual(Object.keys(snapshot.states).sort(), [...config.agentIds].sort())) throw new Error('Snapshot participant IDs differ from the run');
+                    startingStates = snapshot.states;
+                }
+                if (protocol?.attributeMode === 'role' && config.agentIds.some(id => !Object.hasOwn(protocol.roles, id))) throw new Error('Each participant requires an explicit role description');
                 for (const id of config.agentIds) {
-                    if (!await this.jsonStorage.loadAgentIdentity(id)) throw new Error(`Agent ${id} missing`);
+                    if (!startingStates && !await this.activeStorage.loadAgentIdentity(id)) throw new Error(`Agent ${id} missing`);
                 }
                 const llmConfig = resolveLlmConfig(config.llmConfig);
+                if (protocol && !llmConfig.modelVersion) throw new Error('Phase III runs require a model version/hash or an explicit unverified declaration');
                 const discovery = new LlmAdapter(llmConfig);
                 const models = await discovery.getModels();
                 if (!llmConfig.model) {
@@ -111,16 +149,30 @@ export class ExperimentController {
                     llmConfig.model = models[0].id;
                 }
                 if (!models.some(model => model.id === llmConfig.model)) throw new Error('Selected model is not in the loaded model list');
-                const resolved = { ...config, agentIds: [...config.agentIds], initialTopic, llmConfig, memoryConfig };
                 const existing = await this.jsonlStorage.loadConfig(config.runId);
+                if (protocol?.stateScope === 'shared') {
+                    if (protocol.snapshotId) throw new Error('Snapshot-backed protocols must use isolated trial state');
+                    let baseline: any;
+                    try { baseline = existing ? await this.jsonlStorage.loadBaseline(config.runId) : undefined; }
+                    catch (error: any) { if (error.code !== 'ENOENT') throw error; }
+                    const states: any = Object.create(null);
+                    if (!baseline) for (const id of config.agentIds) states[id] = await this.jsonStorage.loadWorkingState(id);
+                    const initialHash = hash(baseline?.states ?? states);
+                    if (protocol.initialStateHash && protocol.initialStateHash !== initialHash) throw new Error('Shared starting-state hash mismatch');
+                    protocol.initialStateHash = initialHash;
+                }
+                const resolved = { ...config, agentIds: [...config.agentIds], initialTopic, llmConfig, memoryConfig, ...(protocol ? { protocol } : {}) };
                 if (existing && !isDeepStrictEqual({ ...existing, initialTopic: normalizeInitialTopic(existing.initialTopic), memoryConfig: resolveMemoryConfig(existing.memoryConfig) }, resolved)) throw new Error('Run ID already has different metadata; use a new run ID to change participants, topic, model or settings');
                 const history = await this.jsonlStorage.getConversationHistory(config.runId);
                 const events = await this.jsonlStorage.getEventHistory(config.runId);
                 if (!existing && (history.length || events.length)) throw new Error('Run already has research logs without configuration; use a new run ID');
                 if (!existing) await this.jsonlStorage.saveConfig(config.runId, resolved);
+                if (startingStates) for (const id of config.agentIds) {
+                    if (!await this.activeStorage.loadAgentIdentity(id)) await this.activeStorage.saveWorkingState(id, startingStates[id]);
+                }
                 if (history.length < config.maxTurns) {
-                    const states: Record<string, Awaited<ReturnType<JsonStorage['loadWorkingState']>>> = {};
-                    for (const id of config.agentIds) states[id] = await this.jsonStorage.loadWorkingState(id);
+                    const states: Record<string, Awaited<ReturnType<JsonStorage['loadWorkingState']>>> = Object.create(null);
+                    for (const id of config.agentIds) states[id] = await this.activeStorage.loadWorkingState(id);
                     await this.jsonlStorage.ensureMemoryBaseline(config.runId, history.length - 1, states);
                 }
                 this.config = resolved;
@@ -129,6 +181,7 @@ export class ExperimentController {
                 this.shouldPause = false;
                 this.shouldStop = false;
                 this.lastError = null;
+                if (this.currentTurnIndex < config.maxTurns) await this.recordControl(existing ? 'restart' : 'start');
                 this.status = this.currentTurnIndex >= config.maxTurns ? 'completed' : 'running';
                 this.emit('snapshot', { ...this.getState(), turns: history, events });
                 this.publishStatus();
@@ -145,6 +198,7 @@ export class ExperimentController {
         this.shouldPause = true;
         this.status = 'paused';
         this.publishStatus();
+        await this.recordControl('pause');
         // Finish the in-flight turn before any Resume can launch the next loop.
         await this.activePromise;
     }); }
@@ -155,6 +209,7 @@ export class ExperimentController {
         this.shouldPause = false;
         this.shouldStop = false;
         this.lastError = null;
+        await this.recordControl('resume');
         this.status = this.currentTurnIndex >= this.config.maxTurns ? 'completed' : 'running';
         this.emit('snapshot', await this.getSnapshot());
         this.publishStatus();
@@ -163,6 +218,7 @@ export class ExperimentController {
     }); }
     stop() { return this.command(async () => {
         this.shouldStop = true;
+        await this.recordControl('stop');
         this.status = 'stopped';
         this.publishStatus();
         await this.activePromise;
@@ -171,6 +227,7 @@ export class ExperimentController {
     }); }
     reset() { return this.command(async () => {
         this.shouldStop = true;
+        await this.recordControl('reset');
         await this.activePromise;
         if (this.jsonlStorage.ownsWriter(this.writerId)) await this.jsonlStorage.recoverPendingTurns(this.jsonStorage);
         await this.jsonlStorage.releaseWriter(this.writerId);
@@ -201,7 +258,7 @@ export class ExperimentController {
                 this.lastError = {
                     id: randomUUID(), type: 'experiment_error', runId: this.config.runId,
                     turnIndex: error instanceof TurnProjectionError ? this.currentTurnIndex - 1 : this.currentTurnIndex, agentId,
-                    message: (error instanceof LlmError || error instanceof MemoryValidationError || error instanceof TurnProjectionError) ? error.message : 'Turn execution failed; check backend storage and configuration',
+                    message: (error instanceof LlmError || error instanceof MemoryValidationError || error instanceof ProtocolError || error instanceof TurnProjectionError) ? error.message : 'Turn execution failed; check backend storage and configuration',
                     ...(error instanceof LlmError ? { diagnostics: error.diagnostics } : {}),
                     timestamp: new Date().toISOString()
                 };
@@ -222,13 +279,15 @@ export class ExperimentController {
     }
 
     private async buildPrompt(agentId: string) {
-        const state = await this.jsonStorage.loadWorkingState(agentId);
+        const state = await this.activeStorage.loadWorkingState(agentId);
         const config = resolveMemoryConfig(this.config!.memoryConfig);
         const identity = state.identity;
         const retrieved = retrieveMemory(state, config);
         const history = await this.jsonlStorage.getConversationHistory(this.config!.runId);
+        if (this.config!.protocol) return renderProtocol(state, config, normalizeProtocol(this.config!.protocol, config.mode), history,
+            this.currentTurnIndex === 0 && this.config!.initialTopic ? this.config!.initialTopic : undefined);
         const transcript = boundedTranscript(history, config);
-        const stats = Object.entries(identity.stats).map(([key, value]) => `- ${key}: ${config.mode === 'none' ? value.initial : value.current}`).join('\n');
+        const stats = Object.entries(identity.stats).map(([key, value]) => `- ${key}: ${config.mode !== 'enabled' ? value.initial : value.current}`).join('\n');
         const system = `You are an agent with the following identity:
 ID: ${identity.id}
 Name: ${identity.name}
@@ -261,7 +320,7 @@ ${transcript || '(No conversation supplied)'}`;
         const prompt = await this.buildPrompt(agentId);
         this.currentAttempt = { startedAt: new Date().toISOString(), prompt: { system: prompt.system, messages: prompt.messages }, retrieval: prompt.retrieval };
         this.llmAdapter.updateConfig(this.config!.llmConfig);
-        const response = await this.llmAdapter.generateTurn(prompt.system, prompt.messages);
+        const response = await this.llmAdapter.generateTurn(prompt.system, prompt.messages, this.config!.protocol?.inputCharLimit);
         this.currentAttempt.parsedResponse = response;
         const eventId = randomUUID();
         const config = resolveMemoryConfig(this.config!.memoryConfig);
@@ -270,14 +329,14 @@ ${transcript || '(No conversation supplied)'}`;
             participants: this.config!.agentIds, config
         });
         const record = {
-            schemaVersion: 2, eventId, runId: this.config!.runId,
+            schemaVersion: 2, eventId, stateScope: this.config!.protocol?.stateScope ?? 'shared', configHash: hash(this.config), runId: this.config!.runId,
             turnIndex: this.currentTurnIndex, agentId, agentName: prompt.state.identity.name,
             response: response.response, timestamp: new Date().toISOString(),
             auditTrail: prepared.auditTrail, stateBefore: prompt.state, stateAfter: prepared.state,
             memoryMode: config.mode, retrieval: prompt.retrieval,
             startedAt: this.currentAttempt.startedAt, elapsedMs: Date.now() - Date.parse(this.currentAttempt.startedAt),
             prompt: { system: prompt.system, messages: prompt.messages },
-            parsedResponse: response, rawResponse: this.llmAdapter.lastRawContent,
+            request: this.llmAdapter.lastRequest, parsedResponse: response, rawResponse: this.llmAdapter.lastRawContent,
             diagnostics: this.llmAdapter.lastDiagnostics
         };
         // Commit before touching editable state. Recovery reapplies this exact state,

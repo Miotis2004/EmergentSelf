@@ -87,10 +87,12 @@ No database, online model retraining, reward/punishment, external web access for
 
 ### Acceptance criteria
 
-- [ ] Two runs can be compared with their configuration differences visible.
-- [ ] All prompts, responses, memory changes, and interventions can be traced to a run and turn.
-- [ ] Researchers can reproduce the same *configuration* even when sampling makes output nondeterministic.
-- [ ] Experimental conditions do not silently differ in context budget, model, or prompting.
+- [x] Two runs can be compared with their configuration differences visible.
+- [x] All prompts, responses, memory changes, and interventions can be traced to a run and turn.
+- [x] Researchers can reproduce the same *configuration* even when sampling makes output nondeterministic.
+- [x] Experimental conditions do not silently differ in context budget, model, or prompting.
+
+**Implementation evidence:** Immutable templates and seeded batch manifests, isolated trial state, explicit attribute/memory conditions, source-linked read-only probes and interventions, configuration comparison, and checksummed JSON export are covered by automated backend/HTTP and Angular tests. Local-model behavior and scientific reproducibility still require researcher-run validation. See [INSTALLATION.md](INSTALLATION.md#phase-iii-controlled-trials-and-reproducibility).
 
 ## Phase IV: Behavioral measures and longitudinal analysis
 

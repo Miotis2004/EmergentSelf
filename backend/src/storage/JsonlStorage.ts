@@ -88,7 +88,8 @@ export class JsonlStorage {
     // The conversation record is the write-ahead commit. Projection/event writes
     // are idempotently repaired before any subsequent inference, even after restart.
     async projectTurn(runId: string, record: any, storage: JsonStorage) {
-        if (record.memoryMode !== 'none') await storage.saveWorkingState(record.agentId, record.stateAfter);
+        if (record.stateScope === 'trial') storage = this.trialStorage(runId);
+        if (record.memoryMode !== 'none' && record.memoryMode !== 'history') await storage.saveWorkingState(record.agentId, record.stateAfter);
         await this.appendEvent(runId, {
             schemaVersion: 2, id: record.eventId, type: 'memory_update',
             turnIndex: record.turnIndex, agentId: record.agentId, timestamp: record.timestamp,
@@ -109,6 +110,36 @@ export class JsonlStorage {
                 if (record.schemaVersion === 2 && !projected.has(record.eventId)) await this.projectTurn(run.name, record, storage);
             }
         }
+    }
+
+    trialStorage(runId: string) { return new JsonStorage(path.join(this.getExperimentDir(runId), 'working-state')); }
+    async loadBaseline(runId: string): Promise<any> {
+        return JSON.parse(await fs.readFile(path.join(this.getExperimentDir(runId), 'memory-baseline.json'), 'utf8'));
+    }
+    async saveArtifact(kind: 'templates' | 'snapshots' | 'batches' | 'probe-definitions', artifactId: string, value: any) {
+        if (!/^[A-Za-z0-9_-]{1,120}$/.test(artifactId)) throw new Error('Invalid artifact ID');
+        const dir = path.join(this.baseDir, kind);
+        await this.ensureDir(dir);
+        await fs.writeFile(path.join(dir, `${artifactId}.json`), JSON.stringify(value, null, 2), {flag:'wx'});
+    }
+    async loadArtifact(kind: 'templates' | 'snapshots' | 'batches' | 'probe-definitions', artifactId: string): Promise<any> {
+        if (!/^[A-Za-z0-9_-]{1,120}$/.test(artifactId)) throw new Error('Invalid artifact ID');
+        return JSON.parse(await fs.readFile(path.join(this.baseDir, kind, `${artifactId}.json`), 'utf8'));
+    }
+    async listArtifacts(kind: 'templates' | 'snapshots' | 'batches' | 'probe-definitions') {
+        try { return (await fs.readdir(path.join(this.baseDir, kind))).filter(file => file.endsWith('.json')).map(file => file.slice(0,-5)).sort(); }
+        catch (error: any) { if (error.code === 'ENOENT') return []; throw error; }
+    }
+    async listRuns() {
+        try { return (await fs.readdir(path.join(this.baseDir, 'experiments'), {withFileTypes:true})).filter(entry => entry.isDirectory()).map(entry => entry.name).sort(); }
+        catch (error: any) { if (error.code === 'ENOENT') return []; throw error; }
+    }
+    async appendResearch(runId: string, stream: 'probes' | 'interventions', record: any) {
+        const dir = this.getExperimentDir(runId); await this.ensureDir(dir);
+        await this.appendJsonl(path.join(dir, `${stream}.jsonl`), record);
+    }
+    async readResearch(runId: string, stream: 'probes' | 'interventions'): Promise<any[]> {
+        return this.readJsonl(path.join(this.getExperimentDir(runId), `${stream}.jsonl`));
     }
 
     private lockOwner: string | null = null;

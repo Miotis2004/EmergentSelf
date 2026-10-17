@@ -18,8 +18,8 @@ export class MemoryManager {
         for (const op of operations) {
             const timestamp = new Date().toISOString();
             const record: any = { operation: op, status: 'success', timestamp, source: context.source };
-            if (context.config.mode === 'none') {
-                auditTrail.push({ ...record, status: 'ignored', error: 'No-memory condition: proposed state changes withheld' });
+            if (context.config.mode !== 'enabled') {
+                auditTrail.push({ ...record, status: 'ignored', error: `${context.config.mode} condition: proposed state changes withheld` });
                 continue;
             }
             const candidate = structuredClone(state);

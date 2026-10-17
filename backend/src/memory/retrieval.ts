@@ -13,7 +13,7 @@ export function retrieveMemory(state: WorkingState, config: MemoryConfig) {
     const selectedIds: string[] = [], summaryIds: string[] = [];
     const lines: string[] = [];
     let used = 0;
-    for (const entry of config.mode === 'none' ? [] : ranked) {
+    for (const entry of config.mode !== 'enabled' ? [] : ranked) {
         const prefix = `[${entry.id}] ${entry.type}${entry.relationship_agent_id ? ` about ${entry.relationship_agent_id}` : ''} (confidence=${entry.confidence}): `;
         const text = entry.content.slice(0, config.entryChars);
         const line = prefix + text + (text.length < entry.content.length ? ' [excerpt]' : '');
@@ -24,7 +24,7 @@ export function retrieveMemory(state: WorkingState, config: MemoryConfig) {
     // Deterministic extractive digest, never an invented/model-authored recollection.
     // Originals remain in the state and append-only turn record.
     let summary = '';
-    if (config.mode !== 'none') for (const entry of ranked.filter(e => !selectedIds.includes(e.id))) {
+    if (config.mode === 'enabled') for (const entry of ranked.filter(e => !selectedIds.includes(e.id))) {
         const prefix = `[${entry.id}] ${entry.type}: `;
         const remaining = config.summaryChars - summary.length - prefix.length - 1;
         if (remaining < 1) break;

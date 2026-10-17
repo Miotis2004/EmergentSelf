@@ -6,6 +6,8 @@ import { JsonlStorage } from './storage/JsonlStorage';
 import { LlmAdapter, resolveLlmConfig } from './llm/LlmAdapter';
 import { ExperimentController } from './experiments/ExperimentController';
 import { createAgentsRouter } from './api/agents';
+import { ResearchService } from './research/ResearchService';
+import { createResearchRouter } from './api/research';
 import { createExperimentRouter } from './api/experiment';
 
 dotenv.config();
@@ -22,6 +24,7 @@ const llmAdapter = new LlmAdapter();
 const controller = new ExperimentController(jsonStorage, jsonlStorage, llmAdapter);
 
 app.use('/api/agents', createAgentsRouter(jsonStorage));
+app.use('/api/research', createResearchRouter(new ResearchService(controller, jsonlStorage, jsonStorage)));
 app.use('/api/experiment', createExperimentRouter(controller, jsonlStorage));
 
 app.get('/api/llm/config', (req, res) => {

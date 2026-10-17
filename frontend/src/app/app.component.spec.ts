@@ -21,6 +21,7 @@ describe('Experiment participants and initial topic', () => {
         agents = { getAgents: jasmine.createSpy().and.returnValue(of([agent('sara'), agent('charlie'), agent('bob')])) };
         experiments = {
             events$: events,
+            research: () => of({runs:[],templates:[],snapshots:[],batches:[],probes:[],systemPrompt:'Fixed system',turnPrompt:'Turn',inputCharLimit:24000}),
             getLlmDefaults: () => of(savedConfig.llmConfig),
             getLlmModels: () => of([{ id: 'loaded' }]),
             getMemoryHistory: () => of({ baselineTurn:-1, lastTurn:-1, state: {entries:[]}, timeline:[] }),
@@ -41,7 +42,7 @@ describe('Experiment participants and initial topic', () => {
 
     it('defaults all agents to selected and keeps deterministic ID order', () => {
         expect(component.nextParticipantIds).toEqual(['bob','charlie','sara']);
-        const checkboxes = fixture.nativeElement.querySelectorAll('input[type=checkbox]');
+        const checkboxes = fixture.nativeElement.querySelectorAll('.agent-card input[type=checkbox]');
         expect(checkboxes.length).toBe(3);
         expect(Array.from(checkboxes).every((input: any) => input.checked)).toBeTrue();
         component.startExperiment();
@@ -49,7 +50,7 @@ describe('Experiment participants and initial topic', () => {
     });
 
     it('sends exactly two checked agents and retains unchecked choices when agents reload', () => {
-        const checkbox = fixture.nativeElement.querySelectorAll('input[type=checkbox]')[1] as HTMLInputElement;
+        const checkbox = fixture.nativeElement.querySelectorAll('.agent-card input[type=checkbox]')[1] as HTMLInputElement;
         checkbox.click(); fixture.detectChanges();
         component.loadAgents();
         expect(component.nextParticipantIds).toEqual(['bob','sara']);
@@ -88,7 +89,7 @@ describe('Experiment participants and initial topic', () => {
             fixture.detectChanges();
             await fixture.whenStable();
             fixture.detectChanges();
-            const boxes = Array.from(fixture.nativeElement.querySelectorAll('input[type=checkbox]')) as HTMLInputElement[];
+            const boxes = Array.from(fixture.nativeElement.querySelectorAll('.agent-card input[type=checkbox]')) as HTMLInputElement[];
             expect(boxes.every(input => input.disabled)).toBeTrue();
             expect(boxes.map(input => input.checked)).toEqual([true,false,true]);
             expect((fixture.nativeElement.querySelector('#conversation-topic') as HTMLTextAreaElement).disabled).toBeTrue();
