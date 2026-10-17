@@ -137,6 +137,7 @@
             </details>
         </fieldset>
 
+        <app-publication-panel [running]="experimentStatus === 'running'"></app-publication-panel>
         <app-branch-panel [running]="experimentStatus === 'running'"></app-branch-panel>
         <app-social-controls [social]="socialConfig" [task]="taskConfig" [feedback]="feedbackConfig" [locked]="configurationLocked" [running]="experimentStatus === 'running'" [runId]="savedAgentIds ? runId : ''" (recorded)="handleServerEvent({type:'environment_event',data:$event})"></app-social-controls>
         <app-analysis-panel [running]="experimentStatus === 'running'"></app-analysis-panel>

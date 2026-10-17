@@ -179,9 +179,11 @@ No database, online model retraining, reward/punishment, external web access for
 
 ### Acceptance criteria
 
-- [ ] Another researcher can run the documented protocol with a compatible local model.
-- [ ] Each major result traces back to raw event data and analysis code.
-- [ ] Alternative explanations and limitations are stated explicitly.
+- [x] Another researcher can run the documented protocol with a compatible local model.
+- [x] Each major result traces back to raw event data and analysis code.
+- [x] Alternative explanations and limitations are stated explicitly.
+
+**Implementation evidence:** Immutable local study registrations, frozen trial manifests, source-linked run-level contrasts/intervals, prespecified sensitivity, explicit missing/excluded/deviating trials, private and aggregate publication packages, archived analysis code/lockfiles, synthetic fixtures, and a documented replication command are covered by backend/API/CLI and Angular tests. See [PHASE_VII.md](PHASE_VII.md) for replication, dataset dictionary, disclosure boundaries and threats to validity. Tests use controlled inference; scientific claims still require actual local-model studies.
 
 ## Cross-cutting engineering requirements
 

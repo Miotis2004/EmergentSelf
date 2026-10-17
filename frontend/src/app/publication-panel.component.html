@@ -1,0 +1,47 @@
+<details><summary><strong>Research synthesis & publication readiness</strong></summary>
+ <p>Freeze hypotheses and procedures before observations when feasible. Local registrations are checksummed records, not externally certified preregistrations. Results describe observable behavior; they do not establish consciousness or moral competence.</p>
+ <p *ngIf="error" role="alert">{{error}}</p><p *ngIf="message" role="status">{{message}}</p><button (click)="refresh()">Refresh planned runs and studies</button>
+ <fieldset [disabled]="busy || running"><legend>Immutable study registration</legend>
+  <p>Prepare Phase III batches or Phase VI branches first. Select every intended trial, including controls. Prospective registration is rejected if any planned run already has turns, probes or error events.</p>
+  <label *ngFor="let run of catalog.runIds"><input type="checkbox" [checked]="selected.has(run)" (change)="toggle(run,$any($event.target).checked)">{{run}}</label>
+  <label>Study ID <input [(ngModel)]="studyId"></label><label>Title <input [(ngModel)]="title" maxlength="300"></label><label>Research question <textarea [(ngModel)]="researchQuestion" maxlength="2000"></textarea></label>
+  <label>Researcher <input [(ngModel)]="actor"></label><label>Registration timing <select [(ngModel)]="registrationType"><option value="prospective">Prospective (before observations)</option><option value="retrospective">Retrospective / exploratory</option></select></label>
+  <label *ngFor="let field of procedureFields">{{field.label}}<textarea [(ngModel)]="procedures[field.id]" maxlength="4000"></textarea></label>
+  <fieldset><legend>Operational hypotheses</legend>
+   <label>Hypothesis ID <input [(ngModel)]="hypothesisId"></label><label>Hypothesis question <textarea [(ngModel)]="question" maxlength="2000"></textarea></label>
+   <label>Domain <select [(ngModel)]="domain"><option value="behavior">Phase IV behavioral measure</option><option value="social">Phase V social / feedback measure</option></select></label>
+   <label>Metric ID <input [(ngModel)]="metric"></label><small>Use a published metric ID such as question_fraction, self_description_similarity, or social amountChange.</small>
+   <label>Left condition <input [(ngModel)]="leftCondition"></label><label>Right condition <input [(ngModel)]="rightCondition"></label><small>Behavior: none/history/enabled. Social: off or a source-timing-delay-visibility label from the social report.</small>
+   <label>Prediction for right minus left <select [(ngModel)]="prediction"><option value="greater">Greater than zero</option><option value="less">Less than zero</option><option value="different">Different from zero</option></select></label>
+   <label>Minimum meaningful absolute effect <input type="number" min="0" step="0.01" [(ngModel)]="minimumEffect"></label>
+   <label>Stream <select [(ngModel)]="stream"><option value="dialogue">Dialogue</option><option value="probe">Exact probe stratum (behavior only)</option></select></label>
+   <label *ngIf="stream === 'probe'">Exact probe stratum key <textarea [(ngModel)]="probeKey"></textarea></label>
+   <button (click)="addHypothesis()" [disabled]="hypotheses.length >= 20">Add hypothesis</button>
+   <div *ngFor="let h of hypotheses;index as i">{{h | json}} <button (click)="hypotheses.splice(i,1)">Remove</button></div>
+  </fieldset>
+  <label>Primary observations per agent window <input type="number" [(ngModel)]="windowSize"></label><label>Bootstrap draws (100–2000) <input type="number" [(ngModel)]="bootstrapSamples"></label><label>Analysis seed <input type="number" [(ngModel)]="seed"></label>
+  <label>Sensitivity windows (1–5 comma-separated sizes) <input [(ngModel)]="sensitivityWindows"></label>
+  <label>Prespecified excluded run ID (optional) <input [(ngModel)]="excludeRunId"></label><label>Exclusion rationale <textarea [(ngModel)]="excludeReason"></textarea></label><button (click)="addExclusion()">Add exclusion</button>
+  <div *ngFor="let exclusion of exclusions;index as i">{{exclusion | json}} <button (click)="exclusions.splice(i,1)">Remove</button></div>
+  <button (click)="register()">Save immutable registration</button>
+ </fieldset>
+ <fieldset [disabled]="busy || running"><legend>Synthesis and saved protocol</legend>
+  <label>Study ID <input list="publication-studies" [(ngModel)]="selectedStudy"></label><button (click)="load()">Inspect registration</button><button (click)="synthesize()">Generate synthesis</button>
+  <details *ngIf="saved"><summary>Saved protocol and trial metadata</summary><pre>{{saved | json}}</pre></details>
+  <section *ngIf="report"><p>{{report.registrationType}} · planned {{report.totals.planned}}, observed {{report.totals.observed}}, missing {{report.totals.missing}}, incomplete {{report.totals.incomplete}}, excluded {{report.totals.excluded}}, configuration deviations {{report.totals.deviations}}</p>
+   <p>{{report.method}}</p><p>{{report.interpretation}}</p>
+   <table><thead><tr><th>Hypothesis / design / measure</th><th>Right minus left</th><th>95% interval</th><th>Eligible runs (left/right)</th><th>Descriptive outcome</th></tr></thead><tbody><tr *ngFor="let c of report.primary.contrasts"><td>{{c.hypothesisId}} / {{c.designHash?.slice(0,12)}} / {{c.metric}}</td><td>{{format(c.estimate)}}</td><td>{{c.ci95 ? format(c.ci95[0]) + ' … ' + format(c.ci95[1]) : 'Unavailable'}}</td><td>{{c.left.length}} / {{c.right.length}}</td><td>{{c.status}}</td></tr></tbody></table>
+   <details><summary>Every planned trial and result evidence</summary><pre>{{report.ledger | json}}</pre><pre>{{report.primary.contrasts | json}}</pre></details>
+   <details><summary>Prespecified sensitivity analyses</summary><pre>{{report.sensitivity | json}}</pre></details>
+  </section>
+ </fieldset>
+ <fieldset [disabled]="busy || running"><legend>Publication artifact</legend>
+  <label>New publication ID <input [(ngModel)]="publicationId"></label>
+  <label>Disclosure profile <select [(ngModel)]="profile"><option value="aggregate">Aggregate only (no raw text, prompts, memory or source IDs)</option><option value="private">Private full reproduction (contains exact prompts, conversations and memory)</option></select></label>
+  <p>Aggregate exports omit source evidence and cannot reproduce raw-text analysis. They use aliases and are not a guarantee of anonymity. Private packages include source data and analysis code; retain them as private research artifacts unless reviewed for disclosure.</p>
+  <button (click)="publish()">Save publication artifact</button><label>Saved publication ID <input list="publication-artifacts" [(ngModel)]="selectedPublication"></label><button (click)="download()">Download saved package</button>
+ </fieldset>
+ <details><summary>Dataset dictionary and threats to validity</summary><pre>{{defaults?.dictionary | json}}</pre><pre>{{defaults?.validity | json}}</pre></details>
+ <datalist id="publication-studies"><option *ngFor="let id of catalog.studies" [value]="id"></option></datalist>
+ <datalist id="publication-artifacts"><option *ngFor="let id of catalog.publications" [value]="id"></option></datalist>
+</details>

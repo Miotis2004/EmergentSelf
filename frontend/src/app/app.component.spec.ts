@@ -21,6 +21,7 @@ describe('Experiment participants and initial topic', () => {
         agents = { getAgents: jasmine.createSpy().and.returnValue(of([agent('sara'), agent('charlie'), agent('bob')])) };
         experiments = {
             events$: events,
+            studies: () => of({studies:[],publications:[],runIds:[]}),
             branches: () => of({branches:[],comparisons:[]}),
             analysis: () => of({metrics:[],benchmarks:[],datasets:[]}),
             research: () => of({runs:[],templates:[],snapshots:[],batches:[],probes:[],systemPrompt:'Fixed system',turnPrompt:'Turn',inputCharLimit:24000}),

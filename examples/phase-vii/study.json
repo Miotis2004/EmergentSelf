@@ -1,0 +1,259 @@
+{
+  "schemaVersion": 7,
+  "protocol": {
+    "studyId": "synthetic-study",
+    "title": "Synthetic reproducibility example",
+    "researchQuestion": "Can the pipeline trace a known question-marker difference?",
+    "actor": "Synthetic researcher",
+    "registrationType": "retrospective",
+    "plannedRunIds": [
+      "synthetic-none-1",
+      "synthetic-none-2",
+      "synthetic-enabled-1",
+      "synthetic-enabled-2"
+    ],
+    "hypotheses": [
+      {
+        "hypothesisId": "h1",
+        "question": "Synthetic enabled responses have a larger question-marker fraction than synthetic no-memory responses.",
+        "domain": "behavior",
+        "metric": "question_fraction",
+        "leftCondition": "none",
+        "rightCondition": "enabled",
+        "prediction": "greater",
+        "minimumEffect": 0.1,
+        "stream": "dialogue",
+        "probeKey": "dialogue"
+      }
+    ],
+    "procedures": {
+      "samplingPlan": "Four entirely synthetic runs, two per condition; no model was queried.",
+      "randomization": "Fixed teaching order; no experimental randomization.",
+      "blinding": "No human evaluation in this example.",
+      "exclusionRules": "No exclusions; retain the synthetic failure.",
+      "stoppingRule": "Six synthetic committed turns per run.",
+      "analysisPlan": "Known right-minus-left question-marker effect; independent-run bootstrap is demonstrated, not used for a scientific claim."
+    },
+    "analysis": {
+      "windowSize": 2,
+      "bootstrapSamples": 200,
+      "seed": 42,
+      "sensitivityWindows": [
+        1,
+        3
+      ],
+      "excludeRuns": []
+    }
+  },
+  "plans": [
+    {
+      "runId": "synthetic-none-1",
+      "configuration": {
+        "runId": "synthetic-none-1",
+        "agentIds": [
+          "agent-a",
+          "agent-b"
+        ],
+        "initialTopic": "",
+        "maxTurns": 6,
+        "memoryConfig": {
+          "mode": "none",
+          "maxActiveEntries": 200,
+          "maxOperations": 20,
+          "maxEntryChars": 2000,
+          "retrievalEntries": 24,
+          "retrievalChars": 12000,
+          "entryChars": 1000,
+          "summaryChars": 2000,
+          "transcriptTurns": 10,
+          "transcriptChars": 8000,
+          "retrievalRule": "importance"
+        },
+        "llmConfig": {
+          "baseUrl": "http://127.0.0.1:8080/v1",
+          "model": "synthetic-model-not-an-inference-result",
+          "modelVersion": "synthetic-v1",
+          "temperature": 0.7,
+          "maxTokens": 2048,
+          "outputMode": "json_schema"
+        },
+        "protocol": {
+          "stateScope": "trial",
+          "snapshotId": "synthetic-start",
+          "initialStateHash": "482839fc2da88f56ef87b748a28af61d8df04d24978a441e6ac8812d6580dea9",
+          "version": 1,
+          "condition": "none",
+          "systemPrompt": "You are an agent with the following identity:\nID: {id}\nName: {name}\n\nAttributes:\n{attributes}\n\nWorking memory:\n{memory}\n\nExtractive digest (excerpts; originals retained):\n{digest}\n\nRecent conversation:\n{transcript}\n\nBased on the conversation, generate a reply. You may propose revisions to your working state.",
+          "turnPrompt": "It is your turn to speak, {name}.",
+          "inputCharLimit": 24000,
+          "attributeMode": "numeric",
+          "roles": {}
+        }
+      },
+      "configHash": "0e4c9f455907709950a0d78953891fc1611d41b4bac62e278e07a283a9028675",
+      "origin": {
+        "kind": "synthetic",
+        "id": "example-v1"
+      }
+    },
+    {
+      "runId": "synthetic-none-2",
+      "configuration": {
+        "runId": "synthetic-none-2",
+        "agentIds": [
+          "agent-a",
+          "agent-b"
+        ],
+        "initialTopic": "",
+        "maxTurns": 6,
+        "memoryConfig": {
+          "mode": "none",
+          "maxActiveEntries": 200,
+          "maxOperations": 20,
+          "maxEntryChars": 2000,
+          "retrievalEntries": 24,
+          "retrievalChars": 12000,
+          "entryChars": 1000,
+          "summaryChars": 2000,
+          "transcriptTurns": 10,
+          "transcriptChars": 8000,
+          "retrievalRule": "importance"
+        },
+        "llmConfig": {
+          "baseUrl": "http://127.0.0.1:8080/v1",
+          "model": "synthetic-model-not-an-inference-result",
+          "modelVersion": "synthetic-v1",
+          "temperature": 0.7,
+          "maxTokens": 2048,
+          "outputMode": "json_schema"
+        },
+        "protocol": {
+          "stateScope": "trial",
+          "snapshotId": "synthetic-start",
+          "initialStateHash": "482839fc2da88f56ef87b748a28af61d8df04d24978a441e6ac8812d6580dea9",
+          "version": 1,
+          "condition": "none",
+          "systemPrompt": "You are an agent with the following identity:\nID: {id}\nName: {name}\n\nAttributes:\n{attributes}\n\nWorking memory:\n{memory}\n\nExtractive digest (excerpts; originals retained):\n{digest}\n\nRecent conversation:\n{transcript}\n\nBased on the conversation, generate a reply. You may propose revisions to your working state.",
+          "turnPrompt": "It is your turn to speak, {name}.",
+          "inputCharLimit": 24000,
+          "attributeMode": "numeric",
+          "roles": {}
+        }
+      },
+      "configHash": "36c53b60b431fcfce88727f0ca602a067f118923c651114ec0cd2b821c7580b5",
+      "origin": {
+        "kind": "synthetic",
+        "id": "example-v1"
+      }
+    },
+    {
+      "runId": "synthetic-enabled-1",
+      "configuration": {
+        "runId": "synthetic-enabled-1",
+        "agentIds": [
+          "agent-a",
+          "agent-b"
+        ],
+        "initialTopic": "",
+        "maxTurns": 6,
+        "memoryConfig": {
+          "mode": "enabled",
+          "maxActiveEntries": 200,
+          "maxOperations": 20,
+          "maxEntryChars": 2000,
+          "retrievalEntries": 24,
+          "retrievalChars": 12000,
+          "entryChars": 1000,
+          "summaryChars": 2000,
+          "transcriptTurns": 10,
+          "transcriptChars": 8000,
+          "retrievalRule": "importance"
+        },
+        "llmConfig": {
+          "baseUrl": "http://127.0.0.1:8080/v1",
+          "model": "synthetic-model-not-an-inference-result",
+          "modelVersion": "synthetic-v1",
+          "temperature": 0.7,
+          "maxTokens": 2048,
+          "outputMode": "json_schema"
+        },
+        "protocol": {
+          "stateScope": "trial",
+          "snapshotId": "synthetic-start",
+          "initialStateHash": "482839fc2da88f56ef87b748a28af61d8df04d24978a441e6ac8812d6580dea9",
+          "version": 1,
+          "condition": "enabled",
+          "systemPrompt": "You are an agent with the following identity:\nID: {id}\nName: {name}\n\nAttributes:\n{attributes}\n\nWorking memory:\n{memory}\n\nExtractive digest (excerpts; originals retained):\n{digest}\n\nRecent conversation:\n{transcript}\n\nBased on the conversation, generate a reply. You may propose revisions to your working state.",
+          "turnPrompt": "It is your turn to speak, {name}.",
+          "inputCharLimit": 24000,
+          "attributeMode": "numeric",
+          "roles": {}
+        }
+      },
+      "configHash": "6942fb2183e1fae87643b1413c0b072489a7b25dbe5119b28330cbf167fb3cb9",
+      "origin": {
+        "kind": "synthetic",
+        "id": "example-v1"
+      }
+    },
+    {
+      "runId": "synthetic-enabled-2",
+      "configuration": {
+        "runId": "synthetic-enabled-2",
+        "agentIds": [
+          "agent-a",
+          "agent-b"
+        ],
+        "initialTopic": "",
+        "maxTurns": 6,
+        "memoryConfig": {
+          "mode": "enabled",
+          "maxActiveEntries": 200,
+          "maxOperations": 20,
+          "maxEntryChars": 2000,
+          "retrievalEntries": 24,
+          "retrievalChars": 12000,
+          "entryChars": 1000,
+          "summaryChars": 2000,
+          "transcriptTurns": 10,
+          "transcriptChars": 8000,
+          "retrievalRule": "importance"
+        },
+        "llmConfig": {
+          "baseUrl": "http://127.0.0.1:8080/v1",
+          "model": "synthetic-model-not-an-inference-result",
+          "modelVersion": "synthetic-v1",
+          "temperature": 0.7,
+          "maxTokens": 2048,
+          "outputMode": "json_schema"
+        },
+        "protocol": {
+          "stateScope": "trial",
+          "snapshotId": "synthetic-start",
+          "initialStateHash": "482839fc2da88f56ef87b748a28af61d8df04d24978a441e6ac8812d6580dea9",
+          "version": 1,
+          "condition": "enabled",
+          "systemPrompt": "You are an agent with the following identity:\nID: {id}\nName: {name}\n\nAttributes:\n{attributes}\n\nWorking memory:\n{memory}\n\nExtractive digest (excerpts; originals retained):\n{digest}\n\nRecent conversation:\n{transcript}\n\nBased on the conversation, generate a reply. You may propose revisions to your working state.",
+          "turnPrompt": "It is your turn to speak, {name}.",
+          "inputCharLimit": 24000,
+          "attributeMode": "numeric",
+          "roles": {}
+        }
+      },
+      "configHash": "a9085cba6e1455660d5f160d32ae4b27b88e5c83b21ab4d7a00b0ae418b35f00",
+      "origin": {
+        "kind": "synthetic",
+        "id": "example-v1"
+      }
+    }
+  ],
+  "evidence": [],
+  "registeredAt": "2026-01-01T00:00:00.000Z",
+  "provenance": {
+    "revision": "synthetic-example-v1",
+    "dirty": null,
+    "codeHash": null
+  },
+  "attestation": "Synthetic teaching fixture; not a prospective study or local-model result.",
+  "registrationHash": "d2870d21d9e8bb3816162711391b4419d55a7178eda6c415dce75abfd31e2899"
+}

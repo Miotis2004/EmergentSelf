@@ -459,3 +459,7 @@ No additional services or dependencies are required. Use **Social interaction, t
 ## Phase VI branches and identity continuity
 
 No additional dependencies or services are required. Capture a historical snapshot from a fixed-protocol run, then use **Identity continuity, branches & interventions** to create, inspect, prepare and start independent runs. [PHASE_VI.md](PHASE_VI.md) documents reversible operations, model variants, paired probes, API fields and analysis.
+
+## Phase VII synthesis and publication artifacts
+
+No additional dependencies or services are required. A full checkout (including `examples/phase-vii`) supports code/archive provenance. Use **Research synthesis & publication readiness** after preparing trial batches/branches. [PHASE_VII.md](PHASE_VII.md) documents prospective registration, local-model replication, private/aggregate packages and offline reconstruction. `npm run example:publication --prefix backend -- --check` validates the anonymous synthetic example without inference.

@@ -1,0 +1,1586 @@
+{
+  "version": "synthesis-v1",
+  "studyId": "synthetic-study",
+  "registrationHash": "d2870d21d9e8bb3816162711391b4419d55a7178eda6c415dce75abfd31e2899",
+  "registrationType": "retrospective",
+  "ledger": [
+    {
+      "runId": "synthetic-none-1",
+      "plannedConfigHash": "0e4c9f455907709950a0d78953891fc1611d41b4bac62e278e07a283a9028675",
+      "actualConfigHash": "0e4c9f455907709950a0d78953891fc1611d41b4bac62e278e07a283a9028675",
+      "exportHash": "168b4a22ebd0f5f05b856894f500dafa3e826c7882807ecd4cab9687e5260e10",
+      "status": "completed",
+      "turns": 6,
+      "maxTurns": 6,
+      "failures": 0,
+      "probeFailures": 0,
+      "deviation": null,
+      "excluded": false,
+      "exclusionReason": null
+    },
+    {
+      "runId": "synthetic-none-2",
+      "plannedConfigHash": "36c53b60b431fcfce88727f0ca602a067f118923c651114ec0cd2b821c7580b5",
+      "actualConfigHash": "36c53b60b431fcfce88727f0ca602a067f118923c651114ec0cd2b821c7580b5",
+      "exportHash": "8c2dcc997b00c0378992c9c2c6e24346651d4acfd95926d945f21d936eb39c4e",
+      "status": "completed",
+      "turns": 6,
+      "maxTurns": 6,
+      "failures": 0,
+      "probeFailures": 0,
+      "deviation": null,
+      "excluded": false,
+      "exclusionReason": null
+    },
+    {
+      "runId": "synthetic-enabled-1",
+      "plannedConfigHash": "6942fb2183e1fae87643b1413c0b072489a7b25dbe5119b28330cbf167fb3cb9",
+      "actualConfigHash": "6942fb2183e1fae87643b1413c0b072489a7b25dbe5119b28330cbf167fb3cb9",
+      "exportHash": "60d4d138f31020b2404834ea862b052d49a2f4d57fbe56290ff27a392cd8c44e",
+      "status": "completed",
+      "turns": 6,
+      "maxTurns": 6,
+      "failures": 0,
+      "probeFailures": 0,
+      "deviation": null,
+      "excluded": false,
+      "exclusionReason": null
+    },
+    {
+      "runId": "synthetic-enabled-2",
+      "plannedConfigHash": "a9085cba6e1455660d5f160d32ae4b27b88e5c83b21ab4d7a00b0ae418b35f00",
+      "actualConfigHash": "a9085cba6e1455660d5f160d32ae4b27b88e5c83b21ab4d7a00b0ae418b35f00",
+      "exportHash": "476fc899e6ab86f08e9c45943039c49fc928d92eb0b4e63bb52e3f8da374facf",
+      "status": "completed",
+      "turns": 6,
+      "maxTurns": 6,
+      "failures": 1,
+      "probeFailures": 0,
+      "deviation": null,
+      "excluded": false,
+      "exclusionReason": null
+    }
+  ],
+  "primary": {
+    "windowSize": 2,
+    "reportHash": "4ad769903bb5ebf4d79806cc5abed5236245247e90451f956fb154eb07a9c476",
+    "contrasts": [
+      {
+        "hypothesisId": "h1",
+        "domain": "behavior",
+        "metric": "question_fraction",
+        "designHash": "71ecc607d0afeb19a1c853ed66d66ca598416989dca3e155e92f23e3b47fa480",
+        "leftCondition": "none",
+        "rightCondition": "enabled",
+        "left": [
+          {
+            "runId": "synthetic-none-1",
+            "value": 0
+          },
+          {
+            "runId": "synthetic-none-2",
+            "value": 0
+          }
+        ],
+        "right": [
+          {
+            "runId": "synthetic-enabled-1",
+            "value": 0.6666666666666666
+          },
+          {
+            "runId": "synthetic-enabled-2",
+            "value": 0.3333333333333333
+          }
+        ],
+        "estimate": 0.5,
+        "ci95": [
+          0.3333333333333333,
+          0.6666666666666666
+        ],
+        "status": "direction_and_threshold_met",
+        "intervalIncludesZero": false,
+        "meetsMinimumEffect": true,
+        "matchesDirection": true,
+        "longitudinalDifference": {
+          "estimate": -0.875,
+          "ci95": [
+            -1,
+            -0.75
+          ]
+        },
+        "evidence": [
+          {
+            "key": "synthetic-none-1|dialogue|synthetic-none-1-turn-0",
+            "source": {
+              "runId": "synthetic-none-1",
+              "agentId": "agent-a",
+              "stream": "dialogue",
+              "recordId": "synthetic-none-1-turn-0",
+              "turnIndex": 0,
+              "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+            },
+            "status": "success",
+            "value": 0
+          },
+          {
+            "key": "synthetic-none-1|dialogue|synthetic-none-1-turn-1",
+            "source": {
+              "runId": "synthetic-none-1",
+              "agentId": "agent-b",
+              "stream": "dialogue",
+              "recordId": "synthetic-none-1-turn-1",
+              "turnIndex": 1,
+              "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+            },
+            "status": "success",
+            "value": 0
+          },
+          {
+            "key": "synthetic-none-1|dialogue|synthetic-none-1-turn-2",
+            "source": {
+              "runId": "synthetic-none-1",
+              "agentId": "agent-a",
+              "stream": "dialogue",
+              "recordId": "synthetic-none-1-turn-2",
+              "turnIndex": 2,
+              "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+            },
+            "status": "success",
+            "value": 0
+          },
+          {
+            "key": "synthetic-none-1|dialogue|synthetic-none-1-turn-3",
+            "source": {
+              "runId": "synthetic-none-1",
+              "agentId": "agent-b",
+              "stream": "dialogue",
+              "recordId": "synthetic-none-1-turn-3",
+              "turnIndex": 3,
+              "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+            },
+            "status": "success",
+            "value": 0
+          },
+          {
+            "key": "synthetic-none-1|dialogue|synthetic-none-1-turn-4",
+            "source": {
+              "runId": "synthetic-none-1",
+              "agentId": "agent-a",
+              "stream": "dialogue",
+              "recordId": "synthetic-none-1-turn-4",
+              "turnIndex": 4,
+              "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+            },
+            "status": "success",
+            "value": 0
+          },
+          {
+            "key": "synthetic-none-1|dialogue|synthetic-none-1-turn-5",
+            "source": {
+              "runId": "synthetic-none-1",
+              "agentId": "agent-b",
+              "stream": "dialogue",
+              "recordId": "synthetic-none-1-turn-5",
+              "turnIndex": 5,
+              "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+            },
+            "status": "success",
+            "value": 0
+          },
+          {
+            "key": "synthetic-none-2|dialogue|synthetic-none-2-turn-0",
+            "source": {
+              "runId": "synthetic-none-2",
+              "agentId": "agent-a",
+              "stream": "dialogue",
+              "recordId": "synthetic-none-2-turn-0",
+              "turnIndex": 0,
+              "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+            },
+            "status": "success",
+            "value": 0
+          },
+          {
+            "key": "synthetic-none-2|dialogue|synthetic-none-2-turn-1",
+            "source": {
+              "runId": "synthetic-none-2",
+              "agentId": "agent-b",
+              "stream": "dialogue",
+              "recordId": "synthetic-none-2-turn-1",
+              "turnIndex": 1,
+              "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+            },
+            "status": "success",
+            "value": 0
+          },
+          {
+            "key": "synthetic-none-2|dialogue|synthetic-none-2-turn-2",
+            "source": {
+              "runId": "synthetic-none-2",
+              "agentId": "agent-a",
+              "stream": "dialogue",
+              "recordId": "synthetic-none-2-turn-2",
+              "turnIndex": 2,
+              "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+            },
+            "status": "success",
+            "value": 0
+          },
+          {
+            "key": "synthetic-none-2|dialogue|synthetic-none-2-turn-3",
+            "source": {
+              "runId": "synthetic-none-2",
+              "agentId": "agent-b",
+              "stream": "dialogue",
+              "recordId": "synthetic-none-2-turn-3",
+              "turnIndex": 3,
+              "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+            },
+            "status": "success",
+            "value": 0
+          },
+          {
+            "key": "synthetic-none-2|dialogue|synthetic-none-2-turn-4",
+            "source": {
+              "runId": "synthetic-none-2",
+              "agentId": "agent-a",
+              "stream": "dialogue",
+              "recordId": "synthetic-none-2-turn-4",
+              "turnIndex": 4,
+              "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+            },
+            "status": "success",
+            "value": 0
+          },
+          {
+            "key": "synthetic-none-2|dialogue|synthetic-none-2-turn-5",
+            "source": {
+              "runId": "synthetic-none-2",
+              "agentId": "agent-b",
+              "stream": "dialogue",
+              "recordId": "synthetic-none-2-turn-5",
+              "turnIndex": 5,
+              "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+            },
+            "status": "success",
+            "value": 0
+          },
+          {
+            "key": "synthetic-enabled-1|dialogue|synthetic-enabled-1-turn-0",
+            "source": {
+              "runId": "synthetic-enabled-1",
+              "agentId": "agent-a",
+              "stream": "dialogue",
+              "recordId": "synthetic-enabled-1-turn-0",
+              "turnIndex": 0,
+              "responseHash": "66cb54e9d8b8e233a71b6ac3b423b2604ebb182f14adea00348b67678fb9d64c"
+            },
+            "status": "success",
+            "value": 1
+          },
+          {
+            "key": "synthetic-enabled-1|dialogue|synthetic-enabled-1-turn-1",
+            "source": {
+              "runId": "synthetic-enabled-1",
+              "agentId": "agent-b",
+              "stream": "dialogue",
+              "recordId": "synthetic-enabled-1-turn-1",
+              "turnIndex": 1,
+              "responseHash": "66cb54e9d8b8e233a71b6ac3b423b2604ebb182f14adea00348b67678fb9d64c"
+            },
+            "status": "success",
+            "value": 1
+          },
+          {
+            "key": "synthetic-enabled-1|dialogue|synthetic-enabled-1-turn-2",
+            "source": {
+              "runId": "synthetic-enabled-1",
+              "agentId": "agent-a",
+              "stream": "dialogue",
+              "recordId": "synthetic-enabled-1-turn-2",
+              "turnIndex": 2,
+              "responseHash": "66cb54e9d8b8e233a71b6ac3b423b2604ebb182f14adea00348b67678fb9d64c"
+            },
+            "status": "success",
+            "value": 1
+          },
+          {
+            "key": "synthetic-enabled-1|dialogue|synthetic-enabled-1-turn-3",
+            "source": {
+              "runId": "synthetic-enabled-1",
+              "agentId": "agent-b",
+              "stream": "dialogue",
+              "recordId": "synthetic-enabled-1-turn-3",
+              "turnIndex": 3,
+              "responseHash": "66cb54e9d8b8e233a71b6ac3b423b2604ebb182f14adea00348b67678fb9d64c"
+            },
+            "status": "success",
+            "value": 1
+          },
+          {
+            "key": "synthetic-enabled-1|dialogue|synthetic-enabled-1-turn-4",
+            "source": {
+              "runId": "synthetic-enabled-1",
+              "agentId": "agent-a",
+              "stream": "dialogue",
+              "recordId": "synthetic-enabled-1-turn-4",
+              "turnIndex": 4,
+              "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+            },
+            "status": "success",
+            "value": 0
+          },
+          {
+            "key": "synthetic-enabled-1|dialogue|synthetic-enabled-1-turn-5",
+            "source": {
+              "runId": "synthetic-enabled-1",
+              "agentId": "agent-b",
+              "stream": "dialogue",
+              "recordId": "synthetic-enabled-1-turn-5",
+              "turnIndex": 5,
+              "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+            },
+            "status": "success",
+            "value": 0
+          },
+          {
+            "key": "synthetic-enabled-2|dialogue|synthetic-enabled-2-turn-0",
+            "source": {
+              "runId": "synthetic-enabled-2",
+              "agentId": "agent-a",
+              "stream": "dialogue",
+              "recordId": "synthetic-enabled-2-turn-0",
+              "turnIndex": 0,
+              "responseHash": "66cb54e9d8b8e233a71b6ac3b423b2604ebb182f14adea00348b67678fb9d64c"
+            },
+            "status": "success",
+            "value": 1
+          },
+          {
+            "key": "synthetic-enabled-2|dialogue|synthetic-enabled-2-failure",
+            "source": {
+              "runId": "synthetic-enabled-2",
+              "agentId": "agent-b",
+              "stream": "dialogue",
+              "recordId": "synthetic-enabled-2-failure",
+              "turnIndex": 1,
+              "responseHash": null
+            },
+            "status": "failed",
+            "value": null
+          },
+          {
+            "key": "synthetic-enabled-2|dialogue|synthetic-enabled-2-turn-1",
+            "source": {
+              "runId": "synthetic-enabled-2",
+              "agentId": "agent-b",
+              "stream": "dialogue",
+              "recordId": "synthetic-enabled-2-turn-1",
+              "turnIndex": 1,
+              "responseHash": "66cb54e9d8b8e233a71b6ac3b423b2604ebb182f14adea00348b67678fb9d64c"
+            },
+            "status": "success",
+            "value": 1
+          },
+          {
+            "key": "synthetic-enabled-2|dialogue|synthetic-enabled-2-turn-2",
+            "source": {
+              "runId": "synthetic-enabled-2",
+              "agentId": "agent-a",
+              "stream": "dialogue",
+              "recordId": "synthetic-enabled-2-turn-2",
+              "turnIndex": 2,
+              "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+            },
+            "status": "success",
+            "value": 0
+          },
+          {
+            "key": "synthetic-enabled-2|dialogue|synthetic-enabled-2-turn-3",
+            "source": {
+              "runId": "synthetic-enabled-2",
+              "agentId": "agent-b",
+              "stream": "dialogue",
+              "recordId": "synthetic-enabled-2-turn-3",
+              "turnIndex": 3,
+              "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+            },
+            "status": "success",
+            "value": 0
+          },
+          {
+            "key": "synthetic-enabled-2|dialogue|synthetic-enabled-2-turn-4",
+            "source": {
+              "runId": "synthetic-enabled-2",
+              "agentId": "agent-a",
+              "stream": "dialogue",
+              "recordId": "synthetic-enabled-2-turn-4",
+              "turnIndex": 4,
+              "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+            },
+            "status": "success",
+            "value": 0
+          },
+          {
+            "key": "synthetic-enabled-2|dialogue|synthetic-enabled-2-turn-5",
+            "source": {
+              "runId": "synthetic-enabled-2",
+              "agentId": "agent-b",
+              "stream": "dialogue",
+              "recordId": "synthetic-enabled-2-turn-5",
+              "turnIndex": 5,
+              "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+            },
+            "status": "success",
+            "value": 0
+          }
+        ]
+      }
+    ]
+  },
+  "sensitivity": [
+    {
+      "kind": "window",
+      "windowSize": 1,
+      "reportHash": "a5beeb150f236f04e5bc9d3f2e20e7d59109f49dc0bcc683751115a93dd1f6d8",
+      "contrasts": [
+        {
+          "hypothesisId": "h1",
+          "domain": "behavior",
+          "metric": "question_fraction",
+          "designHash": "71ecc607d0afeb19a1c853ed66d66ca598416989dca3e155e92f23e3b47fa480",
+          "leftCondition": "none",
+          "rightCondition": "enabled",
+          "left": [
+            {
+              "runId": "synthetic-none-1",
+              "value": 0
+            },
+            {
+              "runId": "synthetic-none-2",
+              "value": 0
+            }
+          ],
+          "right": [
+            {
+              "runId": "synthetic-enabled-1",
+              "value": 0.6666666666666666
+            },
+            {
+              "runId": "synthetic-enabled-2",
+              "value": 0.3333333333333333
+            }
+          ],
+          "estimate": 0.5,
+          "ci95": [
+            0.3333333333333333,
+            0.6666666666666666
+          ],
+          "status": "direction_and_threshold_met",
+          "intervalIncludesZero": false,
+          "meetsMinimumEffect": true,
+          "matchesDirection": true,
+          "longitudinalDifference": {
+            "estimate": -1,
+            "ci95": [
+              -1,
+              -1
+            ]
+          },
+          "evidence": [
+            {
+              "key": "synthetic-none-1|dialogue|synthetic-none-1-turn-0",
+              "source": {
+                "runId": "synthetic-none-1",
+                "agentId": "agent-a",
+                "stream": "dialogue",
+                "recordId": "synthetic-none-1-turn-0",
+                "turnIndex": 0,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            },
+            {
+              "key": "synthetic-none-1|dialogue|synthetic-none-1-turn-1",
+              "source": {
+                "runId": "synthetic-none-1",
+                "agentId": "agent-b",
+                "stream": "dialogue",
+                "recordId": "synthetic-none-1-turn-1",
+                "turnIndex": 1,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            },
+            {
+              "key": "synthetic-none-1|dialogue|synthetic-none-1-turn-2",
+              "source": {
+                "runId": "synthetic-none-1",
+                "agentId": "agent-a",
+                "stream": "dialogue",
+                "recordId": "synthetic-none-1-turn-2",
+                "turnIndex": 2,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            },
+            {
+              "key": "synthetic-none-1|dialogue|synthetic-none-1-turn-3",
+              "source": {
+                "runId": "synthetic-none-1",
+                "agentId": "agent-b",
+                "stream": "dialogue",
+                "recordId": "synthetic-none-1-turn-3",
+                "turnIndex": 3,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            },
+            {
+              "key": "synthetic-none-1|dialogue|synthetic-none-1-turn-4",
+              "source": {
+                "runId": "synthetic-none-1",
+                "agentId": "agent-a",
+                "stream": "dialogue",
+                "recordId": "synthetic-none-1-turn-4",
+                "turnIndex": 4,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            },
+            {
+              "key": "synthetic-none-1|dialogue|synthetic-none-1-turn-5",
+              "source": {
+                "runId": "synthetic-none-1",
+                "agentId": "agent-b",
+                "stream": "dialogue",
+                "recordId": "synthetic-none-1-turn-5",
+                "turnIndex": 5,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            },
+            {
+              "key": "synthetic-none-2|dialogue|synthetic-none-2-turn-0",
+              "source": {
+                "runId": "synthetic-none-2",
+                "agentId": "agent-a",
+                "stream": "dialogue",
+                "recordId": "synthetic-none-2-turn-0",
+                "turnIndex": 0,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            },
+            {
+              "key": "synthetic-none-2|dialogue|synthetic-none-2-turn-1",
+              "source": {
+                "runId": "synthetic-none-2",
+                "agentId": "agent-b",
+                "stream": "dialogue",
+                "recordId": "synthetic-none-2-turn-1",
+                "turnIndex": 1,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            },
+            {
+              "key": "synthetic-none-2|dialogue|synthetic-none-2-turn-2",
+              "source": {
+                "runId": "synthetic-none-2",
+                "agentId": "agent-a",
+                "stream": "dialogue",
+                "recordId": "synthetic-none-2-turn-2",
+                "turnIndex": 2,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            },
+            {
+              "key": "synthetic-none-2|dialogue|synthetic-none-2-turn-3",
+              "source": {
+                "runId": "synthetic-none-2",
+                "agentId": "agent-b",
+                "stream": "dialogue",
+                "recordId": "synthetic-none-2-turn-3",
+                "turnIndex": 3,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            },
+            {
+              "key": "synthetic-none-2|dialogue|synthetic-none-2-turn-4",
+              "source": {
+                "runId": "synthetic-none-2",
+                "agentId": "agent-a",
+                "stream": "dialogue",
+                "recordId": "synthetic-none-2-turn-4",
+                "turnIndex": 4,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            },
+            {
+              "key": "synthetic-none-2|dialogue|synthetic-none-2-turn-5",
+              "source": {
+                "runId": "synthetic-none-2",
+                "agentId": "agent-b",
+                "stream": "dialogue",
+                "recordId": "synthetic-none-2-turn-5",
+                "turnIndex": 5,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            },
+            {
+              "key": "synthetic-enabled-1|dialogue|synthetic-enabled-1-turn-0",
+              "source": {
+                "runId": "synthetic-enabled-1",
+                "agentId": "agent-a",
+                "stream": "dialogue",
+                "recordId": "synthetic-enabled-1-turn-0",
+                "turnIndex": 0,
+                "responseHash": "66cb54e9d8b8e233a71b6ac3b423b2604ebb182f14adea00348b67678fb9d64c"
+              },
+              "status": "success",
+              "value": 1
+            },
+            {
+              "key": "synthetic-enabled-1|dialogue|synthetic-enabled-1-turn-1",
+              "source": {
+                "runId": "synthetic-enabled-1",
+                "agentId": "agent-b",
+                "stream": "dialogue",
+                "recordId": "synthetic-enabled-1-turn-1",
+                "turnIndex": 1,
+                "responseHash": "66cb54e9d8b8e233a71b6ac3b423b2604ebb182f14adea00348b67678fb9d64c"
+              },
+              "status": "success",
+              "value": 1
+            },
+            {
+              "key": "synthetic-enabled-1|dialogue|synthetic-enabled-1-turn-2",
+              "source": {
+                "runId": "synthetic-enabled-1",
+                "agentId": "agent-a",
+                "stream": "dialogue",
+                "recordId": "synthetic-enabled-1-turn-2",
+                "turnIndex": 2,
+                "responseHash": "66cb54e9d8b8e233a71b6ac3b423b2604ebb182f14adea00348b67678fb9d64c"
+              },
+              "status": "success",
+              "value": 1
+            },
+            {
+              "key": "synthetic-enabled-1|dialogue|synthetic-enabled-1-turn-3",
+              "source": {
+                "runId": "synthetic-enabled-1",
+                "agentId": "agent-b",
+                "stream": "dialogue",
+                "recordId": "synthetic-enabled-1-turn-3",
+                "turnIndex": 3,
+                "responseHash": "66cb54e9d8b8e233a71b6ac3b423b2604ebb182f14adea00348b67678fb9d64c"
+              },
+              "status": "success",
+              "value": 1
+            },
+            {
+              "key": "synthetic-enabled-1|dialogue|synthetic-enabled-1-turn-4",
+              "source": {
+                "runId": "synthetic-enabled-1",
+                "agentId": "agent-a",
+                "stream": "dialogue",
+                "recordId": "synthetic-enabled-1-turn-4",
+                "turnIndex": 4,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            },
+            {
+              "key": "synthetic-enabled-1|dialogue|synthetic-enabled-1-turn-5",
+              "source": {
+                "runId": "synthetic-enabled-1",
+                "agentId": "agent-b",
+                "stream": "dialogue",
+                "recordId": "synthetic-enabled-1-turn-5",
+                "turnIndex": 5,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            },
+            {
+              "key": "synthetic-enabled-2|dialogue|synthetic-enabled-2-turn-0",
+              "source": {
+                "runId": "synthetic-enabled-2",
+                "agentId": "agent-a",
+                "stream": "dialogue",
+                "recordId": "synthetic-enabled-2-turn-0",
+                "turnIndex": 0,
+                "responseHash": "66cb54e9d8b8e233a71b6ac3b423b2604ebb182f14adea00348b67678fb9d64c"
+              },
+              "status": "success",
+              "value": 1
+            },
+            {
+              "key": "synthetic-enabled-2|dialogue|synthetic-enabled-2-failure",
+              "source": {
+                "runId": "synthetic-enabled-2",
+                "agentId": "agent-b",
+                "stream": "dialogue",
+                "recordId": "synthetic-enabled-2-failure",
+                "turnIndex": 1,
+                "responseHash": null
+              },
+              "status": "failed",
+              "value": null
+            },
+            {
+              "key": "synthetic-enabled-2|dialogue|synthetic-enabled-2-turn-1",
+              "source": {
+                "runId": "synthetic-enabled-2",
+                "agentId": "agent-b",
+                "stream": "dialogue",
+                "recordId": "synthetic-enabled-2-turn-1",
+                "turnIndex": 1,
+                "responseHash": "66cb54e9d8b8e233a71b6ac3b423b2604ebb182f14adea00348b67678fb9d64c"
+              },
+              "status": "success",
+              "value": 1
+            },
+            {
+              "key": "synthetic-enabled-2|dialogue|synthetic-enabled-2-turn-2",
+              "source": {
+                "runId": "synthetic-enabled-2",
+                "agentId": "agent-a",
+                "stream": "dialogue",
+                "recordId": "synthetic-enabled-2-turn-2",
+                "turnIndex": 2,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            },
+            {
+              "key": "synthetic-enabled-2|dialogue|synthetic-enabled-2-turn-3",
+              "source": {
+                "runId": "synthetic-enabled-2",
+                "agentId": "agent-b",
+                "stream": "dialogue",
+                "recordId": "synthetic-enabled-2-turn-3",
+                "turnIndex": 3,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            },
+            {
+              "key": "synthetic-enabled-2|dialogue|synthetic-enabled-2-turn-4",
+              "source": {
+                "runId": "synthetic-enabled-2",
+                "agentId": "agent-a",
+                "stream": "dialogue",
+                "recordId": "synthetic-enabled-2-turn-4",
+                "turnIndex": 4,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            },
+            {
+              "key": "synthetic-enabled-2|dialogue|synthetic-enabled-2-turn-5",
+              "source": {
+                "runId": "synthetic-enabled-2",
+                "agentId": "agent-b",
+                "stream": "dialogue",
+                "recordId": "synthetic-enabled-2-turn-5",
+                "turnIndex": 5,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "window",
+      "windowSize": 3,
+      "reportHash": "7ef45bfd65db78944419ff8b2d6f3a4e49e323085ffd75b48c97e3d9ac006eff",
+      "contrasts": [
+        {
+          "hypothesisId": "h1",
+          "domain": "behavior",
+          "metric": "question_fraction",
+          "designHash": "71ecc607d0afeb19a1c853ed66d66ca598416989dca3e155e92f23e3b47fa480",
+          "leftCondition": "none",
+          "rightCondition": "enabled",
+          "left": [
+            {
+              "runId": "synthetic-none-1",
+              "value": 0
+            },
+            {
+              "runId": "synthetic-none-2",
+              "value": 0
+            }
+          ],
+          "right": [
+            {
+              "runId": "synthetic-enabled-1",
+              "value": 0.6666666666666666
+            },
+            {
+              "runId": "synthetic-enabled-2",
+              "value": 0.3333333333333333
+            }
+          ],
+          "estimate": 0.5,
+          "ci95": [
+            0.3333333333333333,
+            0.6666666666666666
+          ],
+          "status": "direction_and_threshold_met",
+          "intervalIncludesZero": false,
+          "meetsMinimumEffect": true,
+          "matchesDirection": true,
+          "longitudinalDifference": {
+            "estimate": null,
+            "ci95": null
+          },
+          "evidence": [
+            {
+              "key": "synthetic-none-1|dialogue|synthetic-none-1-turn-0",
+              "source": {
+                "runId": "synthetic-none-1",
+                "agentId": "agent-a",
+                "stream": "dialogue",
+                "recordId": "synthetic-none-1-turn-0",
+                "turnIndex": 0,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            },
+            {
+              "key": "synthetic-none-1|dialogue|synthetic-none-1-turn-1",
+              "source": {
+                "runId": "synthetic-none-1",
+                "agentId": "agent-b",
+                "stream": "dialogue",
+                "recordId": "synthetic-none-1-turn-1",
+                "turnIndex": 1,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            },
+            {
+              "key": "synthetic-none-1|dialogue|synthetic-none-1-turn-2",
+              "source": {
+                "runId": "synthetic-none-1",
+                "agentId": "agent-a",
+                "stream": "dialogue",
+                "recordId": "synthetic-none-1-turn-2",
+                "turnIndex": 2,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            },
+            {
+              "key": "synthetic-none-1|dialogue|synthetic-none-1-turn-3",
+              "source": {
+                "runId": "synthetic-none-1",
+                "agentId": "agent-b",
+                "stream": "dialogue",
+                "recordId": "synthetic-none-1-turn-3",
+                "turnIndex": 3,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            },
+            {
+              "key": "synthetic-none-1|dialogue|synthetic-none-1-turn-4",
+              "source": {
+                "runId": "synthetic-none-1",
+                "agentId": "agent-a",
+                "stream": "dialogue",
+                "recordId": "synthetic-none-1-turn-4",
+                "turnIndex": 4,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            },
+            {
+              "key": "synthetic-none-1|dialogue|synthetic-none-1-turn-5",
+              "source": {
+                "runId": "synthetic-none-1",
+                "agentId": "agent-b",
+                "stream": "dialogue",
+                "recordId": "synthetic-none-1-turn-5",
+                "turnIndex": 5,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            },
+            {
+              "key": "synthetic-none-2|dialogue|synthetic-none-2-turn-0",
+              "source": {
+                "runId": "synthetic-none-2",
+                "agentId": "agent-a",
+                "stream": "dialogue",
+                "recordId": "synthetic-none-2-turn-0",
+                "turnIndex": 0,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            },
+            {
+              "key": "synthetic-none-2|dialogue|synthetic-none-2-turn-1",
+              "source": {
+                "runId": "synthetic-none-2",
+                "agentId": "agent-b",
+                "stream": "dialogue",
+                "recordId": "synthetic-none-2-turn-1",
+                "turnIndex": 1,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            },
+            {
+              "key": "synthetic-none-2|dialogue|synthetic-none-2-turn-2",
+              "source": {
+                "runId": "synthetic-none-2",
+                "agentId": "agent-a",
+                "stream": "dialogue",
+                "recordId": "synthetic-none-2-turn-2",
+                "turnIndex": 2,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            },
+            {
+              "key": "synthetic-none-2|dialogue|synthetic-none-2-turn-3",
+              "source": {
+                "runId": "synthetic-none-2",
+                "agentId": "agent-b",
+                "stream": "dialogue",
+                "recordId": "synthetic-none-2-turn-3",
+                "turnIndex": 3,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            },
+            {
+              "key": "synthetic-none-2|dialogue|synthetic-none-2-turn-4",
+              "source": {
+                "runId": "synthetic-none-2",
+                "agentId": "agent-a",
+                "stream": "dialogue",
+                "recordId": "synthetic-none-2-turn-4",
+                "turnIndex": 4,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            },
+            {
+              "key": "synthetic-none-2|dialogue|synthetic-none-2-turn-5",
+              "source": {
+                "runId": "synthetic-none-2",
+                "agentId": "agent-b",
+                "stream": "dialogue",
+                "recordId": "synthetic-none-2-turn-5",
+                "turnIndex": 5,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            },
+            {
+              "key": "synthetic-enabled-1|dialogue|synthetic-enabled-1-turn-0",
+              "source": {
+                "runId": "synthetic-enabled-1",
+                "agentId": "agent-a",
+                "stream": "dialogue",
+                "recordId": "synthetic-enabled-1-turn-0",
+                "turnIndex": 0,
+                "responseHash": "66cb54e9d8b8e233a71b6ac3b423b2604ebb182f14adea00348b67678fb9d64c"
+              },
+              "status": "success",
+              "value": 1
+            },
+            {
+              "key": "synthetic-enabled-1|dialogue|synthetic-enabled-1-turn-1",
+              "source": {
+                "runId": "synthetic-enabled-1",
+                "agentId": "agent-b",
+                "stream": "dialogue",
+                "recordId": "synthetic-enabled-1-turn-1",
+                "turnIndex": 1,
+                "responseHash": "66cb54e9d8b8e233a71b6ac3b423b2604ebb182f14adea00348b67678fb9d64c"
+              },
+              "status": "success",
+              "value": 1
+            },
+            {
+              "key": "synthetic-enabled-1|dialogue|synthetic-enabled-1-turn-2",
+              "source": {
+                "runId": "synthetic-enabled-1",
+                "agentId": "agent-a",
+                "stream": "dialogue",
+                "recordId": "synthetic-enabled-1-turn-2",
+                "turnIndex": 2,
+                "responseHash": "66cb54e9d8b8e233a71b6ac3b423b2604ebb182f14adea00348b67678fb9d64c"
+              },
+              "status": "success",
+              "value": 1
+            },
+            {
+              "key": "synthetic-enabled-1|dialogue|synthetic-enabled-1-turn-3",
+              "source": {
+                "runId": "synthetic-enabled-1",
+                "agentId": "agent-b",
+                "stream": "dialogue",
+                "recordId": "synthetic-enabled-1-turn-3",
+                "turnIndex": 3,
+                "responseHash": "66cb54e9d8b8e233a71b6ac3b423b2604ebb182f14adea00348b67678fb9d64c"
+              },
+              "status": "success",
+              "value": 1
+            },
+            {
+              "key": "synthetic-enabled-1|dialogue|synthetic-enabled-1-turn-4",
+              "source": {
+                "runId": "synthetic-enabled-1",
+                "agentId": "agent-a",
+                "stream": "dialogue",
+                "recordId": "synthetic-enabled-1-turn-4",
+                "turnIndex": 4,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            },
+            {
+              "key": "synthetic-enabled-1|dialogue|synthetic-enabled-1-turn-5",
+              "source": {
+                "runId": "synthetic-enabled-1",
+                "agentId": "agent-b",
+                "stream": "dialogue",
+                "recordId": "synthetic-enabled-1-turn-5",
+                "turnIndex": 5,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            },
+            {
+              "key": "synthetic-enabled-2|dialogue|synthetic-enabled-2-turn-0",
+              "source": {
+                "runId": "synthetic-enabled-2",
+                "agentId": "agent-a",
+                "stream": "dialogue",
+                "recordId": "synthetic-enabled-2-turn-0",
+                "turnIndex": 0,
+                "responseHash": "66cb54e9d8b8e233a71b6ac3b423b2604ebb182f14adea00348b67678fb9d64c"
+              },
+              "status": "success",
+              "value": 1
+            },
+            {
+              "key": "synthetic-enabled-2|dialogue|synthetic-enabled-2-failure",
+              "source": {
+                "runId": "synthetic-enabled-2",
+                "agentId": "agent-b",
+                "stream": "dialogue",
+                "recordId": "synthetic-enabled-2-failure",
+                "turnIndex": 1,
+                "responseHash": null
+              },
+              "status": "failed",
+              "value": null
+            },
+            {
+              "key": "synthetic-enabled-2|dialogue|synthetic-enabled-2-turn-1",
+              "source": {
+                "runId": "synthetic-enabled-2",
+                "agentId": "agent-b",
+                "stream": "dialogue",
+                "recordId": "synthetic-enabled-2-turn-1",
+                "turnIndex": 1,
+                "responseHash": "66cb54e9d8b8e233a71b6ac3b423b2604ebb182f14adea00348b67678fb9d64c"
+              },
+              "status": "success",
+              "value": 1
+            },
+            {
+              "key": "synthetic-enabled-2|dialogue|synthetic-enabled-2-turn-2",
+              "source": {
+                "runId": "synthetic-enabled-2",
+                "agentId": "agent-a",
+                "stream": "dialogue",
+                "recordId": "synthetic-enabled-2-turn-2",
+                "turnIndex": 2,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            },
+            {
+              "key": "synthetic-enabled-2|dialogue|synthetic-enabled-2-turn-3",
+              "source": {
+                "runId": "synthetic-enabled-2",
+                "agentId": "agent-b",
+                "stream": "dialogue",
+                "recordId": "synthetic-enabled-2-turn-3",
+                "turnIndex": 3,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            },
+            {
+              "key": "synthetic-enabled-2|dialogue|synthetic-enabled-2-turn-4",
+              "source": {
+                "runId": "synthetic-enabled-2",
+                "agentId": "agent-a",
+                "stream": "dialogue",
+                "recordId": "synthetic-enabled-2-turn-4",
+                "turnIndex": 4,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            },
+            {
+              "key": "synthetic-enabled-2|dialogue|synthetic-enabled-2-turn-5",
+              "source": {
+                "runId": "synthetic-enabled-2",
+                "agentId": "agent-b",
+                "stream": "dialogue",
+                "recordId": "synthetic-enabled-2-turn-5",
+                "turnIndex": 5,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "all_planned_observed",
+      "windowSize": 2,
+      "reportHash": "4ad769903bb5ebf4d79806cc5abed5236245247e90451f956fb154eb07a9c476",
+      "contrasts": [
+        {
+          "hypothesisId": "h1",
+          "domain": "behavior",
+          "metric": "question_fraction",
+          "designHash": "71ecc607d0afeb19a1c853ed66d66ca598416989dca3e155e92f23e3b47fa480",
+          "leftCondition": "none",
+          "rightCondition": "enabled",
+          "left": [
+            {
+              "runId": "synthetic-none-1",
+              "value": 0
+            },
+            {
+              "runId": "synthetic-none-2",
+              "value": 0
+            }
+          ],
+          "right": [
+            {
+              "runId": "synthetic-enabled-1",
+              "value": 0.6666666666666666
+            },
+            {
+              "runId": "synthetic-enabled-2",
+              "value": 0.3333333333333333
+            }
+          ],
+          "estimate": 0.5,
+          "ci95": [
+            0.3333333333333333,
+            0.6666666666666666
+          ],
+          "status": "direction_and_threshold_met",
+          "intervalIncludesZero": false,
+          "meetsMinimumEffect": true,
+          "matchesDirection": true,
+          "longitudinalDifference": {
+            "estimate": -0.875,
+            "ci95": [
+              -1,
+              -0.75
+            ]
+          },
+          "evidence": [
+            {
+              "key": "synthetic-none-1|dialogue|synthetic-none-1-turn-0",
+              "source": {
+                "runId": "synthetic-none-1",
+                "agentId": "agent-a",
+                "stream": "dialogue",
+                "recordId": "synthetic-none-1-turn-0",
+                "turnIndex": 0,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            },
+            {
+              "key": "synthetic-none-1|dialogue|synthetic-none-1-turn-1",
+              "source": {
+                "runId": "synthetic-none-1",
+                "agentId": "agent-b",
+                "stream": "dialogue",
+                "recordId": "synthetic-none-1-turn-1",
+                "turnIndex": 1,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            },
+            {
+              "key": "synthetic-none-1|dialogue|synthetic-none-1-turn-2",
+              "source": {
+                "runId": "synthetic-none-1",
+                "agentId": "agent-a",
+                "stream": "dialogue",
+                "recordId": "synthetic-none-1-turn-2",
+                "turnIndex": 2,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            },
+            {
+              "key": "synthetic-none-1|dialogue|synthetic-none-1-turn-3",
+              "source": {
+                "runId": "synthetic-none-1",
+                "agentId": "agent-b",
+                "stream": "dialogue",
+                "recordId": "synthetic-none-1-turn-3",
+                "turnIndex": 3,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            },
+            {
+              "key": "synthetic-none-1|dialogue|synthetic-none-1-turn-4",
+              "source": {
+                "runId": "synthetic-none-1",
+                "agentId": "agent-a",
+                "stream": "dialogue",
+                "recordId": "synthetic-none-1-turn-4",
+                "turnIndex": 4,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            },
+            {
+              "key": "synthetic-none-1|dialogue|synthetic-none-1-turn-5",
+              "source": {
+                "runId": "synthetic-none-1",
+                "agentId": "agent-b",
+                "stream": "dialogue",
+                "recordId": "synthetic-none-1-turn-5",
+                "turnIndex": 5,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            },
+            {
+              "key": "synthetic-none-2|dialogue|synthetic-none-2-turn-0",
+              "source": {
+                "runId": "synthetic-none-2",
+                "agentId": "agent-a",
+                "stream": "dialogue",
+                "recordId": "synthetic-none-2-turn-0",
+                "turnIndex": 0,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            },
+            {
+              "key": "synthetic-none-2|dialogue|synthetic-none-2-turn-1",
+              "source": {
+                "runId": "synthetic-none-2",
+                "agentId": "agent-b",
+                "stream": "dialogue",
+                "recordId": "synthetic-none-2-turn-1",
+                "turnIndex": 1,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            },
+            {
+              "key": "synthetic-none-2|dialogue|synthetic-none-2-turn-2",
+              "source": {
+                "runId": "synthetic-none-2",
+                "agentId": "agent-a",
+                "stream": "dialogue",
+                "recordId": "synthetic-none-2-turn-2",
+                "turnIndex": 2,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            },
+            {
+              "key": "synthetic-none-2|dialogue|synthetic-none-2-turn-3",
+              "source": {
+                "runId": "synthetic-none-2",
+                "agentId": "agent-b",
+                "stream": "dialogue",
+                "recordId": "synthetic-none-2-turn-3",
+                "turnIndex": 3,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            },
+            {
+              "key": "synthetic-none-2|dialogue|synthetic-none-2-turn-4",
+              "source": {
+                "runId": "synthetic-none-2",
+                "agentId": "agent-a",
+                "stream": "dialogue",
+                "recordId": "synthetic-none-2-turn-4",
+                "turnIndex": 4,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            },
+            {
+              "key": "synthetic-none-2|dialogue|synthetic-none-2-turn-5",
+              "source": {
+                "runId": "synthetic-none-2",
+                "agentId": "agent-b",
+                "stream": "dialogue",
+                "recordId": "synthetic-none-2-turn-5",
+                "turnIndex": 5,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            },
+            {
+              "key": "synthetic-enabled-1|dialogue|synthetic-enabled-1-turn-0",
+              "source": {
+                "runId": "synthetic-enabled-1",
+                "agentId": "agent-a",
+                "stream": "dialogue",
+                "recordId": "synthetic-enabled-1-turn-0",
+                "turnIndex": 0,
+                "responseHash": "66cb54e9d8b8e233a71b6ac3b423b2604ebb182f14adea00348b67678fb9d64c"
+              },
+              "status": "success",
+              "value": 1
+            },
+            {
+              "key": "synthetic-enabled-1|dialogue|synthetic-enabled-1-turn-1",
+              "source": {
+                "runId": "synthetic-enabled-1",
+                "agentId": "agent-b",
+                "stream": "dialogue",
+                "recordId": "synthetic-enabled-1-turn-1",
+                "turnIndex": 1,
+                "responseHash": "66cb54e9d8b8e233a71b6ac3b423b2604ebb182f14adea00348b67678fb9d64c"
+              },
+              "status": "success",
+              "value": 1
+            },
+            {
+              "key": "synthetic-enabled-1|dialogue|synthetic-enabled-1-turn-2",
+              "source": {
+                "runId": "synthetic-enabled-1",
+                "agentId": "agent-a",
+                "stream": "dialogue",
+                "recordId": "synthetic-enabled-1-turn-2",
+                "turnIndex": 2,
+                "responseHash": "66cb54e9d8b8e233a71b6ac3b423b2604ebb182f14adea00348b67678fb9d64c"
+              },
+              "status": "success",
+              "value": 1
+            },
+            {
+              "key": "synthetic-enabled-1|dialogue|synthetic-enabled-1-turn-3",
+              "source": {
+                "runId": "synthetic-enabled-1",
+                "agentId": "agent-b",
+                "stream": "dialogue",
+                "recordId": "synthetic-enabled-1-turn-3",
+                "turnIndex": 3,
+                "responseHash": "66cb54e9d8b8e233a71b6ac3b423b2604ebb182f14adea00348b67678fb9d64c"
+              },
+              "status": "success",
+              "value": 1
+            },
+            {
+              "key": "synthetic-enabled-1|dialogue|synthetic-enabled-1-turn-4",
+              "source": {
+                "runId": "synthetic-enabled-1",
+                "agentId": "agent-a",
+                "stream": "dialogue",
+                "recordId": "synthetic-enabled-1-turn-4",
+                "turnIndex": 4,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            },
+            {
+              "key": "synthetic-enabled-1|dialogue|synthetic-enabled-1-turn-5",
+              "source": {
+                "runId": "synthetic-enabled-1",
+                "agentId": "agent-b",
+                "stream": "dialogue",
+                "recordId": "synthetic-enabled-1-turn-5",
+                "turnIndex": 5,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            },
+            {
+              "key": "synthetic-enabled-2|dialogue|synthetic-enabled-2-turn-0",
+              "source": {
+                "runId": "synthetic-enabled-2",
+                "agentId": "agent-a",
+                "stream": "dialogue",
+                "recordId": "synthetic-enabled-2-turn-0",
+                "turnIndex": 0,
+                "responseHash": "66cb54e9d8b8e233a71b6ac3b423b2604ebb182f14adea00348b67678fb9d64c"
+              },
+              "status": "success",
+              "value": 1
+            },
+            {
+              "key": "synthetic-enabled-2|dialogue|synthetic-enabled-2-failure",
+              "source": {
+                "runId": "synthetic-enabled-2",
+                "agentId": "agent-b",
+                "stream": "dialogue",
+                "recordId": "synthetic-enabled-2-failure",
+                "turnIndex": 1,
+                "responseHash": null
+              },
+              "status": "failed",
+              "value": null
+            },
+            {
+              "key": "synthetic-enabled-2|dialogue|synthetic-enabled-2-turn-1",
+              "source": {
+                "runId": "synthetic-enabled-2",
+                "agentId": "agent-b",
+                "stream": "dialogue",
+                "recordId": "synthetic-enabled-2-turn-1",
+                "turnIndex": 1,
+                "responseHash": "66cb54e9d8b8e233a71b6ac3b423b2604ebb182f14adea00348b67678fb9d64c"
+              },
+              "status": "success",
+              "value": 1
+            },
+            {
+              "key": "synthetic-enabled-2|dialogue|synthetic-enabled-2-turn-2",
+              "source": {
+                "runId": "synthetic-enabled-2",
+                "agentId": "agent-a",
+                "stream": "dialogue",
+                "recordId": "synthetic-enabled-2-turn-2",
+                "turnIndex": 2,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            },
+            {
+              "key": "synthetic-enabled-2|dialogue|synthetic-enabled-2-turn-3",
+              "source": {
+                "runId": "synthetic-enabled-2",
+                "agentId": "agent-b",
+                "stream": "dialogue",
+                "recordId": "synthetic-enabled-2-turn-3",
+                "turnIndex": 3,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            },
+            {
+              "key": "synthetic-enabled-2|dialogue|synthetic-enabled-2-turn-4",
+              "source": {
+                "runId": "synthetic-enabled-2",
+                "agentId": "agent-a",
+                "stream": "dialogue",
+                "recordId": "synthetic-enabled-2-turn-4",
+                "turnIndex": 4,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            },
+            {
+              "key": "synthetic-enabled-2|dialogue|synthetic-enabled-2-turn-5",
+              "source": {
+                "runId": "synthetic-enabled-2",
+                "agentId": "agent-b",
+                "stream": "dialogue",
+                "recordId": "synthetic-enabled-2-turn-5",
+                "turnIndex": 5,
+                "responseHash": "95a34c2d314532910990da3fa916b340efff6e50d1c4c8e77a354bab86842827"
+              },
+              "status": "success",
+              "value": 0
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "allObservedReportHash": "4ad769903bb5ebf4d79806cc5abed5236245247e90451f956fb154eb07a9c476",
+  "totals": {
+    "planned": 4,
+    "observed": 4,
+    "missing": 0,
+    "incomplete": 0,
+    "excluded": 0,
+    "deviations": 0
+  },
+  "method": "Right minus left; equal-agent then equal-run means within matched design/stream/probe strata. Independent-run percentile bootstrap, saved seed and draws. CI unavailable with fewer than two eligible runs per condition. Sensitivity varies prespecified windows and includes excluded observed trials.",
+  "interpretation": "Direction/threshold labels are descriptive, not significance tests or confirmed hypotheses. Intervals are unadjusted for multiple hypotheses; shared starts, matched batches and seed/server dependence can violate independent-run assumptions. Missing/excluded outcomes remain visible; no missing outcome is imputed as zero.",
+  "synthesisHash": "46d9ae74115f7e49085b8372f5563f12c747c8a3a8ae752a37275a8178bb7ad1"
+}

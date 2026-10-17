@@ -1,0 +1,8 @@
+cff-version: 1.2.0
+message: "Cite this repository and the exact commit and publication-artifact hash used in your study."
+type: software
+title: EmergentSelf
+authors:
+  - name: "EmergentSelf project"
+repository-code: "https://github.com/Miotis2004/EmergentSelf"
+abstract: "A local research application for controlled multi-agent conversation, editable memory, behavioral measurement and source-linked reproducible research artifacts. Observable behavior is not treated as evidence of consciousness."
