@@ -23,6 +23,7 @@ describe('Experiment participants and initial topic', () => {
             events$: events,
             getLlmDefaults: () => of(savedConfig.llmConfig),
             getLlmModels: () => of([{ id: 'loaded' }]),
+            getMemoryHistory: () => of({ baselineTurn:-1, lastTurn:-1, state: {entries:[]}, timeline:[] }),
             connectEvents: () => {}, disconnectEvents: () => {},
             startExperiment: jasmine.createSpy().and.returnValue(of({ success: true })),
             resumeExperiment: jasmine.createSpy().and.returnValue(of({ success: true }))
@@ -96,6 +97,23 @@ describe('Experiment participants and initial topic', () => {
             component.setAgentIncluded('charlie', true);
             expect(component.selectedAgentIds.has('charlie')).toBeFalse();
         }
+    });
+
+    it('records memory condition and limits, restores them, and freezes controls during runs', async () => {
+        component.memoryConfig.mode = 'none';
+        component.setMemoryLimit('retrievalEntries', 4);
+        component.startExperiment();
+        expect(experiments.startExperiment.calls.mostRecent().args[0].memoryConfig.mode).toBe('none');
+        expect(experiments.startExperiment.calls.mostRecent().args[0].memoryConfig.retrievalEntries).toBe(4);
+        events.next({type:'status_changed',data:{status:'paused',config:{...savedConfig,memoryConfig:{mode:'enabled',retrievalEntries:8}}}});
+        fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+        expect(component.memoryConfig.retrievalEntries).toBe(8);
+        expect((fixture.nativeElement.querySelector('#memory-mode') as HTMLSelectElement).matches(':disabled')).toBeTrue();
+        component.setMemoryLimit('retrievalEntries', 10);
+        expect(component.memoryConfig.retrievalEntries).toBe(8);
+        events.next({type:'status_changed',data:{status:'completed',config:savedConfig}});
+        expect(component.memoryConfig.mode).toBe('enabled');
+        expect(component.memoryConfig.retrievalEntries).toBe(24);
     });
 
     it('Resume sends no replacement configuration; legacy topics display as empty', () => {

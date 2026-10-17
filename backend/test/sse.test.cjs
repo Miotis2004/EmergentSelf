@@ -95,6 +95,15 @@ test('HTTP endpoints: independent SSE subscribers, inline error data, retry, and
   assert.equal(snapshot.events.filter(e => e.type === 'memory_update').length, 3);
   assert.equal(snapshot.events.filter(e => e.type === 'experiment_error').length, 1);
   assert.equal(snapshot.config.llmConfig.model, 'local-model');
+  const memory = await (await fetch(`${base}/api/experiment/runs/sse-run/agents/bob/memory?turn=2&compareTo=-1`)).json();
+  assert.equal(memory.state.schemaVersion, 2);
+  assert.equal(memory.turnIndex, 2);
+  assert.equal(memory.baselineTurn, -1);
+  assert.equal(memory.timeline.length, 2);
+  assert.deepEqual(memory.diff.added, []);
+  assert.equal((await fetch(`${base}/api/experiment/runs/sse-run/agents/outsider/memory`)).status, 400);
+  assert.equal((await fetch(`${base}/api/experiment/runs/sse-run/agents/bob/memory?turn=bad`)).status, 400);
+  assert.equal((await fetch(`${base}/api/experiment/runs/legacy/agents/bob/memory`)).status, 404);
   assert.equal(snapshot.config.initialTopic, 'Starting topic');
   assert.deepEqual(snapshot.config.agentIds, ['bob','sara']);
   assert.equal(prompts[0].messages[1].content, 'Starting topic');

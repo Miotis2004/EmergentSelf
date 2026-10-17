@@ -22,7 +22,7 @@ const llmAdapter = new LlmAdapter();
 const controller = new ExperimentController(jsonStorage, jsonlStorage, llmAdapter);
 
 app.use('/api/agents', createAgentsRouter(jsonStorage));
-app.use('/api/experiment', createExperimentRouter(controller));
+app.use('/api/experiment', createExperimentRouter(controller, jsonlStorage));
 
 app.get('/api/llm/config', (req, res) => {
     res.json(resolveLlmConfig());

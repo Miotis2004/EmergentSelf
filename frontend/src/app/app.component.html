@@ -110,6 +110,30 @@
             <small>Model and output settings are recorded and fixed for the run. Use a new Run ID to change them.</small>
         </fieldset>
 
+        <fieldset [disabled]="configurationLocked" class="model-config">
+            <legend>Memory condition</legend>
+            <label for="memory-mode">Condition</label>
+            <select id="memory-mode" [(ngModel)]="memoryConfig.mode">
+                <option value="enabled">Structured editable memory</option>
+                <option value="none">No memory</option>
+            </select>
+            <small>No memory withholds working memory and transcript history, uses initial stats, and ignores proposed state changes. Original stored state is retained.</small>
+            <details>
+                <summary>Retrieval and memory limits</summary>
+                <label for="retrieval-rule">Retrieval order</label>
+                <select id="retrieval-rule" [(ngModel)]="memoryConfig.retrievalRule">
+                    <option value="importance">Importance, confidence, recency</option>
+                    <option value="recent">Most recently updated</option>
+                </select>
+                <div *ngFor="let limit of memoryLimits">
+                    <label [for]="'memory-' + limit.key">{{limit.label}}</label>
+                    <input [id]="'memory-' + limit.key" type="number" step="1" [min]="limit.min" [max]="limit.max"
+                        [ngModel]="memoryLimit(limit.key)" (ngModelChange)="setMemoryLimit(limit.key, $event)">
+                </div>
+                <small>Limits are recorded and fixed per run. Overflow uses a deterministic extractive digest; original entries remain available in history.</small>
+            </details>
+        </fieldset>
+
         <div class="transcript" #transcriptContainer>
             <div *ngIf="turns.length === 0" style="color: #888; font-style: italic;">No conversation yet.</div>
 
@@ -135,7 +159,8 @@
             <h2>Audit & State Events</h2>
         </div>
 
-        <div style="height: 100%; overflow-y: auto;">
+        <app-memory-inspector [runId]="savedAgentIds ? runId : ''" [agentIds]="savedAgentIds || []" [refreshToken]="turns.length"></app-memory-inspector>
+        <div style="overflow-y: auto;">
             <div *ngIf="auditEvents.length === 0" style="color: #888; font-style: italic;">No events.</div>
             <div class="log-entry" *ngFor="let evt of auditEvents">
                 <strong style="color: #0056b3;">[{{evt.type}}]</strong> Turn {{evt.turnIndex ?? '?'}} ({{evt.agentId || 'System'}})<br>

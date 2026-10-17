@@ -177,3 +177,108 @@ The frontend tests require Chrome/Chromium (set `CHROME_BIN` if necessary).
 Backend tests use isolated temporary storage and controlled inference responses,
 including participant isolation, multi-agent order, topic delivery, legacy data
 compatibility, and pause/resume/restart preservation.
+
+## Phase II: memory and self-model evolution
+
+The dashboard's **Memory condition** configures each new run. **Structured editable
+memory** separates episodic observations, beliefs/opinions, self-description, and
+relationships. **No memory** withholds all private working entries and shared
+transcript history, presents original initial stats, and ignores every proposed
+state change. It preserves existing working files for later comparisons. Neither
+condition assigns personality traits or changes model weights.
+
+Each entry has a stable ID, confidence (0–1, default 0.5), optional importance
+(0–1), creation/update timestamps, initial/latest source events (run, global turn,
+event ID), and an active/retired/superseded status. Relationships identify another
+participant. Model replies retain the original `response` and `memory_operations`
+shape. `memory` remains an alias for the new `episodic` type. Examples:
+
+```json
+{
+  "response": "The model's original conversational text.",
+  "memory_operations": [
+    {"action":"add","type":"belief","content":"A provisional opinion","reason":"Evidence in this exchange","confidence":0.6,"importance":0.7},
+    {"action":"add","type":"self_description","content":"An agent-authored self-description","reason":"Reflection on the exchange","confidence":0.5},
+    {"action":"add","type":"relationship","relationship_agent_id":"sara","content":"An opinion about Sara","reason":"Observed interaction","confidence":0.6}
+  ]
+}
+```
+
+`update` revises an active `target_id`, retaining its original source and recording
+the new source. `contradict` supersedes an active `target_id` with a new alternative
+linked to that entry. `consolidate` combines two or more active `target_ids` of the
+same category (and relationship subject) into a model-authored summary. `retire`
+deactivates a `target_id`. These operations require `content` and `reason`; retirement
+retains the original content. Superseded and retired entries remain in state and
+history. Every accepted/rejected operation has a source-linked before/after audit.
+Invalid targets, confidence/importance, stat changes, subjects, and limits are
+rejected; another agent's private entries cannot be targeted.
+
+Retrieval is deterministic and configurable in the dashboard, recorded in
+`config.json` as `memoryConfig`, and repeated in each turn's retrieval metadata:
+
+| Field | Default | Allowed range / values |
+| --- | --- | --- |
+| `mode` | `enabled` | `enabled`, `none` |
+| `maxActiveEntries` | 200 | 1–1000 |
+| `maxOperations` | 20 | 1–50 |
+| `maxEntryChars` | 2000 | 1–8000 |
+| `retrievalEntries` | 24 | 0–100 |
+| `retrievalChars` | 12000 | 0–32000 |
+| `entryChars` | 1000 | 1–8000 |
+| `summaryChars` | 2000 | 0–8000 |
+| `transcriptTurns` | 10 | 0–100 |
+| `transcriptChars` | 8000 | 0–32000 |
+| `retrievalRule` | `importance` | `importance`, `recent` |
+
+Importance retrieval ranks by importance (unspecified = 0.5), confidence, update
+time, then ID. Recent retrieval ranks by update time then ID. Only active entries
+are retrieved. Overflow can contribute short verbatim excerpts to a separately
+labeled **extractive digest** with source entry IDs. This deterministic summary
+uses no additional inference and never overwrites entries. Agent-authored
+consolidations are distinct, explicit operations in the audit. Zero digest budget
+disables the extractive summary. Memory and transcript budgets are character
+limits, not tokenizer guarantees; choose them to fit your local model's context
+window plus the completion budget. Retained research files are not size-limited
+by retrieval settings.
+
+Mutable Phase II state lives in `model_memories/agents/<id>/state.json` with
+`schemaVersion: 2`; the complete identity and entries are replaced atomically in
+one file. Phase I identity/memory/belief files are imported on read without
+rewriting them. Unknown legacy sources/timestamps remain null; imported confidence
+is explicitly defaulted to 0.5. Original legacy files remain intact when a new
+canonical state is created. The API serves canonical state after that point.
+
+Each run gets an immutable `memory-baseline.json` and append-only turn records
+containing before/after working state, exact rendered prompt, raw/parsed successful
+model output, operation audit, selected/digest IDs, omissions, and budgets. These
+research files contain private experimental content; console diagnostics remain
+redacted by default. A turn is committed to `conversation.jsonl` before updating
+working state and appending its memory event. Resume/start repairs pending state
+and event projections from that exact committed record before further inference,
+so a failed projection does not repeat model calls or duplicate memory additions.
+A writer lock covers the research store, including paused runs; a second worker
+cannot mutate it. Stop releases it after pending projections are repaired. Only
+locks whose owning PID is confirmed dead are automatically reclaimed. This is
+application-level recovery, not a guarantee against disk corruption or power loss.
+
+Use **Memory & self-model** in the audit panel to select an agent, inspect its
+state after a committed global turn, compare with another turn, and browse its
+operation timeline. Turn `-1` means the initial state for a new run. You can enter
+another saved Run ID. The equivalent read-only API is:
+
+```text
+GET /api/experiment/runs/<runId>/agents/<agentId>/memory?turn=8&compareTo=2
+```
+
+The response includes state, timeline, differences, and the available historical
+range. Legacy runs resumed under Phase II get a baseline at the last pre-Phase-II
+turn; earlier states cannot be reconstructed reliably and return a clear error.
+Completed legacy runs are not migrated merely by viewing/starting them. Their
+historical endpoint reports that Phase II history was not recorded.
+
+Run `cd backend && npm test` for memory evolution, source attribution, retrieval,
+no-memory isolation, historical differences, consolidation retention, writer
+ownership, and journal-recovery regressions. Angular tests also cover configuration
+locking and the memory history explorer. Actual local-model behavior still needs
+the researcher-run `npm run test:local-model` check.
