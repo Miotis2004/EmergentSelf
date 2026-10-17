@@ -116,9 +116,11 @@ No database, online model retraining, reward/punishment, external web access for
 
 ### Acceptance criteria
 
-- [ ] Each reported metric has an operational definition and reproducible computation.
-- [ ] Analysts can generate condition-level summaries from exported run data.
-- [ ] Probe responses are distinguishable from agent-to-agent training/conversation turns.
+- [x] Each reported metric has an operational definition and reproducible computation.
+- [x] Analysts can generate condition-level summaries from exported run data.
+- [x] Probe responses are distinguishable from agent-to-agent training/conversation turns.
+
+**Implementation evidence:** Versioned observable-text/state measures, source-linked longitudinal windows and matched-design condition summaries, offline JSON/CSV analysis, immutable benchmark sets, read-only memory views, and blinded human evaluation are covered by backend/API and Angular regression tests. See [PHASE_IV.md](PHASE_IV.md) for operational definitions, scoring rubrics, reproducibility procedures and limitations. Local-model experiments and substantive behavioral conclusions remain researcher validation tasks.
 
 ## Phase V: Social interaction and environmental feedback
 

@@ -6,6 +6,9 @@ import { JsonlStorage } from './storage/JsonlStorage';
 import { LlmAdapter, resolveLlmConfig } from './llm/LlmAdapter';
 import { ExperimentController } from './experiments/ExperimentController';
 import { createAgentsRouter } from './api/agents';
+import { AnalysisService } from './analysis/AnalysisService';
+import { BenchmarkService } from './analysis/BenchmarkService';
+import { createAnalysisRouter } from './api/analysis';
 import { ResearchService } from './research/ResearchService';
 import { createResearchRouter } from './api/research';
 import { createExperimentRouter } from './api/experiment';
@@ -24,7 +27,9 @@ const llmAdapter = new LlmAdapter();
 const controller = new ExperimentController(jsonStorage, jsonlStorage, llmAdapter);
 
 app.use('/api/agents', createAgentsRouter(jsonStorage));
-app.use('/api/research', createResearchRouter(new ResearchService(controller, jsonlStorage, jsonStorage)));
+const research = new ResearchService(controller, jsonlStorage, jsonStorage);
+app.use('/api/research', createResearchRouter(research));
+app.use('/api/analysis', createAnalysisRouter(new AnalysisService(controller, jsonlStorage, research), new BenchmarkService(controller, jsonlStorage, research)));
 app.use('/api/experiment', createExperimentRouter(controller, jsonlStorage));
 
 app.get('/api/llm/config', (req, res) => {

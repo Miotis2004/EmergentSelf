@@ -58,6 +58,10 @@ export class ExperimentService {
       return this.http.request(method, `http://localhost:3000/api/research${path}`, { body });
   }
 
+  analysis(method: string, path: string, body?: any): Observable<any> {
+      return this.http.request(method, `http://localhost:3000/api/analysis${path}`, { body });
+  }
+
   getStatus(): Observable<any> {
       return this.http.get(`${this.apiUrl}/status`);
   }

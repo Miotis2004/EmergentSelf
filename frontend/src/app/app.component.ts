@@ -1,4 +1,6 @@
 import { Component, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewChecked } from '@angular/core';
+import { AnalysisPanelComponent } from './analysis-panel.component';
+import { RouterOutlet } from '@angular/router';
 import { ResearchPanelComponent } from './research-panel.component';
 import { MemoryInspectorComponent } from './memory-inspector.component';
 import { CommonModule } from '@angular/common';
@@ -10,12 +12,14 @@ import { Subscription } from 'rxjs';
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, FormsModule, MemoryInspectorComponent, ResearchPanelComponent],
+  imports: [CommonModule, FormsModule, MemoryInspectorComponent, ResearchPanelComponent, AnalysisPanelComponent, RouterOutlet],
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.css']
 })
 export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
   @ViewChild('transcriptContainer') private transcriptContainer!: ElementRef;
+
+  readonly reviewMode = window.location.pathname === '/review';
 
   availableAgents: AgentIdentity[] = [];
   selectedAgentIds = new Set<string>();
@@ -99,6 +103,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
   ) {}
 
   ngOnInit() {
+      if (this.reviewMode) return;
       this.loadAgents();
 
       this.experimentService.getLlmDefaults().subscribe({

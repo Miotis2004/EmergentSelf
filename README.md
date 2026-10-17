@@ -132,7 +132,7 @@ Phase I deliberately excludes formal personality scoring, reward/punishment, sim
 - **Role prompts can contaminate results.** Keep instructions neutral and record the exact prompts sent to the model.
 - **Sampling causes variation.** Record model identifiers, temperatures, seeds when supported, and other inference settings. A seed may not guarantee full determinism.
 - **Memory proposals are model outputs.** Store raw responses and validation outcomes, not just the final accepted state.
-- **A single run is exploratory.** Controlled conditions, repeated runs, and blinded evaluations belong in later phases.
+- **A single run is exploratory.** Use controlled conditions, repeated runs and independent blinded evaluations before drawing conclusions.
 - **Agents may say they feel or intend something.** Treat those statements as observations about generated language, not direct measurements of inner experience.
 
 ## Roadmap
@@ -141,4 +141,6 @@ See [DEVELOPMENT.md](DEVELOPMENT.md) for milestones and acceptance criteria, pro
 
 ## Project status
 
-**Phase I application, Phase II memory evolution, and Phase III experimental controls implemented.** The conceptual layout above is historical design context; the actual application lives in `backend/` and `frontend/`. See [INSTALLATION.md](INSTALLATION.md) for setup, participant/topic selection, memory conditions, historical state inspection, reproducible trial templates/batches, probes, analysis exports, and local-model validation. Automated regression checks use controlled inference responses; real-model stability and research conclusions require local experiments.
+**Phase I application, Phase II memory evolution, Phase III experimental controls, and Phase IV behavioral analysis implemented.** The conceptual layout above is historical design context; the actual application lives in `backend/` and `frontend/`. See [INSTALLATION.md](INSTALLATION.md) for setup, participant/topic selection, memory conditions, historical state inspection, reproducible trial templates/batches, probes, analysis exports, and local-model validation. Automated regression checks use controlled inference responses; real-model stability and research conclusions require local experiments.
+
+Phase IV adds versioned behavioral proxies, agent timelines, matched-design condition summaries, benchmark conversations, read-only withheld/restored-memory tests, and a separate blinded review page. See [PHASE_IV.md](PHASE_IV.md) for definitions, rubrics, offline analysis commands and limits on interpretation.

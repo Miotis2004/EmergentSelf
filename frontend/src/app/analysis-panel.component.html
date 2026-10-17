@@ -1,0 +1,76 @@
+<details>
+  <summary><strong>Behavioral measures & longitudinal analysis</strong></summary>
+  <p>Versioned behavioral proxies describe observed text and state changes. They do not establish personality or consciousness. Dialogue and read-only probes are analyzed separately.</p>
+  <p role="alert" *ngIf="error">{{error}}</p><p role="status" *ngIf="message">{{message}}</p>
+  <button (click)="refresh()">Refresh saved runs and benchmarks</button>
+  <fieldset [disabled]="busy || running"><legend>Source runs and analysis</legend>
+    <label *ngFor="let run of runs"><input type="checkbox" [checked]="selected.has(run)" (change)="toggle(run,$any($event.target).checked)">{{run}}</label>
+    <p *ngIf="!runs.length">No saved runs yet.</p>
+    <label>Observations per agent window <input type="number" min="1" max="10000" [(ngModel)]="windowSize"></label>
+    <label>Analysis / arm-order seed <input type="number" min="0" max="4294967295" [(ngModel)]="seed"></label>
+    <button (click)="analyze()" [disabled]="!runIds.length">Generate report</button>
+    <p>Pause the active experiment before collecting analysis or probes. Different model, prompt, budget, participant order or starting state produces a separate design group.</p>
+  </fieldset>
+  <section *ngIf="report">
+    <p>{{report.metricVersion}} · {{report.totals.runs}} runs · {{report.totals.successfulResponses}} successful responses · {{report.totals.failedAttempts}} failed attempts · {{report.totals.humanRatings}} human ratings</p>
+    <button (click)="download()">Download reproducible analysis JSON</button>
+    <label>Measure <select [(ngModel)]="metric"><option *ngFor="let m of definitions.metrics" [value]="m.id">{{m.label}}</option></select></label>
+    <p>{{selectedDefinition?.definition}}</p><p>{{report.aggregation}}</p>
+    <div class="scroll"><table><thead><tr><th>Condition / design / stream</th><th>Mean</th><th>95% run bootstrap interval</th><th>Runs / agents</th><th>Valid / unavailable</th><th>Responses / failures</th></tr></thead><tbody>
+      <tr *ngFor="let group of report.groups"><td>{{group.condition}} / {{group.designHash.slice(0,12)}} / {{group.stream}} / {{group.probeKey}}</td><td>{{format(group.metrics[metric].mean)}}</td><td>{{group.metrics[metric].ci95 ? format(group.metrics[metric].ci95[0]) + ' … ' + format(group.metrics[metric].ci95[1]) : 'Unavailable (<2 independent runs)'}}</td><td>{{group.runCount}} / {{group.unitCount}}</td><td>{{group.metrics[metric].validObservations}} / {{group.metrics[metric].unavailableObservations}}</td><td>{{group.responses}} / {{group.failures}}</td></tr>
+    </tbody></table></div>
+    <h4>Matched-design condition differences</h4>
+    <p>Differences are right minus left, descriptive only. Longitudinal differences compare each condition’s mean first-to-last available window change.</p>
+    <table><thead><tr><th>Conditions / stream</th><th>Mean difference</th><th>Change difference</th></tr></thead><tbody><tr *ngFor="let c of report.comparisons"><td>{{c.rightCondition}} minus {{c.leftCondition}} / {{c.stream}} / {{c.probeKey}}</td><td>{{format(c.metrics[metric].meanDifference)}}</td><td>{{format(c.metrics[metric].longitudinalChangeDifference)}}</td></tr></tbody></table>
+    <p *ngIf="!report.comparisons.length">No conditions share a matched design in this selection.</p>
+    <label>Agent timeline <select [(ngModel)]="unitIndex"><option *ngFor="let u of report.units;index as i" [ngValue]="i">{{u.runId}} / {{u.agentId}} / {{u.stream}} / {{u.probeKey}}</option></select></label>
+    <div *ngIf="unit"><p>First-to-last available window change: {{format(unit.change[metric])}}. Missing scores create gaps; zero is an observed value.</p>
+      <svg viewBox="0 0 700 215" role="img" [attr.aria-label]="'Window means for '+metric">
+        <line x1="45" y1="175" x2="645" y2="175" stroke="#777"/>
+        <line *ngFor="let s of segments" [attr.x1]="s.a.x" [attr.y1]="s.a.y" [attr.x2]="s.b.x" [attr.y2]="s.b.y" stroke="#245b91"/>
+        <circle *ngFor="let point of points" [attr.cx]="point.x" [attr.cy]="point.y" r="4" fill="#245b91"><title>Window {{point.index+1}}: {{point.value}}</title></circle>
+        <text x="45" y="198">Window 1</text><text x="550" y="198">Window {{unit.windows.length}}</text><text x="8" y="179">0</text>
+      </svg>
+      <table><thead><tr><th>Window / source turns</th><th>Mean</th><th>Valid / unavailable</th><th>Failures</th></tr></thead><tbody><tr *ngFor="let w of unit.windows"><td>{{w.index+1}} / {{w.firstSourceTurn}}–{{w.lastSourceTurn}}</td><td>{{format(w.metrics[metric].value)}}</td><td>{{w.metrics[metric].n}} / {{w.metrics[metric].unavailable}}</td><td>{{w.failures}}</td></tr></tbody></table>
+    </div>
+    <details><summary>Calibration, memory dependence and human scores</summary>
+      <p>Brier loss uses only explicit answer/confidence benchmark items with known answers. Bins are descriptive pooled responses; uncertainty intervals resample runs.</p>
+      <div *ngFor="let g of report.groups"><strong>{{g.condition}} / {{g.designHash.slice(0,12)}} / {{g.stream}} / {{g.probeKey}}</strong>
+        <p>{{g.calibration.eligible}} eligible calibration attempts, {{g.calibration.scored}} scored, {{g.calibration.unscorable}} successful but unscorable replies.</p>
+        <table><thead><tr><th>Confidence bin</th><th>Responses</th><th>Mean confidence</th><th>Accuracy</th></tr></thead><tbody><tr *ngFor="let b of g.calibration.bins"><td>{{b.lower}}–{{b.upper}}</td><td>{{b.n}}</td><td>{{format(b.meanConfidence)}}</td><td>{{format(b.accuracy)}}</td></tr></tbody></table>
+      </div>
+      <p>Memory dependence requires the selected entries to have appeared in original retrieval. Similarities are exploratory lexical differences, with server sampling as an alternative explanation.</p>
+      <table><thead><tr><th>Run / agent / item</th><th>Exposed / complete</th><th>Original/restored request match</th><th>Withheld / restored similarity</th></tr></thead><tbody><tr *ngFor="let m of report.memoryDependence"><td>{{m.runId}} / {{m.agentId}} / {{m.itemId}}</td><td>{{m.eligible}} / {{m.complete}}</td><td>{{m.originalRestoredRequestMatch === null ? 'Unavailable' : m.originalRestoredRequestMatch}}</td><td>{{format(m.withheldSimilarity)}} / {{format(m.restoredSimilarity)}}</td></tr></tbody></table>
+      <p>Human scores use the published rubric; null judgments are excluded. Source group keys identify their condition/design in the downloaded report.</p>
+      <div *ngFor="let h of report.human"><p>{{h.dimension}}: {{format(h.mean)}} · {{h.items}} items / {{h.ratings}} ratings / {{h.n}} runs. {{h.groupKey}}</p></div>
+      <p>Benchmark outcomes (unrun turns are distinct from failed inference attempts):</p>
+      <p *ngFor="let o of report.benchmarkOutcomes">{{o.runId}} / {{o.itemId}} / {{o.arm}}: {{o.status}}, {{o.successfulResponses}} successful responses, {{o.unrunProbeTurns}} unrun turns. {{o.error}}</p>
+      <h4>Failed attempts</h4><ng-container *ngFor="let o of report.observations"><p *ngIf="o.status === 'failed'">{{o.source.runId}} / {{o.source.agentId}} / {{o.source.stream}} / turn {{o.source.turnIndex}}: {{o.error}}</p></ng-container>
+    </details>
+  </section>
+  <fieldset [disabled]="busy || running"><legend>Repeatable behavioral benchmarks</legend>
+    <p>The standard v1 set covers questions, topic choice, uncertainty, contradiction, social response, preferences, self-description, memory and an answer/confidence item. Each item starts an independent read-only conversation.</p>
+    <label>Benchmark ID <input list="analysis-benchmarks" [(ngModel)]="benchmarkId"></label>
+    <button (click)="saveBenchmark()">Save standard set under this immutable ID</button>
+    <details><summary>Inspect standard prompts and scoring</summary><pre>{{definitions.standardBenchmark | json}}</pre></details>
+    <label>Source run <input list="analysis-runs" [(ngModel)]="targetRun"></label>
+    <label>Source agent ID <input [(ngModel)]="agentId"></label>
+    <label>Historical source turn (-1 for initial state) <input type="number" min="-1" [(ngModel)]="turnIndex"></label>
+    <label>Active memory entry IDs to withhold (optional; whitespace separated)<textarea [(ngModel)]="entryIds"></textarea></label>
+    <p>With selected entries, run randomized original, withheld and restored views of the same historical state. Stored memory and the main conversation remain intact.</p>
+    <label>Researcher <input [(ngModel)]="actor"></label><label>Reason <textarea [(ngModel)]="reason"></textarea></label>
+    <button (click)="runBenchmark()">Run benchmark session</button>
+    <p *ngFor="let o of outcomes">{{o.itemId}} / {{o.arm}}: {{o.status}}, {{o.successfulResponses}} successful responses, {{o.unrunProbeTurns}} unrun probe turns. {{o.error}}</p>
+  </fieldset>
+  <fieldset [disabled]="busy || running"><legend>Prepare blinded human evaluation</legend>
+    <p>Uses the selected source runs above. The separate review page hides source metadata, conditions and scoring keys. Exact wording is retained and may reveal identity.</p>
+    <label>Immutable dataset ID <input [(ngModel)]="datasetId"></label>
+    <label>Response stream <select [(ngModel)]="stream"><option value="dialogue">Dialogue</option><option value="probe">Probes</option><option value="both">Both</option></select></label>
+    <label>Maximum sample size <input type="number" min="1" max="500" [(ngModel)]="sampleSize"></label>
+    <button (click)="createDataset()" [disabled]="!runIds.length">Create seeded evaluation sample</button>
+    <p>Give the evaluator only the dataset ID and the review page. Analyst access is not a security boundary.</p>
+  </fieldset>
+  <a href="/review" target="_blank" rel="noopener">Open blinded review page</a>
+  <datalist id="analysis-runs"><option *ngFor="let id of runs" [value]="id"></option></datalist>
+  <datalist id="analysis-benchmarks"><option *ngFor="let id of catalog.benchmarks" [value]="id"></option></datalist>
+</details>

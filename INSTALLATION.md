@@ -447,3 +447,7 @@ Such runs require an explicit model version/hash (or `unverified`). Its default
 records the baseline's `initialStateHash`, so comparisons expose differing starting
 memory instead of implying equal conditions. Snapshot-backed protocols require
 `stateScope: "trial"`; dashboard templates always choose isolated trial state.
+
+## Phase IV behavioral analysis
+
+No additional services or dependencies are required. Run the backend and Angular dashboard as above, pause or complete an experiment, then open **Behavioral measures & longitudinal analysis**. The separate `/review` page serves metadata-blinded human evaluation. [PHASE_IV.md](PHASE_IV.md) documents benchmarks, memory tests, scoring rubrics, API endpoints and offline JSON/CSV analysis.

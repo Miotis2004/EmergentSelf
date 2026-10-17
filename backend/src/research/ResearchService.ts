@@ -120,14 +120,24 @@ export class ResearchService {
         });
     }
     probe(runId: string, agentId: string, turnIndex: number, probeId: string, actor: string, reason: string) {
-        return this.controller.researchAction(async()=> {
+        return this.controller.researchAction(()=>this.probeInLease(runId,agentId,turnIndex,probeId,actor,reason));
+    }
+    async probeInLease(runId: string, agentId: string, turnIndex: number, probeId: string, actor: string, reason: string,
+        options: {withholdEntryIds?: string[]; benchmark?: any} = {}) {
+            this.controller.assertResearchLease();
             if (!Number.isSafeInteger(turnIndex)) throw new Error('Select an integer source turn');
             const config = await this.logs.loadConfig(id(runId));
             if (!config?.protocol) throw new Error('Probes require a Phase III run with recorded prompting');
             text(actor,'Researcher',200); text(reason,'Reason');
             const definition=await this.logs.loadArtifact('probe-definitions',id(probeId));
             if (hash(definition.prompts)!==definition.promptHash) throw new Error('Probe definition hash mismatch');
-            const state=(await this.logs.memoryHistory(runId,id(agentId),turnIndex)).state;
+            const sourceState=(await this.logs.memoryHistory(runId,id(agentId),turnIndex)).state;
+            const state=structuredClone(sourceState);
+            if(options.withholdEntryIds?.length) {
+                if(config.memoryConfig.mode!=='enabled') throw new Error('Memory withholding requires structured editable memory');
+                if(new Set(options.withholdEntryIds).size!==options.withholdEntryIds.length || options.withholdEntryIds.some(entryId=>!state.entries.some(entry=>entry.id===entryId&&entry.status==='active'))) throw new Error('Withheld IDs must be distinct active entries belonging to this agent');
+                state.entries=state.entries.filter(entry=>!options.withholdEntryIds!.includes(entry.id));
+            }
             const protocol=normalizeProtocol(config.protocol,config.memoryConfig.mode);
             const adapter=new LlmAdapter(config.llmConfig);
             const probeSessionId=randomUUID();
@@ -139,7 +149,8 @@ export class ResearchService {
                 messages.push({role:'user',content:prompt});
                 const record:any={schemaVersion:3,id:randomUUID(),probeSessionId,probeId,probeHash:definition.promptHash,runId,agentId,
                     turnIndex,probeTurn,actor,reason,configHash:hash(config),timestamp:new Date().toISOString(),
-                    prompt:{system:rendered.system,messages:structuredClone(messages)},stateHash:hash(state),memoryPolicy:'read-only'};
+                    prompt:{system:rendered.system,messages:structuredClone(messages)},retrieval:rendered.retrieval,sourceStateHash:hash(sourceState),stateHash:hash(state),memoryPolicy:'read-only',
+                    ...(options.benchmark?{benchmark:{...options.benchmark,final:probeTurn===definition.prompts.length-1}}:{})};
                 adapter.lastRequest=undefined; adapter.lastRawContent=undefined; adapter.lastDiagnostics=undefined;
                 try {
                     if(rendered.system.length+messages.reduce((n,m)=>n+m.content.length,0)>protocol.inputCharLimit) throw new Error('Probe exceeds the recorded input character limit');
@@ -155,10 +166,10 @@ export class ResearchService {
             }
             await this.note(runId,actor,reason,'probe',{probeId,probeSessionId,agentId,sourceTurnIndex:turnIndex});
             return {probeSessionId,results};
-        });
     }
-    exportRun(runId: string) { return this.controller.researchAction(()=>this.buildExport(runId)); }
-    private async buildExport(runId: string) {
+    exportRun(runId: string) { return this.controller.researchAction(()=>this.exportInLease(runId)); }
+    async exportInLease(runId: string) {
+        this.controller.assertResearchLease();
         const config=await this.logs.loadConfig(id(runId)); if(!config) throw new Error('Unknown run');
         const bundle:any={schemaVersion:3,runId,config,configHash:hash(config),
             turns:await this.logs.getConversationHistory(runId),events:await this.logs.getEventHistory(runId),
@@ -168,6 +179,11 @@ export class ResearchService {
         if(config.protocol?.templateId) bundle.template=await this.logs.loadArtifact('templates',config.protocol.templateId);
         if(config.protocol?.batchId) bundle.batch=await this.logs.loadArtifact('batches',config.protocol.batchId);
         bundle.probeDefinitions=await Promise.all([...new Set(bundle.probes.map((p:any)=>p.probeId))].map(probeId=>this.logs.loadArtifact('probe-definitions',String(probeId))));
+        bundle.benchmarkOutcomes=await this.logs.readResearch(runId,'benchmarks');
+        bundle.benchmarkSessions=(await Promise.all((await this.logs.listArtifacts('benchmark-sessions')).map(sessionId=>this.logs.loadArtifact('benchmark-sessions',sessionId)))).filter(session=>session.runId===runId);
+        bundle.benchmarkDefinitions=await Promise.all([...new Set(bundle.benchmarkSessions.map((record:any)=>record.benchmarkId))].map(benchmarkId=>this.logs.loadArtifact('benchmarks',String(benchmarkId))));
+        const ratings=await Promise.all((await this.logs.listArtifacts('ratings')).map(ratingId=>this.logs.loadArtifact('ratings',ratingId)));
+        bundle.evaluations=ratings.filter(record=>record.source.runId===runId);
         bundle.integrityHash=hash(bundle);return bundle;
     }
     async compare(leftId: string,rightId: string) {
