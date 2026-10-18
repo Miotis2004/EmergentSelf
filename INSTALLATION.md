@@ -278,6 +278,39 @@ No migration or rewrite of agent states, frozen snapshots, or historical logs is
 performed. New prompts, schema hashes, proposals, and audit outcomes are recorded
 with new inference attempts using the existing append-only research log.
 
+Enabled-memory prompts also include a **Conversation Participants** directory built
+from the saved run's participant IDs and run-scoped identities. Unselected agents
+are omitted, and the current agent is marked `(you)`. Historical probes use saved
+historical identities instead of current shared-agent names. Relationship `add`
+operations must include an exact `relationship_agent_id` from that directory;
+unknown subjects and self-references are rejected without name matching. Revisions
+retain the original subject when that field is omitted and reject subject changes.
+The schema enforces the addition field using the existing complete-object `anyOf`
+approach; no new decoder keywords are introduced.
+
+Retrieved entries now use one JSON record per line under category headings:
+
+```json
+{"metadata":{"id":"exact-stored-id","type":"belief","confidence":0.6,"status":"active"},"content":"Only the agent-authored statement.","excerpt":false}
+```
+
+Relationship metadata additionally includes `relationship_agent_id`. The metadata,
+quoted content, and excerpt flag are separate; only content belongs in a proposed
+memory's `content` field. Full IDs remain available for revisions. Display metadata
+and JSON escaping count toward existing budgets; short budgets can fit fewer
+records, and no record or identifier is cut in half to fit. Stored content and
+retrieval ranking are unchanged.
+
+Contamination detection is **warning-only**. It recognizes content starting with
+a UUID/type/confidence display header or a complete structured memory record.
+Warnings use code `memory_content_record_header` with a zero-based operation index,
+format, message, and original content. They appear in the operation audit and
+inference validation diagnostics, including schema-rejected attempts. The audit
+panel displays these warnings alongside the original proposal. They do not strip
+headers, repair references, reject otherwise valid content, or rewrite history.
+A legitimate quotation may trigger a warning; other contamination patterns may go
+undetected. Existing polluted memories are retained rather than cleaned up.
+
 Retrieval is deterministic and configurable in the dashboard, recorded in
 `config.json` as `memoryConfig`, and repeated in each turn's retrieval metadata:
 

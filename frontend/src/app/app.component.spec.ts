@@ -73,6 +73,17 @@ describe('Experiment participants and initial topic', () => {
         expect(fixture.nativeElement.querySelector('.starting-demeanor').textContent).toContain('Patient and reflective');
     });
 
+    it('displays observational contamination warnings alongside the original proposed memory', () => {
+        const content='[c9d4f211-3b7a-4e8c-9f12-6a0e8b5c2d47] belief (confidence=0.6): Original words';
+        component.auditEvents=[{type:'memory_update',turnIndex:2,agentId:'bob',operations:[{
+            status:'success',operation:{action:'add',type:'belief',content,reason:'Observed'},
+            warnings:[{operationIndex:0,message:'Serialized record metadata detected; original content retained.'}]
+        }]}];
+        fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('.memory-warning').textContent).toContain('Warning (operation 1)');
+        expect(fixture.nativeElement.querySelector('.log-entry').textContent).toContain(content);
+    });
+
     it('defaults all agents to selected and keeps deterministic ID order', () => {
         expect(component.nextParticipantIds).toEqual(['bob','charlie','sara']);
         const checkboxes = fixture.nativeElement.querySelectorAll('.agent-card input[type=checkbox]');

@@ -1,3 +1,4 @@
+import { memoryContentWarnings } from '../memory/contentDiagnostics';
 import { JsonStorage } from '../storage/JsonStorage';
 import { MemoryOperation } from '../llm/LlmAdapter';
 import { validateAgentTurn } from '../llm/agentTurnSchema';
@@ -15,9 +16,12 @@ export class MemoryManager {
         if (operations.length > context.config.maxOperations) throw new MemoryValidationError('Memory operation limit exceeded; reduce proposed changes or start a run with a larger limit');
         let state = structuredClone(before);
         const auditTrail: any[] = [];
-        for (const op of operations) {
+        const warnings = memoryContentWarnings(operations);
+        for (const [operationIndex, op] of operations.entries()) {
             const timestamp = new Date().toISOString();
             const record: any = { operation: op, status: 'success', timestamp, source: context.source };
+            const operationWarnings = warnings.filter(warning=>warning.operationIndex === operationIndex);
+            if (operationWarnings.length) record.warnings = operationWarnings;
             if (context.config.mode !== 'enabled') {
                 auditTrail.push({ ...record, status: 'ignored', error: `${context.config.mode} condition: proposed state changes withheld` });
                 continue;
@@ -46,7 +50,11 @@ export class MemoryManager {
                     });
                     if (op.action !== 'add' && (!originals.length || (op.action === 'consolidate' && originals.length < 2))) throw new Error(op.action === 'consolidate' ? 'Missing target_ids: consolidation requires at least two existing active entry IDs' : 'Missing target_id: revision requires an existing active entry ID');
                     const subject = op.relationship_agent_id ?? originals[0]?.relationship_agent_id;
-                    if (type === 'relationship' && (!subject || subject === candidate.identity.id || !context.participants.includes(subject))) throw new Error('Relationship subject must be another participant');
+                    if (type === 'relationship') {
+                        if (typeof subject !== 'string' || !subject.trim()) throw new Error('Missing relationship_agent_id: use the exact ID of another participant');
+                        if (subject === candidate.identity.id) throw new Error('Self-referential relationship: subject must be another participant');
+                        if (!context.participants.includes(subject)) throw new Error('Unknown relationship participant: use an exact participant ID from the directory');
+                    }
                     if (type !== 'relationship' && op.relationship_agent_id) throw new Error('Only relationships can have a relationship subject');
                     if (originals.some(e => e.relationship_agent_id !== subject)) throw new Error('Relationship subjects cannot change during revision/consolidation');
                     record.before = structuredClone(originals);

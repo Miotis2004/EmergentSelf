@@ -198,6 +198,9 @@
                             {{op.operation.action | uppercase}} {{op.operation.type}}
                         </span>: {{op.operation.content}} <br>
                         <div *ngIf="op.error">Rejected: {{op.error}}</div>
+                        <div *ngFor="let warning of op.warnings || []" class="memory-warning" role="status">
+                            Warning (operation {{warning.operationIndex + 1}}): {{warning.message}}
+                        </div>
                         <i style="color: #666;">"{{op.operation.reason}}"</i>
                     </div>
                 </div>

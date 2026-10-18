@@ -8,17 +8,18 @@ const operationProperties = {
     type: { enum: ['memory', 'episodic', 'belief', 'stat', 'self_description', 'relationship'], description: 'memory is a legacy alias for episodic observations; beliefs/opinions, self-description and relationships are separate categories' },
     confidence: { type: 'number', minimum: 0, maximum: 1 },
     importance: { type: 'number', minimum: 0, maximum: 1 },
-    relationship_agent_id: { type: 'string', minLength: 1 },
-    content: { type: ['string', 'number'], maxLength: 8000 },
+    relationship_agent_id: { type: 'string', minLength: 1, description: 'For relationship additions, required exact ID of another participant from the directory, not a name. Revisions preserve the original subject; omit to retain it.' },
+    content: { type: ['string', 'number'], maxLength: 8000, description: 'Natural-language information only (numeric value for stats). Do not embed record IDs, category/confidence labels, or serialized memory headers.' },
     reason: { type: 'string', minLength: 1 }
 };
-const operationSchema = (actions: string[], required: string[]) => ({
+const operationSchema = (actions: string[], required: string[], types: string[] = operationProperties.type.enum) => ({
     type:'object', additionalProperties:false,
-    properties:{action:{enum:actions}, ...operationProperties},
+    properties:{action:{enum:actions}, ...operationProperties, type:{...operationProperties.type,enum:types}},
     required:['action','type','content','reason',...required]
 });
 export const memoryOperationSchema = {anyOf:[
-    operationSchema(['add'], []),
+    operationSchema(['add'], [], operationProperties.type.enum.filter(type=>type !== 'relationship')),
+    operationSchema(['add'], ['relationship_agent_id'], ['relationship']),
     operationSchema(['update','retire','contradict'], ['target_id']),
     operationSchema(['consolidate'], ['target_ids'])
 ]};
@@ -57,6 +58,9 @@ export function validateAgentTurn(value: unknown, social = false, task = false):
         // Explain reference-shape errors without exposing memory content in diagnostics.
         const operations = (value as any)?.memory_operations;
         if (Array.isArray(operations)) for (const [index, op] of operations.entries()) {
+            if (op?.action === 'add' && op?.type === 'relationship' && (typeof op.relationship_agent_id !== 'string' || !op.relationship_agent_id.trim())) {
+                throw new Error(`Invalid agent-turn schema: memory_operations/${index} relationship addition requires a nonempty relationship_agent_id from the participant directory`);
+            }
             if (['update','retire','contradict'].includes(op?.action) && (typeof op.target_id !== 'string' || !op.target_id.trim())) {
                 throw new Error(`Invalid agent-turn schema: memory_operations/${index} missing target_id; revision requires an exact existing active target ID`);
             }
