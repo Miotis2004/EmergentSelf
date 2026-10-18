@@ -1,4 +1,4 @@
-import { MemoryConfig, MemoryKind, WorkingState } from './types';
+import { MemoryConfig, MemoryEntry, MemoryKind, WorkingState } from './types';
 
 const categories: {type:MemoryKind; label:string}[] = [
     {type:'episodic',label:'Episodic observations'}, {type:'belief',label:'Beliefs and opinions'},
@@ -9,6 +9,13 @@ function grouped(lines: {type:MemoryKind; text:string}[]): string {
         const entries = lines.filter(line=>line.type===category.type);
         return entries.length ? [`Active ${category.label} (${category.type}):\n${entries.map(line=>line.text).join('\n')}`] : [];
     }).join('\n\n');
+}
+
+/** JSON lines keep reference metadata separate from quoted, agent-authored content. */
+function renderRecord(entry: MemoryEntry, content: string): string {
+    return JSON.stringify({metadata:{id:entry.id,type:entry.type,confidence:entry.confidence,status:entry.status,
+        ...(entry.relationship_agent_id ? {relationship_agent_id:entry.relationship_agent_id} : {})},
+        content,excerpt:content.length < entry.content.length});
 }
 
 export function retrieveMemory(state: WorkingState, config: MemoryConfig) {
@@ -25,9 +32,8 @@ export function retrieveMemory(state: WorkingState, config: MemoryConfig) {
     const lines: {type:MemoryKind; text:string}[] = [];
     let used = 0;
     for (const entry of config.mode !== 'enabled' ? [] : ranked) {
-        const prefix = `[${entry.id}] ${entry.type}${entry.relationship_agent_id ? ` about ${entry.relationship_agent_id}` : ''} (confidence=${entry.confidence}): `;
         const text = entry.content.slice(0, config.entryChars);
-        const line = prefix + text + (text.length < entry.content.length ? ' [excerpt]' : '');
+        const line = renderRecord(entry, text);
         const proposed = [...lines, {type:entry.type,text:line}];
         if (selectedIds.length < config.retrievalEntries && grouped(proposed).length <= config.retrievalChars) {
             lines.push({type:entry.type,text:line}); selectedIds.push(entry.id); used = grouped(lines).length;
@@ -38,11 +44,17 @@ export function retrieveMemory(state: WorkingState, config: MemoryConfig) {
     let summary = '';
     const excerpts: {type:MemoryKind; text:string}[] = [];
     if (config.mode === 'enabled') for (const entry of ranked.filter(e => !selectedIds.includes(e.id))) {
-        const prefix = `[${entry.id}] ${entry.type}: `;
-        const remaining = config.summaryChars - grouped([...excerpts,{type:entry.type,text:prefix}]).length;
-        if (remaining < 1) break;
-        const piece = entry.content.slice(0, Math.min(160, remaining));
-        excerpts.push({type:entry.type,text:prefix+piece});
+        // Include complete metadata and valid JSON even when escaped text expands.
+        let low = 1, high = Math.min(160, entry.content.length), chosen = '';
+        while (low <= high) {
+            const length = Math.floor((low + high) / 2);
+            const text = renderRecord(entry, entry.content.slice(0,length));
+            if (grouped([...excerpts,{type:entry.type,text}]).length <= config.summaryChars) {
+                chosen = text; low = length + 1;
+            } else high = length - 1;
+        }
+        if (!chosen) break;
+        excerpts.push({type:entry.type,text:chosen});
         summary = grouped(excerpts); summaryIds.push(entry.id);
     }
     return {

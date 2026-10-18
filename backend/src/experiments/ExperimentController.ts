@@ -1,4 +1,4 @@
-import { memoryOperationGuide } from '../memory/operationGuide';
+import { memoryOperationGuide, participantDirectory, ParticipantIdentity } from '../memory/operationGuide';
 import { demeanorContext } from '../agents/startingDemeanor';
 import { inheritedContext } from '../branches/context';
 import { verifiedBranch } from '../branches/interventions';
@@ -309,10 +309,16 @@ export class ExperimentController {
         const state = await this.activeStorage.loadWorkingState(agentId);
         const config = resolveMemoryConfig(this.config!.memoryConfig);
         const identity = state.identity;
+        const participants: ParticipantIdentity[] = [];
+        if (config.mode === 'enabled') for (const id of this.config!.agentIds) {
+            const participant = await this.activeStorage.loadAgentIdentity(id);
+            if (!participant) throw new Error('Run participant identity is missing');
+            participants.push({id,name:participant.name});
+        }
         const retrieved = retrieveMemory(state, config);
         const history = [...await inheritedContext(this.jsonlStorage,this.config),...await this.jsonlStorage.getConversationHistory(this.config!.runId)];
         if (this.config!.protocol) return renderProtocol(state, config, normalizeProtocol(this.config!.protocol, config.mode), history,
-            this.currentTurnIndex === 0 && this.config!.initialTopic ? this.config!.initialTopic : undefined);
+            this.currentTurnIndex === 0 && this.config!.initialTopic ? this.config!.initialTopic : undefined, participants);
         const transcript = boundedTranscript(history, config);
         const stats = Object.entries(identity.stats).map(([key, value]) => `- ${key}: ${config.mode !== 'enabled' ? value.initial : value.current}`).join('\n');
         const system = `You are an agent with the following identity:
@@ -332,7 +338,7 @@ Based on the recent conversation transcript below, you must generate a reply.
 You can also propose changes to your memories or beliefs if you learned something new or changed your mind.
 
 Recent conversation:
-${transcript || '(No conversation supplied)'}${memoryOperationGuide(config)}`;
+${transcript || '(No conversation supplied)'}${memoryOperationGuide(config)}${participantDirectory(config, participants, identity.id)}`;
         return {
             state,
             retrieval: { ...retrieved.metadata, transcriptChars: transcript.length, config },

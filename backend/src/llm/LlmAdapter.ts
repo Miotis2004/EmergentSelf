@@ -1,3 +1,4 @@
+import { memoryContentWarnings, MemoryContentWarning } from '../memory/contentDiagnostics';
 import fetch from 'node-fetch';
 import { createHash } from 'crypto';
 import { responseSchema, validateAgentTurn } from './agentTurnSchema';
@@ -47,6 +48,7 @@ export interface LlmValidation {
     status: 'pending' | 'passed' | 'failed';
     stage: 'request' | 'http' | 'http_body' | 'envelope' | 'response_json' | 'schema' | 'transport_boundary' | 'complete';
     error?: string;
+    memoryContentWarnings?: MemoryContentWarning[];
 }
 export const TRANSPORT_MARKER = '[EMERGENTSELF_TRANSPORT_FORMAT_V1]';
 export function outputContract(schema: ReturnType<typeof responseSchema>): string {
@@ -187,6 +189,8 @@ export class LlmAdapter {
             let parsed: unknown;
             try { parsed = JSON.parse(content); } catch { return fail('Invalid JSON response from LLM; inspect diagnostics for truncation or output-format incompatibility'); }
             this.lastParsedResponse = structuredClone(parsed);
+            const warnings = memoryContentWarnings((parsed as any)?.memory_operations);
+            if (warnings.length) this.lastValidation.memoryContentWarnings = warnings;
             this.lastValidation.stage = 'schema';
             try { validateAgentTurn(parsed, social, task); } catch (error: any) { return fail(error.message); }
             this.lastValidation.stage = 'transport_boundary';

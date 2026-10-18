@@ -1,3 +1,4 @@
+import { ParticipantIdentity } from '../memory/operationGuide';
 import { compactTurn, inheritedContext } from '../branches/context';
 import { verifiedBranch } from '../branches/interventions';
 import { resolveEnvironment } from '../social/environment';
@@ -150,12 +151,17 @@ export class ResearchService {
             }
             const protocol=normalizeProtocol(config.protocol,config.memoryConfig.mode);
             const adapter=new LlmAdapter(options.llmOverride??config.llmConfig);
+            const participants: ParticipantIdentity[] = [];
+            if (config.memoryConfig.mode === 'enabled') for (const id of config.agentIds) {
+                const participant = id === agentId ? sourceState : (await this.logs.memoryHistory(runId,id,turnIndex)).state;
+                participants.push({id,name:participant.identity.name});
+            }
             const probeSessionId=randomUUID();
             const messages: {role:string;content:string}[]=[];
             const results:any[]=[];
             for (const [probeTurn,prompt] of definition.prompts.entries()) {
                 // Dedicated probe conversation: no main transcript and no state writes.
-                const rendered=renderProtocol(state,resolveMemoryConfig(config.memoryConfig),protocol,options.historyOverride??[],prompt);
+                const rendered=renderProtocol(state,resolveMemoryConfig(config.memoryConfig),protocol,options.historyOverride??[],prompt,participants);
                 messages.push({role:'user',content:prompt});
                 const record:any={schemaVersion:3,id:randomUUID(),probeSessionId,probeId,probeHash:definition.promptHash,runId,agentId,
                     turnIndex,probeTurn,actor,reason,configHash:hash(config),timestamp:new Date().toISOString(),

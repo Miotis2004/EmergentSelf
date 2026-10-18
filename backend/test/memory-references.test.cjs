@@ -22,7 +22,7 @@ test('schema requires action-specific references in base, social and task output
    assert.throws(()=>validateAgentTurn(turn(op('consolidate',target_ids===undefined?{}:{target_ids})),social,task),/at least two distinct/);
   }
   for(const operation of [op('add'),op('update',{target_id:'exact-id'}),op('retire',{target_id:'exact-id'}),op('contradict',{target_id:'exact-id'}),op('consolidate',{target_ids:['one','two']})])assert.doesNotThrow(()=>validateAgentTurn(turn(operation),social,task));
-  const schema=responseSchema(social,task);assert.equal(schema.properties.memory_operations.items.anyOf.length,3);
+  const schema=responseSchema(social,task);assert.equal(schema.properties.memory_operations.items.anyOf.length,4);
   assert.ok(!JSON.stringify(schema).includes('"if":')); // Decoder-friendly complete object alternatives.
  }
 });
@@ -34,8 +34,9 @@ for(const protocol of [false,true])for(const outputMode of ['json_schema','json_
   if(n===2){
    const prompt=request.messages[0].content;
    assert.ok(prompt.includes('Active Beliefs and opinions (belief):'));
-   const match=prompt.match(/\[([^\]]+)\] belief \(confidence=/);assert.ok(match,'Exact stored ID is visible to the model');
-   operations=[op('update',{target_id:match[1]})];
+   const record=prompt.split('\n').filter(line=>line.startsWith('{"metadata":')).map(line=>JSON.parse(line)).find(record=>record.metadata.type==='belief');
+   assert.ok(record,'Exact stored ID is visible to the model');
+   operations=[op('update',{target_id:record.metadata.id})];
   }
   proposed.push(operations);return output(operations);
  });
@@ -101,7 +102,7 @@ test('active retrieval groups exact IDs by category without changing ranking, co
  state.entries.push({...state.entries[0],id:'inactive-hidden',status:'retired'});const before=hash(state);
  const config=resolveMemoryConfig({retrievalEntries:4,retrievalChars:2000,summaryChars:300});
  const result=retrieveMemory(state,config);
- for(const entry of state.entries.filter(entry=>entry.status==='active')){assert.ok(result.text.includes(`[${entry.id}] ${entry.type}`));assert.ok(result.text.includes(`(${entry.type}):`));}
+ for(const entry of state.entries.filter(entry=>entry.status==='active')){assert.ok(result.text.includes(`"id":"${entry.id}"`));assert.ok(result.text.includes(`(${entry.type}):`));}
  assert.ok(!result.text.includes('inactive-hidden'));assert.equal(result.metadata.memoryChars,result.text.length);assert.equal(hash(state),before);
  const summary=retrieveMemory(state,{...config,retrievalEntries:0});assert.ok(summary.summary.includes('Active '));assert.ok(summary.summary.length<=300);
  for(const size of [0,1,40,80,200]){const bounded=retrieveMemory(state,{...config,retrievalChars:size,summaryChars:size});assert.ok(bounded.text.length<=size);assert.ok(bounded.summary.length<=size);}

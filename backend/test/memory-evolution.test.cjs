@@ -77,11 +77,11 @@ test('retrieval and visible extractive summaries are deterministic, bounded and 
   const manager = new MemoryManager(f.storage);
   const state = manager.prepareOperations(await f.storage.loadWorkingState('bob'),Array.from({length:8},(_,i) => add('episodic',`Observation ${i}: `+'x'.repeat(200),{importance:i/10})),ctx(0)).state;
   const original = JSON.stringify(state);
-  const config = resolveMemoryConfig({retrievalEntries:2,retrievalChars:400,entryChars:40,summaryChars:180,transcriptTurns:2,transcriptChars:50});
+  const config = resolveMemoryConfig({retrievalEntries:2,retrievalChars:600,entryChars:40,summaryChars:300,transcriptTurns:2,transcriptChars:50});
   const retrieved = retrieveMemory(state,config);
   assert.equal(retrieved.metadata.selectedIds.length,2);
   assert.equal(retrieved.metadata.selectedIds[0],state.entries[7].id);
-  assert.ok(retrieved.text.length<=400); assert.ok(retrieved.summary.length<=180);
+  assert.ok(retrieved.text.length<=600); assert.ok(retrieved.summary.length<=300);
   assert.ok(retrieved.metadata.summaryIds.length>0);
   assert.equal(retrieved.metadata.selectedIds.length+retrieved.metadata.summaryIds.length+retrieved.metadata.omittedEntries,8);
   assert.deepEqual(retrieveMemory(state,config),retrieved);
@@ -152,7 +152,7 @@ test('private states never cross prompts; memory budgets and summaries are journ
   const f=await fixture(t,(n,p)=>{prompts.push(p);return response([]);});
   await f.storage.saveAgentMemory('bob',Array.from({length:6},(_,i)=>({id:`bob-${i}`,content:`BOB-PRIVATE-${i}`})));
   await f.storage.saveAgentMemory('sara',[{id:'sara-private',content:'SARA-PRIVATE'}]);
-  f.config.maxTurns=2;f.config.memoryConfig={retrievalEntries:1,summaryChars:100,retrievalChars:200};
+  f.config.maxTurns=2;f.config.memoryConfig={retrievalEntries:1,summaryChars:300,retrievalChars:300};
   await f.controller.start(f.config);await until(()=>f.controller.getStatus()==='completed');
   assert.ok(!prompts[0].messages[0].content.includes('SARA-PRIVATE'));
   assert.ok(!prompts[1].messages[0].content.includes('BOB-PRIVATE'));

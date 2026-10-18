@@ -1,4 +1,4 @@
-import { memoryOperationGuide } from '../memory/operationGuide';
+import { memoryOperationGuide, participantDirectory, ParticipantIdentity } from '../memory/operationGuide';
 import { demeanorContext } from '../agents/startingDemeanor';
 import { createHash } from 'crypto';
 import { MemoryConfig, WorkingState } from '../memory/types';
@@ -100,7 +100,7 @@ export function shuffled<T>(values: T[], initialSeed: number): T[] {
     }
     return result;
 }
-export function renderProtocol(state: WorkingState, config: MemoryConfig, protocol: Protocol, history: any[], stimulus?: string) {
+export function renderProtocol(state: WorkingState, config: MemoryConfig, protocol: Protocol, history: any[], stimulus?: string, participants: ParticipantIdentity[] = []) {
     const retrieved = retrieveMemory(state, config);
     const identity = state.identity;
     const attributeLabels = Object.fromEntries(Object.keys(identity.stats).sort().map((key,index)=>[key,protocol.attributeMode === 'arbitrary' ? `q${index+1}` : key]));
@@ -113,7 +113,7 @@ export function renderProtocol(state: WorkingState, config: MemoryConfig, protoc
         transcript: boundedTranscript(history, config) || '(No conversation supplied)' };
     // One replacement pass: memory/role text containing braces is never interpreted.
     const render = (value: string) => value.replace(/(?<!\{)\{([A-Za-z_]+)\}(?!\})/g, (_, key) => fields[key]);
-    const system = render(protocol.systemPrompt) + demeanorContext(identity, protocol.attributeMode === 'role') + memoryOperationGuide(config);
+    const system = render(protocol.systemPrompt) + demeanorContext(identity, protocol.attributeMode === 'role') + memoryOperationGuide(config) + participantDirectory(config, participants, identity.id);
     const messages = [{ role: 'user', content: stimulus ?? render(protocol.turnPrompt) }];
     if (system.length + messages[0].content.length > protocol.inputCharLimit) throw new ProtocolError('Rendered prompt exceeds the recorded input character limit');
     return { system, messages, retrieval: { ...retrieved.metadata, attributeLabels, transcriptChars: fields.transcript.length, config }, state };
