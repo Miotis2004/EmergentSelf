@@ -1,3 +1,4 @@
+import type { OperationalOperation } from '../operations/state';
 import { memoryContentWarnings, MemoryContentWarning } from '../memory/contentDiagnostics';
 import fetch from 'node-fetch';
 import { createHash } from 'crypto';
@@ -39,6 +40,7 @@ export interface LlmDiagnostics {
 export interface AgentTurnResponse {
     response: string;
     memory_operations: MemoryOperation[];
+    operational_operations?: OperationalOperation[];
     social?: {action:'speak'|'decline';recipient_id:string|null};
     task_decision?: {amount:number};
 }
@@ -114,7 +116,7 @@ export class LlmAdapter {
         return data.data.map((m: any) => ({ id: m.id }));
     }
 
-    async generateTurn(systemPrompt: string, messages: { role: string; content: string }[], inputCharLimit?: number, social = false, task = false): Promise<AgentTurnResponse> {
+    async generateTurn(systemPrompt: string, messages: { role: string; content: string }[], inputCharLimit?: number, social = false, task = false, operational = false): Promise<AgentTurnResponse> {
         this.lastRequest = undefined;
         this.lastDiagnostics = undefined;
         this.lastRawContent = undefined;
@@ -125,7 +127,7 @@ export class LlmAdapter {
             httpStatus: null, requestedModel: this.config.model, model: this.config.model,
             finishReason: null, contentPresent: false, contentLength: 0, excerpt: ''
         };
-        const schema = responseSchema(social, task);
+        const schema = responseSchema(social, task, operational);
         const schemaText = JSON.stringify(schema);
         this.lastValidation = {contractVersion:'schema-json-v1',schemaHash:createHash('sha256').update(schemaText).digest('hex'),status:'pending',stage:'request'};
         const payload = {
@@ -192,12 +194,12 @@ export class LlmAdapter {
             const warnings = memoryContentWarnings((parsed as any)?.memory_operations);
             if (warnings.length) this.lastValidation.memoryContentWarnings = warnings;
             this.lastValidation.stage = 'schema';
-            try { validateAgentTurn(parsed, social, task); } catch (error: any) { return fail(error.message); }
+            try { validateAgentTurn(parsed, social, task, operational); } catch (error: any) { return fail(error.message); }
             this.lastValidation.stage = 'transport_boundary';
             const turn = parsed as AgentTurnResponse;
             const echoesContract = (value: unknown) => typeof value === 'string' && (value.includes(TRANSPORT_MARKER) || value.includes(schemaText));
-            if (echoesContract(turn.response) || turn.memory_operations.some(operation => echoesContract(operation.content) || echoesContract(operation.reason))) {
-                return fail('LLM echoed reserved transport metadata into conversation or memory operations; output was rejected without rewriting');
+            if (echoesContract(turn.response) || turn.memory_operations.some(operation => echoesContract(operation.content) || echoesContract(operation.reason)) || turn.operational_operations?.some(operation => echoesContract(operation.reason) || ('description' in operation && echoesContract(operation.description)))) {
+                return fail('LLM echoed reserved transport metadata into conversation, memory or operational operations; output was rejected without rewriting');
             }
             this.lastValidation.status = 'passed';
             this.lastValidation.stage = 'complete';

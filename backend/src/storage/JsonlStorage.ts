@@ -80,7 +80,7 @@ export class JsonlStorage {
             runId, agentId, turnIndex: selected, baselineTurn: baseline.atTurn, lastTurn: last, state,
             timeline: history.filter(record => record.agentId === agentId && record.schemaVersion === 2).map(record => ({
                 turnIndex: record.turnIndex, eventId: record.eventId, timestamp: record.timestamp,
-                operations: record.auditTrail, retrieval: record.retrieval
+                operations: record.auditTrail, retrieval: record.retrieval, ...(record.operationalAudit ? {operationalAudit:record.operationalAudit,operationalState:record.operationalState} : {})
             })),
             ...(compareTo === undefined ? {} : { compareTo, diff: diffStates(stateAt(compareTo), state) })
         };
@@ -90,14 +90,14 @@ export class JsonlStorage {
     // are idempotently repaired before any subsequent inference, even after restart.
     async projectTurn(runId: string, record: any, storage: JsonStorage) {
         if (record.stateScope === 'trial') storage = this.trialStorage(runId);
-        if (record.memoryMode !== 'none' && record.memoryMode !== 'history') await storage.saveWorkingState(record.agentId, record.stateAfter);
+        if ((record.memoryMode !== 'none' && record.memoryMode !== 'history') || record.operationalState) await storage.saveWorkingState(record.agentId, record.stateAfter);
         const existingEvents = await this.getEventHistory(runId);
         const recorded = new Set(existingEvents.map(event=>event.id));
         for (const event of record.environmentEvents ?? []) if (!recorded.has(event.id)) await this.appendEvent(runId, event);
         await this.appendEvent(runId, {
             schemaVersion: 2, id: record.eventId, type: 'memory_update',
             turnIndex: record.turnIndex, agentId: record.agentId, timestamp: record.timestamp,
-            operations: record.auditTrail, retrieval: record.retrieval
+            operations: record.auditTrail, retrieval: record.retrieval, ...(record.operationalAudit ? {operationalAudit:record.operationalAudit,operationalState:record.operationalState} : {})
         });
     }
 

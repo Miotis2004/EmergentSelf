@@ -23,7 +23,7 @@ export class BranchService {
         if(source.configHash&&source.configHash!==hash(sourceConfig))throw new Error('Source snapshot configuration hash mismatch');
         const context=await snapshotContext(this.logs,source);
         const original=structuredClone(source.states);
-        const result=await applyInterventions(this.logs,branchId,structuredClone(original),context,input.operations===undefined?[]:input.operations);
+        const result=await applyInterventions(this.logs,branchId,structuredClone(original),context,input.operations===undefined?[]:input.operations,sourceConfig.operationalConfig);
         const memoryConfig=resolveMemoryConfig(sourceConfig.memoryConfig);
         for(const agentId of sourceConfig.agentIds){
             const state=result.states[agentId];

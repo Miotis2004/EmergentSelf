@@ -33,6 +33,8 @@ import { ExperimentService } from './services/experiment.service';
           <p *ngIf="!identity.startingDemeanor">Starting Demeanor: unspecified</p>
           <p *ngFor="let stat of identity.stats | keyvalue">{{stat.key}}: initial {{statInitial(stat.value)}}, current {{statCurrent(stat.value)}}</p>
         </section>
+        <section *ngIf="history.state?.operational as operational"><h4>Recorded operational state (unverified outcome)</h4>
+          <p>{{operational.location.name}}: {{operational.action.description}} ({{operational.action.type}} / {{operational.action.status}})</p></section>
         <section *ngFor="let kind of kinds">
           <h4>{{kind.label}}</h4>
           <p *ngIf="!entries(kind.type).length">No active entries.</p>
@@ -46,7 +48,8 @@ import { ExperimentService } from './services/experiment.service';
         </section>
         <section *ngIf="history.diff" aria-label="Memory differences">
           <h4>Differences from turn {{history.compareTo}}</h4>
-          <p *ngIf="!history.diff.added.length && !history.diff.changed.length && !history.diff.removed.length && !history.diff.stats.length">No state differences.</p>
+          <pre *ngIf="history.diff.operational">Operational change: {{history.diff.operational | json}}</pre>
+          <p *ngIf="!history.diff.added.length && !history.diff.changed.length && !history.diff.removed.length && !history.diff.stats.length && !history.diff.operational">No state differences.</p>
           <p *ngFor="let entry of history.diff.added">Added {{entry.type}}: {{entry.content}}</p>
           <div *ngFor="let item of history.diff.changed">
             <strong>{{item.after.type}} revision</strong>

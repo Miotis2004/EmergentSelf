@@ -84,6 +84,18 @@ describe('Experiment participants and initial topic', () => {
         expect(fixture.nativeElement.querySelector('.log-entry').textContent).toContain(content);
     });
 
+    it('sends and freezes operational configuration, then displays validated silent turns without inventing speech', () => {
+        component.operationalConfig.locations=[{id:'garden',name:'Garden'}];component.startExperiment();
+        expect(experiments.startExperiment.calls.mostRecent().args[0].operationalConfig.locations[0].id).toBe('garden');
+        const operational={location:{id:'garden',name:'Garden'},action:{type:'working',description:'Preparing rows',status:'in_progress'},outcomeVerified:false};
+        const turn={turnIndex:0,agentId:'bob',agentName:'Bob',response:'',turnKind:'action_only',operationalState:operational,operationalAudit:[{status:'accepted',operation:{action:'set_location',location_id:'garden'}}]};
+        events.next({type:'snapshot',data:{status:'paused',config:{...savedConfig,operationalConfig:{enabled:true,locations:[{id:'garden',name:'Garden'}],observationPolicy:'self_only'}},turns:[turn],events:[],operationalStates:{bob:operational}}});
+        fixture.detectChanges();expect(component.configurationLocked).toBeTrue();expect(component.operationalFor('bob')).toEqual(operational);
+        expect(fixture.nativeElement.querySelector('.turn-operational').textContent).toContain('Preparing rows');
+        expect(fixture.nativeElement.textContent).toContain('Speech: None (intentional)');
+        expect(fixture.nativeElement.querySelector('app-operational-controls fieldset').disabled).toBeTrue();
+    });
+
     it('defaults all agents to selected and keeps deterministic ID order', () => {
         expect(component.nextParticipantIds).toEqual(['bob','charlie','sara']);
         const checkboxes = fixture.nativeElement.querySelectorAll('.agent-card input[type=checkbox]');

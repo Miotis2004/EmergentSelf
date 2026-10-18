@@ -1,3 +1,4 @@
+import {currentOperational} from '../operations/state';
 import { Router, Request, Response } from 'express';
 import { JsonStorage, AgentState } from '../storage/JsonStorage';
 import { DEMEANORS, validateStartingDemeanor } from '../agents/startingDemeanor';
@@ -14,7 +15,7 @@ export function createAgentsRouter(storage: JsonStorage): Router {
             const agents = [];
             for (const id of agentIds) {
                 const identity = await storage.loadAgentIdentity(id);
-                if (identity) agents.push(identity);
+                if (identity) agents.push({...identity,operationalState:currentOperational(await storage.loadWorkingState(id))});
             }
             res.json(agents);
         } catch (error: any) {
@@ -49,6 +50,9 @@ export function createAgentsRouter(storage: JsonStorage): Router {
             await storage.saveAgentMemory(id, []);
             await storage.saveAgentBeliefs(id, []);
 
+            const state=await storage.loadWorkingState(id);
+            state.operational=currentOperational(state);
+            await storage.saveWorkingState(id,state);
             res.status(201).json(identity);
         } catch (error: any) {
             res.status(500).json({ error: error.message });

@@ -1,3 +1,4 @@
+import type { OperationalState } from '../operations/state';
 import { AgentState } from '../storage/JsonStorage';
 
 export type MemoryKind = 'episodic' | 'belief' | 'self_description' | 'relationship';
@@ -17,7 +18,7 @@ export interface MemoryEntry {
     consolidated_from?: string[];
     contradicts?: string[];
 }
-export interface WorkingState { schemaVersion: 2; identity: AgentState; entries: MemoryEntry[]; }
+export interface WorkingState { schemaVersion: 2; identity: AgentState; operational?: OperationalState; entries: MemoryEntry[]; }
 export interface MemoryConfig {
     mode: 'enabled' | 'none' | 'history';
     maxActiveEntries: number;

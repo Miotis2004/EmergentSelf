@@ -1,3 +1,4 @@
+import {resolveOperational, prepareOperational} from '../operations/state';
 import { hash, id } from '../research/protocol';
 import { JsonlStorage } from '../storage/JsonlStorage';
 import { snapshotContext } from './context';
@@ -16,13 +17,13 @@ export async function verifiedSnapshot(logs:JsonlStorage,snapshotId:string){
     const snapshot=await logs.loadArtifact('snapshots',id(snapshotId));
     if(hash(snapshot.states)!==snapshot.stateHash)throw new Error('Snapshot state hash mismatch');return snapshot;
 }
-export async function applyInterventions(logs:JsonlStorage,branchId:string,states:any,context:any[],operations:any[]){
+export async function applyInterventions(logs:JsonlStorage,branchId:string,states:any,context:any[],operations:any[],operationalConfig?:any){
     if(!Array.isArray(operations)||operations.length>20)throw new Error('At most 20 interventions per branch');
     let currentContext=structuredClone(context);const audits:any[]=[];
     const state=(agentId:string)=>{id(agentId);if(!Object.hasOwn(states,agentId))throw new Error('Intervention agent is not a branch participant');return states[agentId];};
     for(const [index,op] of operations.entries()){
         if(!op||typeof op!=='object'||Array.isArray(op))throw new Error('Invalid intervention');
-        const allowed:Record<string,string[]>={withhold:['kind','agentId','entryIds'],restore:['kind','agentId','fromBranchId','operationIndex','entryIds'],transplant:['kind','agentId','donorSnapshotId','donorAgentId','entryIds','relationshipMap'],swap:['kind','agentId','otherAgentId','entryIds','otherEntryIds','relationshipMap','otherRelationshipMap'],attributes:['kind','agentId','values'],history:['kind','mode','donorSnapshotId'],reverse:['kind','fromBranchId','operationIndex']};
+        const allowed:Record<string,string[]>={operational:['kind','agentId','operations'],withhold:['kind','agentId','entryIds'],restore:['kind','agentId','fromBranchId','operationIndex','entryIds'],transplant:['kind','agentId','donorSnapshotId','donorAgentId','entryIds','relationshipMap'],swap:['kind','agentId','otherAgentId','entryIds','otherEntryIds','relationshipMap','otherRelationshipMap'],attributes:['kind','agentId','values'],history:['kind','mode','donorSnapshotId'],reverse:['kind','fromBranchId','operationIndex']};
         if(!allowed[op.kind]||Object.keys(op).some(key=>!allowed[op.kind].includes(key)))throw new Error('Unknown intervention kind or fields');
         const beforeStates:any=Object.create(null),beforeContext=structuredClone(currentContext),details:any={};
         const capture=(agentId:string)=>{const s=state(agentId);if(!Object.hasOwn(beforeStates,agentId))beforeStates[agentId]=structuredClone(s);return s;};
@@ -70,6 +71,11 @@ export async function applyInterventions(logs:JsonlStorage,branchId:string,state
                 if(!Object.hasOwn(target.identity.stats,key)||typeof value!=='number'||!Number.isFinite(value)||value<0||value>10)throw new Error('Attribute must be an existing stat with a finite value 0–10');
                 target.identity.stats[key].current=value;
             }
+        }else if(op.kind==='operational'){
+            const target=capture(op.agentId);
+            const result=prepareOperational(target,op.operations,resolveOperational(operationalConfig),{runId:branchId,turnIndex:-1,eventId:`intervention-${index}`});
+            if(result.error)throw new Error(result.error);
+            states[op.agentId]=result.state;details.operationalAudit=result.audit;
         }else if(op.kind==='history'){
             if(op.mode==='clear')currentContext=[];
             else if(op.mode==='replace'){

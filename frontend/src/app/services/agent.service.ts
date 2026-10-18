@@ -15,6 +15,7 @@ export interface AgentIdentity {
     name: string;
     stats: Record<string, AgentStat>;
     startingDemeanor?: StartingDemeanor;
+    operationalState?: any;
 }
 
 export interface AgentDetails {
