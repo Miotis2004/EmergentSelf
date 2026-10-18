@@ -25,7 +25,8 @@ export const memoryOperationSchema = {anyOf:[
     operationSchema(['consolidate'], ['target_ids'])
 ]};
 
-// Shared by the server's constrained decoder and our independent validator.
+// Authoritative application validation schema. Decoder projection below relaxes only
+// upper repetition bounds; it never changes these backend limits.
 export const agentTurnSchema = {
     type: 'object', additionalProperties: false,
     properties: {
@@ -52,6 +53,25 @@ export function responseSchema(social = false, task = false, operational = false
     const schema = social ? (task ? socialTurnSchema : socialOnlySchema) : agentTurnSchema;
     return operational ? withOperational(schema) : schema;
 }
+/**
+ * llama.cpp expands bounded repetitions while compiling a schema into grammar.
+ * char{0,8000}-style strings and bounded operation arrays can exceed expansion
+ * guards. Unbounded JSON strings/arrays avoid these large finite repetitions;
+ * the backend still checks every limit.
+ * All structure, required fields, enums, minima and numeric constraints are retained.
+ */
+export const INFERENCE_SCHEMA_VERSION = 'llama-unbounded-v1';
+export function inferenceResponseSchema(social = false, task = false, operational = false) {
+    function project(value:any):any {
+        if(Array.isArray(value))return value.map(project);
+        if(value && typeof value === 'object')return Object.fromEntries(Object.entries(value)
+            .filter(([key])=>key !== 'maxLength' && key !== 'maxItems')
+            .map(([key,child])=>[key,project(child)]));
+        return value;
+    }
+    return project(responseSchema(social,task,operational));
+}
+
 const ajv = new Ajv({ strict: false, strictNumbers: true });
 const validators = [agentTurnSchema,socialOnlySchema,socialTurnSchema].flatMap(schema=>[ajv.compile(schema),ajv.compile(withOperational(schema))]);
 

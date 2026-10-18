@@ -2,7 +2,7 @@ import type { OperationalOperation } from '../operations/state';
 import { memoryContentWarnings, MemoryContentWarning } from '../memory/contentDiagnostics';
 import fetch from 'node-fetch';
 import { createHash } from 'crypto';
-import { responseSchema, validateAgentTurn } from './agentTurnSchema';
+import { responseSchema, inferenceResponseSchema, INFERENCE_SCHEMA_VERSION, validateAgentTurn } from './agentTurnSchema';
 
 export interface LlmConfig {
     baseUrl: string;
@@ -46,7 +46,10 @@ export interface AgentTurnResponse {
 }
 export interface LlmValidation {
     contractVersion: 'schema-json-v1';
-    schemaHash: string;
+    schemaHash: string; // Authoritative validation schema, retained for historical readers.
+    validationSchemaHash: string;
+    inferenceSchemaHash?: string;
+    inferenceSchemaVersion?: typeof INFERENCE_SCHEMA_VERSION;
     status: 'pending' | 'passed' | 'failed';
     stage: 'request' | 'http' | 'http_body' | 'envelope' | 'response_json' | 'schema' | 'transport_boundary' | 'complete';
     error?: string;
@@ -129,11 +132,15 @@ export class LlmAdapter {
         };
         const schema = responseSchema(social, task, operational);
         const schemaText = JSON.stringify(schema);
-        this.lastValidation = {contractVersion:'schema-json-v1',schemaHash:createHash('sha256').update(schemaText).digest('hex'),status:'pending',stage:'request'};
+        const inferenceSchema = inferenceResponseSchema(social, task, operational);
+        const validationSchemaHash = createHash('sha256').update(schemaText).digest('hex');
+        this.lastValidation = {contractVersion:'schema-json-v1',schemaHash:validationSchemaHash,validationSchemaHash,
+            ...(this.config.outputMode === 'json_schema' ? {inferenceSchemaVersion:INFERENCE_SCHEMA_VERSION,inferenceSchemaHash:createHash('sha256').update(JSON.stringify(inferenceSchema)).digest('hex')} : {}),status:'pending',stage:'request'};
         const payload = {
             model: this.config.model,
             // Keep the original agent prompt and conversational messages intact.
-            // The dedicated system message is transport metadata on every request.
+            // Prompt instructions retain all application limits; only the decoder
+            // receives a projection without bounded upper string/array repetitions.
             messages: [{role:'system',content:systemPrompt}, ...messages, {role:'system',content:outputContract(schema)}],
             temperature: this.config.temperature,
             ...(this.config.topP === undefined ? {} : { top_p: this.config.topP }),
@@ -141,7 +148,7 @@ export class LlmAdapter {
             max_tokens: this.config.maxTokens,
             response_format: this.config.outputMode === 'json_only'
                 ? { type: 'json_object' }
-                : { type: 'json_schema', json_schema: { name: 'agent_turn', schema } }
+                : { type: 'json_schema', json_schema: { name: 'agent_turn', schema: inferenceSchema } }
         };
         this.lastRequest = structuredClone(payload);
         const fail = (message: string): never => {

@@ -97,8 +97,11 @@ Backend environment defaults (set in the shell or ignored `backend/.env`):
 | `LLM_OUTPUT_MODE` | `json_schema` | `json_schema` or explicit `json_only` compatibility mode |
 | `LLM_DEBUG_CONTENT` | unset | Set to `true` only for deliberate debugging of response content |
 
-JSON Schema mode sends the agent-turn schema to the server and independently
-validates every returned object with the same schema. JSON-only mode sends
+JSON Schema mode sends an inference projection of the agent-turn schema to the
+server and independently validates every returned object with the full application
+schema. The projection removes upper string/array bounds (`maxLength`, `maxItems`)
+to avoid llama.cpp bounded-repetition expansion; these limits remain enforced by
+the backend and stated in the prompt. JSON-only mode sends
 `response_format: {"type":"json_object"}`; the
 same independent schema validation still applies. There is no automatic mode
 switch, JSON repair, Markdown stripping, dialogue rewriting or invented response.
@@ -570,3 +573,20 @@ completed statuses remain agent-reported and unverified. Older runs omit this
 feature and keep their original contract. See [OPERATIONS.md](OPERATIONS.md) for
 response schemas, atomic validation, state-scope and snapshot compatibility, audit
 provenance, branch interventions, and the recommended local garden experiment.
+
+## llama.cpp schema initialization check
+
+Stop active experiments, then run this sequential six-combination check locally:
+
+```bash
+cd backend
+LLM_BASE_URL=http://127.0.0.1:8080/v1 LLM_TEST_MODEL=your-loaded-model npm run test:local-schema
+```
+
+It uses the exact generated JSON Schema projection, saves request/schema/HTTP
+artifacts in a temporary directory, and checks sampler initialization using one
+completion token. A truncated one-token reply is expected; HTTP/schema acceptance
+is separate from successful application response validation. Unavailable servers
+produce an explicit UNVERIFIED result and nonzero exit status. See
+[LLAMA_SCHEMA_COMPATIBILITY.md](LLAMA_SCHEMA_COMPATIBILITY.md) for the exact schema
+change, upstream parser measurements, audit hashes and remaining live validation.

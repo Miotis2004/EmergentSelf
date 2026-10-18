@@ -13,7 +13,8 @@
     "synthesize": "npm run build && node scripts/synthesize-study.cjs",
     "verify-publication": "npm run build && node scripts/verify-publication.cjs",
     "example:publication": "npm run build && node scripts/generate-publication-example.cjs",
-    "replicate": "npm run build && node scripts/replicate-study.cjs"
+    "replicate": "npm run build && node scripts/replicate-study.cjs",
+    "test:local-schema": "npm run build && node scripts/local-schema-check.cjs"
   },
   "keywords": [],
   "author": "",
