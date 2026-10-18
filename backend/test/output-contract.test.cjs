@@ -2,7 +2,7 @@ const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const {fixture,until}=require('./helpers.cjs');
 const {outputContract,TRANSPORT_MARKER}=require('../dist/llm/LlmAdapter');
-const {responseSchema,validateAgentTurn}=require('../dist/llm/agentTurnSchema');
+const {responseSchema,inferenceResponseSchema,validateAgentTurn}=require('../dist/llm/agentTurnSchema');
 
 for(const outputMode of ['json_schema','json_only']) for(const mode of ['none','history','enabled']) for(const capability of ['conversation','social','task']) {
  test(`${outputMode}/${mode}/${capability}: every turn has the schema contract; plain text fails without corrupting history`,async t=>{
@@ -25,7 +25,7 @@ for(const outputMode of ['json_schema','json_only']) for(const mode of ['none','
    assert.equal(request.messages.at(-1).role,'system');assert.equal(request.messages.at(-1).content,outputContract(responseSchema(social,task)));
    assert.equal(request.messages.filter(m=>m.content.includes(TRANSPORT_MARKER)).length,1);
    assert.equal(request.response_format.type,outputMode==='json_only'?'json_object':'json_schema');
-   if(outputMode==='json_schema')assert.deepEqual(request.response_format.json_schema.schema,responseSchema(social,task));
+   if(outputMode==='json_schema')assert.deepEqual(request.response_format.json_schema.schema,inferenceResponseSchema(social,task));
   }
   await f.controller.resume();await until(()=>f.controller.getStatus()==='completed');
   assert.deepEqual((await f.logs.getConversationHistory('test-run')).map(turn=>turn.turnIndex),[0,1,2]);assert.equal(f.stats().maximum,1);
