@@ -111,6 +111,15 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
   connectionMessage = '';
   requestPending = false;
 
+  selectedTab: 'conversation' | 'setup' = 'setup';
+  currentTurnIndex = 0;
+  followLatest = true;
+  unseenTurns = 0;
+  private pendingTranscriptScroll = true;
+  private pendingScrollRestore: number | null = null;
+  private savedTranscriptScrollTop = 0;
+  private lastTranscriptHeight = 0;
+
   turns: any[] = [];
   auditEvents: any[] = [];
   activeTurnAgent: string | null = null;
@@ -154,13 +163,58 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
   }
 
   ngAfterViewChecked() {
-      this.scrollToBottom();
+      const element = this.transcriptContainer?.nativeElement as HTMLElement | undefined;
+      if (this.selectedTab !== 'conversation' || !element?.clientHeight) return;
+      if (this.pendingScrollRestore !== null) {
+          element.scrollTop = this.pendingScrollRestore;
+          this.pendingScrollRestore = null;
+      } else if (this.followLatest && (this.pendingTranscriptScroll || element.scrollHeight !== this.lastTranscriptHeight)) {
+          element.scrollTop = element.scrollHeight;
+      }
+      this.lastTranscriptHeight = element.scrollHeight;
+      this.pendingTranscriptScroll = false;
+  }
+
+  selectTab(tab: 'conversation' | 'setup') {
+      if (this.selectedTab === tab) return;
+      if (this.selectedTab === 'conversation') this.savedTranscriptScrollTop = this.transcriptContainer?.nativeElement.scrollTop ?? 0;
+      this.selectedTab = tab;
+      if (tab === 'conversation') {
+          if (this.followLatest) { this.pendingTranscriptScroll = true; this.unseenTurns = 0; }
+          else this.pendingScrollRestore = this.savedTranscriptScrollTop;
+      }
+  }
+
+  onTabKeydown(event: KeyboardEvent, tab: 'conversation' | 'setup') {
+      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+      event.preventDefault();
+      const target = event.key === 'Home' ? 'conversation' : event.key === 'End' ? 'setup' : tab === 'conversation' ? 'setup' : 'conversation';
+      this.selectTab(target);
+      document.getElementById(target === 'setup' ? 'setup-tab' : 'conversation-tab')?.focus();
+  }
+
+  onTranscriptScroll() {
+      const element = this.transcriptContainer?.nativeElement as HTMLElement | undefined;
+      if (this.selectedTab !== 'conversation' || !element?.clientHeight) return;
+      this.savedTranscriptScrollTop = element.scrollTop;
+      this.followLatest = element.scrollHeight - element.clientHeight - element.scrollTop <= 80;
+      if (this.followLatest) this.unseenTurns = 0;
   }
 
   scrollToBottom(): void {
-      try {
-          this.transcriptContainer.nativeElement.scrollTop = this.transcriptContainer.nativeElement.scrollHeight;
-      } catch(err) { }
+      this.followLatest = true;
+      this.unseenTurns = 0;
+      this.pendingTranscriptScroll = true;
+      this.pendingScrollRestore = null;
+      if (this.selectedTab === 'conversation' && this.transcriptContainer) this.transcriptContainer.nativeElement.scrollTop = this.transcriptContainer.nativeElement.scrollHeight;
+  }
+
+  get rejectedOperationalAttempts(): any[] {
+      return this.auditEvents.filter(event => event.type === 'experiment_error' && event.attempt?.operationalAudit?.length);
+  }
+
+  memoryEventCount(turn: any, status: string): number {
+      return (turn.auditTrail || []).filter((operation: any) => operation.status === status).length;
   }
 
   loadAgents() {
@@ -235,6 +289,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
       };
 
       if (!this.selectedModel) { this.diagnostic = 'Discover and select a loaded model first.'; return; }
+      this.selectTab('conversation');
       this.perform(this.experimentService.startExperiment(config));
   }
 
@@ -265,6 +320,17 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
   resetExperiment() { this.perform(this.experimentService.resetExperiment()); }
 
   private applyState(state: any) {
+      const previousStatus = this.experimentStatus;
+      const previousRunId = this.savedAgentIds ? this.runId : null;
+      if (state.config && previousRunId !== state.config.runId) {
+          this.followLatest = true;
+          this.unseenTurns = 0;
+          this.pendingTranscriptScroll = true;
+          this.pendingScrollRestore = null;
+          this.savedTranscriptScrollTop = 0;
+      }
+      if (Number.isSafeInteger(state.currentTurnIndex)) this.currentTurnIndex = state.currentTurnIndex;
+      if (state.status === 'running' && (previousStatus === 'idle' || previousStatus === 'stopped' || previousRunId !== state.config?.runId)) this.selectTab('conversation');
       this.experimentStatus = state.status;
       this.activeTurnAgent = state.activeAgentId ?? null;
       this.diagnostic = state.error?.message || '';
@@ -286,13 +352,21 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
       } else {
           this.savedAgentIds = null;
           this.operationalStates={};
+          this.currentTurnIndex = 0;
+          this.followLatest = true;
+          this.unseenTurns = 0;
+          this.pendingTranscriptScroll = true;
+          this.pendingScrollRestore = null;
       }
   }
 
   handleServerEvent(event: {type: string, data: any}) {
       if (event.type === 'snapshot') {
           this.connectionMessage = '';
+          const previousRunId = this.savedAgentIds ? this.runId : null;
           this.applyState(event.data);
+          if (event.data.turns.length && previousRunId !== event.data.config?.runId) this.selectTab('conversation');
+          this.currentTurnIndex = event.data.currentTurnIndex ?? event.data.turns.length;
           this.turns = event.data.turns.map((turn: any) => ({ turnRecord: turn, auditTrail: turn.auditTrail || [] }));
           this.auditEvents = event.data.events;
           this.operationalStates={...(event.data.operationalStates??{})};
@@ -305,6 +379,8 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
           this.activeTurnAgent = null;
           if(event.data.turnRecord.operationalState)this.operationalStates[event.data.turnRecord.agentId]=event.data.turnRecord.operationalState;
           if (!this.turns.some(t => t.turnRecord.turnIndex === event.data.turnRecord.turnIndex)) {
+              if (!this.followLatest || this.selectedTab !== 'conversation') this.unseenTurns++;
+              this.currentTurnIndex = Math.max(this.currentTurnIndex, event.data.turnRecord.turnIndex + 1);
               this.turns.push(event.data);
               this.turns.sort((a, b) => a.turnRecord.turnIndex - b.turnRecord.turnIndex);
           }

@@ -64,26 +64,18 @@
                 <strong>Current Action:</strong> {{operational.action.description}}<br>
                 {{operational.action.type}} / {{operational.action.status}} (unverified outcome)
             </div>
-            <label class="participation-choice">
-                <input type="checkbox" [ngModel]="selectedAgentIds.has(a.id)"
-                    (ngModelChange)="setAgentIncluded(a.id, $event)" [disabled]="configurationLocked">
-                Include in Next Experiment
-            </label>
+
         </div>
 
     </div>
 
-    <!-- Middle: Transcript & Controls -->
-    <div class="panel middle-panel">
-        <div class="header" style="display: flex; justify-content: space-between; align-items: center;">
-            <h2>Conversation</h2>
-            <div>
-                Status: <span class="status-badge status-{{experimentStatus}}">{{ experimentStatus | uppercase }}</span>
+    <!-- The toolbar and both mounted tab views share the existing experiment state. -->
+    <main class="panel middle-panel" aria-label="Experiment workspace">
+        <header class="experiment-toolbar">
+            <div class="toolbar-heading">
+                <h2>Experiment</h2>
+                <span class="status-badge status-{{experimentStatus}}" role="status">{{experimentStatus | uppercase}}</span>
             </div>
-        </div>
-
-        <div *ngIf="diagnostic" class="diagnostic" role="alert">{{ diagnostic }}</div>
-        <div *ngIf="connectionMessage" role="status">{{ connectionMessage }}</div>
         <div class="controls">
             <button (click)="startExperiment()" [disabled]="requestPending || experimentStatus !== 'idle' && experimentStatus !== 'stopped'">Start</button>
             <button (click)="pauseExperiment()" [disabled]="requestPending || experimentStatus !== 'running'">Pause</button>
@@ -91,27 +83,90 @@
             <button (click)="stopExperiment()" [disabled]="requestPending || experimentStatus === 'idle' || experimentStatus === 'stopped'">Stop</button>
             <button (click)="resetExperiment()" [disabled]="requestPending || experimentStatus === 'running'">Reset</button>
         </div>
-
-        <div class="form-group" style="display:flex; gap: 10px;">
-            <div>
-                <label>Max Turns</label>
-                <input type="number" [(ngModel)]="maxTurns" style="width: 80px;" [disabled]="requestPending || experimentStatus !== 'idle'">
+            <div class="run-summary">
+                <label for="run-id">Run ID <input id="run-id" type="text" [(ngModel)]="runId" [disabled]="configurationLocked"></label>
+                <label for="max-turns">Max turns <input id="max-turns" type="number" min="1" [(ngModel)]="maxTurns" [disabled]="configurationLocked"></label>
+                <span class="turn-progress">Turns {{currentTurnIndex}} / {{maxTurns}}</span>
+                <progress aria-label="Completed experiment turns" [value]="currentTurnIndex" [max]="maxTurns"></progress>
             </div>
-            <div style="flex: 1;">
-                <label>Run ID</label>
-                <input type="text" [(ngModel)]="runId" [disabled]="requestPending || experimentStatus !== 'idle'">
+        </header>
+        <div *ngIf="diagnostic" class="diagnostic" role="alert">{{ diagnostic }}</div>
+        <div *ngIf="connectionMessage" class="connection-message" role="status">{{ connectionMessage }}</div>
+        <div class="workspace-tabs" role="tablist" aria-label="Experiment workspace views">
+            <button id="conversation-tab" type="button" role="tab" aria-controls="conversation-panel"
+                [attr.aria-selected]="selectedTab === 'conversation'" [attr.tabindex]="selectedTab === 'conversation' ? 0 : -1"
+                (click)="selectTab('conversation')" (keydown)="onTabKeydown($event, 'conversation')">Conversation</button>
+            <button id="setup-tab" type="button" role="tab" aria-controls="setup-panel"
+                [attr.aria-selected]="selectedTab === 'setup'" [attr.tabindex]="selectedTab === 'setup' ? 0 : -1"
+                (click)="selectTab('setup')" (keydown)="onTabKeydown($event, 'setup')">Experiment Setup</button>
+        </div>
+        <section id="conversation-panel" class="tab-panel conversation-view" role="tabpanel" aria-labelledby="conversation-tab" [hidden]="selectedTab !== 'conversation'">
+        <div class="transcript" id="conversation-transcript" #transcriptContainer (scroll)="onTranscriptScroll()" tabindex="0" role="region" aria-label="Conversation transcript">
+            <details *ngIf="rejectedOperationalAttempts.length" class="rejected-attempts">
+                <summary>Rejected operational attempts ({{rejectedOperationalAttempts.length}})</summary>
+                <aside *ngFor="let event of rejectedOperationalAttempts" class="turn rejected-attempt">
+                    <strong>Rejected operational attempt · Turn {{event.turnIndex}} · {{participantLabel(event.agentId)}}</strong>
+                    <p>{{event.message}}</p>
+                    <div *ngFor="let proposal of event.attempt.operationalAudit">{{proposal.status}}: {{proposal.operation | json}} — {{proposal.error}}</div>
+                </aside>
+            </details>
+
+            <div *ngIf="turns.length === 0" style="color: #888; font-style: italic;">No conversation yet.</div>
+
+            <div class="turn" *ngFor="let turn of turns">
+                <div class="turn-header">
+                    [Turn {{turn.turnRecord.turnIndex}}] {{turn.turnRecord.agentName}}
+                    <span *ngIf="turn.turnRecord.social">{{turn.turnRecord.social.action === 'decline' ? 'declined to speak' : '→ ' + (turn.turnRecord.social.recipient_id || 'all')}}</span>
+                    <span style="color: #888; font-weight: normal; font-size: 0.8em; float: right;">
+                        {{turn.turnRecord.timestamp | date:'mediumTime'}}
+                    </span>
+                </div>
+                <div class="turn-content">{{turn.turnRecord.response || (turn.turnRecord.turnKind ? 'Speech: None (intentional)' : '')}}</div>
+                <div *ngIf="turn.turnRecord.operationalState as operational" class="turn-operational">
+                    <strong>{{turn.turnRecord.turnKind}}</strong><br>
+                    Location: {{operational.location.name}}<br>
+                    Action: {{operational.action.description}} ({{operational.action.type}} / {{operational.action.status}})<br>
+                    Outcome remains unverified.
+                </div>
+                <div *ngFor="let audit of turn.turnRecord.operationalAudit" class="operational-change" [class.rejected]="audit.status === 'rejected'">
+                    <strong>{{audit.status}}:</strong> {{audit.operation | json}} <span *ngIf="audit.error">— {{audit.error}}</span>
+                </div>
+                <small *ngIf="turn.auditTrail?.length" class="memory-indicator">
+                    Memory proposals: {{memoryEventCount(turn, 'success')}} accepted · {{memoryEventCount(turn, 'failed')}} rejected · {{memoryEventCount(turn, 'ignored')}} withheld
+                </small>
+            </div>
+
+
+
+            <div *ngIf="activeTurnAgent" style="padding: 10px; font-style: italic; color: #666;">
+                {{ activeTurnAgent }} is thinking...
             </div>
         </div>
 
+            <div class="conversation-footer">
+                <small aria-live="polite">{{followLatest ? 'Following latest turns' : 'Reading earlier turns'}}<span *ngIf="unseenTurns"> · {{unseenTurns}} new</span></small>
+                <button type="button" (click)="scrollToBottom()" [disabled]="!turns.length" aria-controls="conversation-transcript">Latest turn ↓</button>
+            </div>
+        </section>
+        <section id="setup-panel" class="tab-panel setup-view" role="tabpanel" aria-labelledby="setup-tab" [hidden]="selectedTab !== 'setup'" tabindex="0">
+            <h3>Experiment Setup</h3>
+            <p *ngIf="configurationLocked">Saved run settings are read-only. Reset retains its existing behavior for configuring another experiment.</p>
+            <fieldset class="participant-selection" [disabled]="configurationLocked">
+                <legend>Participants</legend>
+                <label class="agent-card participation-choice" *ngFor="let a of availableAgents">
+                    <input type="checkbox" [ngModel]="selectedAgentIds.has(a.id)" (ngModelChange)="setAgentIncluded(a.id, $event)" [disabled]="configurationLocked">
+                    Include {{a.name}} ({{a.id}}) in Next Experiment
+                </label>
+                <div class="saved-participants" aria-label="Participant turn order">
+                    <strong>Participants (turn order):</strong>
+                    <ol><li *ngFor="let id of savedAgentIds || nextParticipantIds">{{participantLabel(id)}}</li></ol>
+                </div>
+            </fieldset>
         <div class="form-group">
             <label for="conversation-topic">Conversation Topic</label>
             <textarea id="conversation-topic" rows="3" maxlength="1000" [(ngModel)]="initialTopic"
                 [disabled]="configurationLocked" aria-describedby="topic-help"></textarea>
             <small id="topic-help">Optional starting stimulus for the first turn only (up to 1,000 characters).</small>
-        </div>
-        <div *ngIf="savedAgentIds" class="saved-participants" aria-label="Saved participants">
-            <strong>Participants (turn order):</strong>
-            <ol><li *ngFor="let id of savedAgentIds">{{ participantLabel(id) }}</li></ol>
         </div>
 
         <fieldset [disabled]="configurationLocked" class="model-config">
@@ -167,32 +222,8 @@
         <app-analysis-panel [running]="experimentStatus === 'running'"></app-analysis-panel>
         <app-research-panel [configuration]="researchConfiguration" [running]="experimentStatus === 'running'" (agentsChanged)="loadAgents()"></app-research-panel>
 
-        <div class="transcript" #transcriptContainer>
-            <div *ngIf="turns.length === 0" style="color: #888; font-style: italic;">No conversation yet.</div>
-
-            <div class="turn" *ngFor="let turn of turns">
-                <div class="turn-header">
-                    [Turn {{turn.turnRecord.turnIndex}}] {{turn.turnRecord.agentName}}
-                    <span *ngIf="turn.turnRecord.social">{{turn.turnRecord.social.action === 'decline' ? 'declined to speak' : '→ ' + (turn.turnRecord.social.recipient_id || 'all')}}</span>
-                    <span style="color: #888; font-weight: normal; font-size: 0.8em; float: right;">
-                        {{turn.turnRecord.timestamp | date:'mediumTime'}}
-                    </span>
-                </div>
-                <div class="turn-content">{{turn.turnRecord.response || (turn.turnRecord.turnKind ? 'Speech: None (intentional)' : '')}}</div>
-                <div *ngIf="turn.turnRecord.operationalState as operational" class="turn-operational">
-                    <strong>{{turn.turnRecord.turnKind}}</strong><br>
-                    Location: {{operational.location.name}}<br>
-                    Action: {{operational.action.description}} ({{operational.action.type}} / {{operational.action.status}})<br>
-                    Outcome remains unverified.
-                </div>
-                <div *ngFor="let audit of turn.turnRecord.operationalAudit">{{audit.status}}: {{audit.operation | json}}</div>
-            </div>
-
-            <div *ngIf="activeTurnAgent" style="padding: 10px; font-style: italic; color: #666;">
-                {{ activeTurnAgent }} is thinking...
-            </div>
-        </div>
-    </div>
+        </section>
+    </main>
 
     <!-- Right: Audit Log & Memory -->
     <div class="panel right-panel">
