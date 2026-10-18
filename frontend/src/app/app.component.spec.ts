@@ -1,3 +1,4 @@
+import { By } from '@angular/platform-browser';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { of, Subject } from 'rxjs';
 import { AppComponent } from './app.component';
@@ -30,7 +31,10 @@ describe('Experiment participants and initial topic', () => {
             getMemoryHistory: () => of({ baselineTurn:-1, lastTurn:-1, state: {entries:[]}, timeline:[] }),
             connectEvents: () => {}, disconnectEvents: () => {},
             startExperiment: jasmine.createSpy().and.returnValue(of({ success: true })),
-            resumeExperiment: jasmine.createSpy().and.returnValue(of({ success: true }))
+            resumeExperiment: jasmine.createSpy().and.returnValue(of({ success: true })),
+            pauseExperiment: jasmine.createSpy().and.returnValue(of({ success: true })),
+            stopExperiment: jasmine.createSpy().and.returnValue(of({ success: true })),
+            resetExperiment: jasmine.createSpy().and.returnValue(of({ success: true }))
         };
         await TestBed.configureTestingModule({
             imports: [AppComponent],
@@ -42,6 +46,97 @@ describe('Experiment participants and initial topic', () => {
     });
 
     afterEach(() => fixture.destroy());
+
+    const completedTurn = (index: number, response = 'Actual model words') => ({type:'turn_completed',data:{turnRecord:{turnIndex:index,agentId:'bob',agentName:'Bob',response},auditTrail:[]}});
+
+    it('separates all setup controls from a single independently scrollable transcript and persistent toolbar', () => {
+        const root=fixture.nativeElement;
+        expect(component.selectedTab).toBe('setup');
+        expect(root.querySelector('#setup-panel').hidden).toBeFalse();
+        expect(root.querySelector('#conversation-panel').hidden).toBeTrue();
+        for(const selector of ['#conversation-topic','#model-id','#memory-mode','app-operational-controls','app-publication-panel','app-branch-panel','app-social-controls','app-analysis-panel','app-research-panel','.participant-selection']) expect(root.querySelector('#setup-panel').querySelector(selector)).not.toBeNull();
+        expect(root.querySelector('.experiment-toolbar').contains(root.querySelector('#run-id'))).toBeTrue();
+        expect(root.querySelector('.experiment-toolbar .controls').querySelectorAll('button').length).toBe(5);
+        component.selectTab('conversation');fixture.detectChanges();
+        expect(root.querySelectorAll('.transcript').length).toBe(1);
+        const transcript=root.querySelector('.transcript') as HTMLElement,middle=root.querySelector('.middle-panel') as HTMLElement;
+        expect(getComputedStyle(transcript).overflowY).toBe('auto');
+        expect(transcript.clientHeight).toBeGreaterThan(middle.clientHeight * .5);
+        expect(getComputedStyle(root.querySelector('#setup-panel')).overflowY).toBe('auto');
+    });
+
+    it('starts in Conversation and retains mounted research forms and run state while switching tabs', async () => {
+        const research=fixture.debugElement.query(By.css('app-research-panel')).componentInstance;
+        research.templateId='preserve-this-template';
+        const transcript=fixture.nativeElement.querySelector('.transcript');
+        component.startExperiment();expect(component.selectedTab).toBe('conversation');
+        events.next({type:'status_changed',data:{status:'running',config:savedConfig,currentTurnIndex:0}});
+        component.selectTab('setup');fixture.detectChanges();
+        events.next({type:'status_changed',data:{status:'running',config:savedConfig,currentTurnIndex:0}});
+        expect(component.selectedTab).toBe('setup');
+        component.selectTab('conversation');fixture.detectChanges();
+        expect(fixture.debugElement.query(By.css('app-research-panel')).componentInstance).toBe(research);
+        expect(research.templateId).toBe('preserve-this-template');expect(fixture.nativeElement.querySelector('.transcript')).toBe(transcript);
+        expect(experiments.startExperiment.calls.count()).toBe(1);expect(experiments.resumeExperiment).not.toHaveBeenCalled();
+        await fixture.whenStable();fixture.detectChanges();
+        expect(fixture.nativeElement.querySelector('#conversation-topic').disabled).toBeTrue();
+    });
+
+    it('retains completed turns on Stop/completion and leaves Reset semantics to server snapshots', () => {
+        events.next({type:'status_changed',data:{status:'running',config:savedConfig,currentTurnIndex:0}});
+        events.next(completedTurn(0));component.stopExperiment();
+        events.next({type:'status_changed',data:{status:'stopped',config:savedConfig,currentTurnIndex:1}});fixture.detectChanges();
+        expect(component.turns.length).toBe(1);expect(component.selectedTab).toBe('conversation');
+        expect(fixture.nativeElement.querySelector('progress').value).toBe(1);
+        events.next({type:'status_changed',data:{status:'completed',config:savedConfig,currentTurnIndex:1}});
+        component.resetExperiment();expect(component.turns.length).toBe(1);expect(experiments.resetExperiment).toHaveBeenCalled();
+        events.next({type:'snapshot',data:{status:'idle',config:null,currentTurnIndex:0,turns:[],events:[]}});
+        expect(component.turns.length).toBe(0);expect(component.currentTurnIndex).toBe(0);expect(component.availableAgents.length).toBe(3);expect(agents.createAgent).not.toHaveBeenCalled();
+    });
+
+    it('follows turns near the bottom, preserves manual reading across tabs and offers an explicit latest action', () => {
+        component.selectTab('conversation');const element=fixture.nativeElement.querySelector('.transcript') as HTMLElement;
+        let height=1000,position=800;const viewport=200;
+        Object.defineProperties(element,{scrollHeight:{configurable:true,get:()=>height},clientHeight:{configurable:true,get:()=>viewport},scrollTop:{configurable:true,get:()=>position,set:(value:number)=>position=Math.max(0,Math.min(value,height-viewport))}});
+        fixture.detectChanges();position=740;component.onTranscriptScroll();expect(component.followLatest).toBeTrue();
+        height=1200;events.next(completedTurn(0));fixture.detectChanges();expect(position).toBe(1000);
+        position=100;component.onTranscriptScroll();expect(component.followLatest).toBeFalse();
+        height=1500;events.next(completedTurn(1));fixture.detectChanges();expect(position).toBe(100);expect(component.unseenTurns).toBe(1);
+        component.selectTab('setup');fixture.detectChanges();height=1800;events.next(completedTurn(2));fixture.detectChanges();
+        component.selectTab('conversation');fixture.detectChanges();expect(position).toBe(100);expect(component.unseenTurns).toBe(2);
+        component.scrollToBottom();fixture.detectChanges();expect(position).toBe(1600);expect(component.unseenTurns).toBe(0);
+        height=2100;events.next(completedTurn(3));fixture.detectChanges();expect(position).toBe(1900);
+    });
+
+    it('preserves speech, action-only, no-op, rejected attempts and memory indicators with readable long text', () => {
+        component.selectTab('conversation');
+        const text='Original model text\n  Spacing preserved. '+ 'longword'.repeat(500);
+        events.next(completedTurn(0,text));
+        const action:any=completedTurn(1,'');action.data.turnRecord.turnKind='action_only';action.data.turnRecord.operationalState={location:{id:'garden',name:'Garden'},action:{type:'working',description:'Preparing beds',status:'in_progress'}};action.data.turnRecord.operationalAudit=[{status:'accepted',operation:{action:'set_action'}}];action.data.auditTrail=[{status:'failed',operation:{action:'update',type:'belief',content:'Original proposal',reason:'New evidence'},error:'Missing target'}];events.next(action);
+        const noop:any=completedTurn(2,'');noop.data.turnRecord.turnKind='intentional_noop';events.next(noop);
+        events.next({type:'experiment_error',data:{id:'failed-attempt',type:'experiment_error',turnIndex:3,agentId:'bob',message:'Unknown location',attempt:{operationalAudit:[{status:'rejected',operation:{action:'set_location'},error:'Unknown location'}]}}});
+        fixture.detectChanges();const root=fixture.nativeElement,content=root.querySelector('.turn-content') as HTMLElement;
+        expect(content.textContent).toBe(text);expect(getComputedStyle(content).whiteSpace).toBe('pre-wrap');expect(getComputedStyle(content).overflowWrap).toBe('anywhere');expect(content.scrollWidth).toBeLessThanOrEqual(content.clientWidth+1);
+        expect(root.querySelector('.turn-operational').textContent).toContain('Preparing beds');expect(root.querySelector('.memory-indicator').textContent).toContain('1 rejected');expect(root.querySelector('.rejected-attempt').textContent).toContain('Unknown location');
+        expect(root.querySelectorAll('.turn').length).toBe(4);expect(root.querySelector('#conversation-panel').textContent).toContain('Speech: None (intentional)');
+    });
+
+    it('starts a different run following latest while Resume within the same run preserves reading mode', () => {
+        events.next({type:'status_changed',data:{status:'running',config:savedConfig,currentTurnIndex:3}});
+        component.followLatest=false;component.selectTab('setup');
+        events.next({type:'status_changed',data:{status:'paused',config:savedConfig,currentTurnIndex:3}});
+        events.next({type:'status_changed',data:{status:'running',config:savedConfig,currentTurnIndex:3}});
+        expect(component.selectedTab).toBe('setup');expect(component.followLatest).toBeFalse();
+        events.next({type:'snapshot',data:{status:'running',config:{...savedConfig,runId:'another-run'},currentTurnIndex:0,turns:[],events:[]}});
+        expect(component.selectedTab).toBe('conversation');expect(component.followLatest).toBeTrue();expect(component.currentTurnIndex).toBe(0);
+    });
+
+    it('supports keyboard tab selection without triggering lifecycle actions', () => {
+        const button=fixture.nativeElement.querySelector('#setup-tab') as HTMLButtonElement;
+        button.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true}));fixture.detectChanges();
+        expect(component.selectedTab).toBe('conversation');expect(document.activeElement?.id).toBe('conversation-tab');
+        expect(experiments.startExperiment).not.toHaveBeenCalled();expect(experiments.resumeExperiment).not.toHaveBeenCalled();
+    });
 
     it('creates preset and custom initial dispositions without changing numerical attributes', () => {
         component.newAgent.id = 'new'; component.newAgent.name = 'New';

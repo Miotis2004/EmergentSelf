@@ -1,1 +1,13 @@
-/* You can add global styles to this file, and also import other style files */
+html, body { margin: 0; min-height: 100%; }
+
+/* Shared dashboard form, agent-card and audit typography. */
+app-root .container .form-group { margin-bottom: 10px; }
+app-root .container .form-group label { display: block; font-size: .85em; margin-bottom: 4px; }
+app-root .container .form-group input { width: 100%; padding: 6px; box-sizing: border-box; }
+app-root .container .form-group textarea { width: 100%; box-sizing: border-box; padding: 6px; resize: vertical; }
+app-root .container .agent-card { border: 1px solid #eee; padding: 10px; margin-bottom: 10px; border-radius: 4px; }
+app-root .container .log-entry { font-family: monospace; font-size: .8em; margin-bottom: 4px; padding-bottom: 4px; border-bottom: 1px solid #eee; }
+app-root .container .model-config { margin-bottom: 12px; display: grid; gap: 5px; }
+app-root .container .model-config input, app-root .container .model-config select { min-width: 0; width: 100%; box-sizing: border-box; }
+app-root .container .participation-choice { display: block; margin-top: 8px; font-size: .85em; }
+app-root .container .saved-participants ol { margin: 4px 0 12px; }
