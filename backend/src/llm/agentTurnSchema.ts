@@ -1,3 +1,4 @@
+import {worldOperationsSchema} from '../world/simulation';
 import { operationalOperationsSchema } from '../operations/state';
 import Ajv from 'ajv';
 
@@ -48,10 +49,12 @@ const {task_decision, ...socialOnlyProperties} = socialTurnSchema.properties;
 const socialOnlySchema = {...socialTurnSchema, properties:socialOnlyProperties};
 
 function withOperational(schema:any) { return {...schema,properties:{...schema.properties,operational_operations:operationalOperationsSchema},required:[...schema.required,'operational_operations']}; }
-export function responseSchema(social = false, task = false, operational = false) {
+export function responseSchema(social = false, task = false, operational = false, world = false) {
+    if(world&&!operational)throw new Error('World output requires operational capability');
     if (task && !social) throw new Error('Task output requires social capability');
     const schema = social ? (task ? socialTurnSchema : socialOnlySchema) : agentTurnSchema;
-    return operational ? withOperational(schema) : schema;
+    const base = operational ? withOperational(schema) : schema;
+    return world ? {...base,properties:{...base.properties,world_operations:worldOperationsSchema},required:[...base.required,'world_operations']} : base;
 }
 /**
  * llama.cpp expands bounded repetitions while compiling a schema into grammar.
@@ -61,7 +64,7 @@ export function responseSchema(social = false, task = false, operational = false
  * All structure, required fields, enums, minima and numeric constraints are retained.
  */
 export const INFERENCE_SCHEMA_VERSION = 'llama-unbounded-v1';
-export function inferenceResponseSchema(social = false, task = false, operational = false) {
+export function inferenceResponseSchema(social = false, task = false, operational = false, world = false) {
     function project(value:any):any {
         if(Array.isArray(value))return value.map(project);
         if(value && typeof value === 'object')return Object.fromEntries(Object.entries(value)
@@ -69,14 +72,16 @@ export function inferenceResponseSchema(social = false, task = false, operationa
             .map(([key,child])=>[key,project(child)]));
         return value;
     }
-    return project(responseSchema(social,task,operational));
+    return project(responseSchema(social,task,operational,world));
 }
 
 const ajv = new Ajv({ strict: false, strictNumbers: true });
-const validators = [agentTurnSchema,socialOnlySchema,socialTurnSchema].flatMap(schema=>[ajv.compile(schema),ajv.compile(withOperational(schema))]);
+const validators = new Map<string,ReturnType<typeof ajv.compile>>();
 
-export function validateAgentTurn(value: unknown, social = false, task = false, operational = false): asserts value is import('./LlmAdapter').AgentTurnResponse {
-    const validate = validators[(social ? (task ? 2 : 1) : 0)*2+Number(operational)];
+export function validateAgentTurn(value: unknown, social = false, task = false, operational = false, world = false): asserts value is import('./LlmAdapter').AgentTurnResponse {
+    const key=JSON.stringify([social,task,operational,world]);
+    if(!validators.has(key))validators.set(key,ajv.compile(responseSchema(social,task,operational,world)));
+    const validate=validators.get(key)!;
     if (!validate(value)) {
         // Explain reference-shape errors without exposing memory content in diagnostics.
         const operations = (value as any)?.memory_operations;

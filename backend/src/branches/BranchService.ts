@@ -41,13 +41,15 @@ export class BranchService {
         const maxTurns=input.maxTurns??sourceConfig.maxTurns;
         if(!Number.isSafeInteger(maxTurns)||maxTurns<1||maxTurns>100000)throw new Error('Branch turn limit must be 1–100000');
         const snapshotId=`branch-${hash(branchId).slice(0,48)}`;
-        const snapshot={schemaVersion:6,snapshotId,sourceRunId:branchId,sourceTurnIndex:-1,states:result.states,stateHash:hash(result.states),context:result.context,contextHash:hash(result.context)};
+        const worldState=source.worldState?structuredClone(source.worldState):undefined;
+        if(worldState)for(const audit of result.interventions)for(const agentId of Object.keys(audit.afterStates))if(audit.operation.kind==='operational'||audit.operation.kind==='reverse')worldState.positions[agentId]=audit.afterStates[agentId].operational?.location.id??worldState.positions[agentId];
+        const snapshot={schemaVersion:6,snapshotId,...(worldState?{worldState,worldHash:hash(worldState)}:{}),sourceRunId:branchId,sourceTurnIndex:-1,states:result.states,stateHash:hash(result.states),context:result.context,contextHash:hash(result.context)};
         const {templateId,batchId,trialIndex,repeatIndex,randomizationSeed,snapshotId:oldSnapshot,initialStateHash,branchId:oldBranch,historySnapshotId,historyContextHash,...baseProtocol}=sourceConfig.protocol;
         const protocol=normalizeProtocol({...baseProtocol,stateScope:'trial',snapshotId,initialStateHash:snapshot.stateHash,branchId,historySnapshotId:snapshotId,historyContextHash:snapshot.contextHash},memoryConfig.mode);
         const configuration={...structuredClone(sourceConfig),runId:branchId,maxTurns,llmConfig,memoryConfig,protocol,initialTopic:result.context.length?'':sourceConfig.initialTopic??''};
         const manifest={schemaVersion:6,branchId,actor:input.actor,reason:input.reason,createdAt:new Date().toISOString(),
             source:{snapshotId:source.snapshotId,snapshotHash:hash(source),sourceRunId:parent?parent.branchId:source.sourceRunId,sourceTurnIndex:parent?-1:source.sourceTurnIndex,parentBranchId:parent?.branchId??sourceConfig.protocol.branchId??null,configHash:hash(sourceConfig)},
-            preSnapshot:{states:original,stateHash:hash(original),context,contextHash:hash(context)},sourceConfiguration:sourceConfig,
+            preSnapshot:{...(source.worldState?{worldState:structuredClone(source.worldState),worldHash:hash(source.worldState)}:{}),states:original,stateHash:hash(original),context,contextHash:hash(context)},sourceConfiguration:sourceConfig,
             interventions:result.interventions,snapshot,configuration,configHash:hash(configuration),
             configurationDifferences:differences(sourceConfig,configuration)};
         const saved={...manifest,manifestHash:hash(manifest)};
@@ -97,7 +99,7 @@ export class BranchService {
         for(const phase of ['pre','post']){
             try{
                 const result=await this.research.probeInLease(branchId,input.agentId,input.postTurnIndex,input.probeId,input.actor,input.reason,{
-                    ...(phase==='pre'?{stateOverride:branch.preSnapshot.states[input.agentId],llmOverride:preModel}:{}),
+                    ...(phase==='pre'?{stateOverride:branch.preSnapshot.states[input.agentId],worldOverride:branch.preSnapshot.worldState,llmOverride:preModel}:{}),
                     historyOverride:contextPolicy==='phase_history'?(phase==='pre'?branch.preSnapshot.context:postContext):[],
                     comparison:{comparisonId,branchId,phase,sourceSnapshotId:branch.source.snapshotId,modelPolicy:input.modelPolicy,contextPolicy}});
                 outcomes.push({phase,probeSessionId:result.probeSessionId,status:result.results.length===definition.prompts.length&&result.results.every((r:any)=>r.status==='success')?'success':'failed',attempts:result.results.length,unrunTurns:definition.prompts.length-result.results.length});

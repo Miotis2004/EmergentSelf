@@ -210,3 +210,11 @@ No database, online model retraining, reward/punishment, external web access for
 7. Run a documented 100-turn smoke test; inspect memory evolution and data integrity.
 
 **Definition of success for Phase I:** a robust, observable two-agent conversation engine whose independent evolving memories can be inspected and reconstructed. No claim of personality emergence is required to pass Phase I.
+
+## World simulation foundation
+
+Opt-in deterministic simulation time, bounded environmental schedules, integer inventories,
+transactional world operations, local communication, event-driven waits and researcher wake/clock
+controls are integrated with turn commits and identity branches. Legacy runs remain opt-out.
+See [World simulation architecture and limits](docs/WORLD_SIMULATION.md) and the
+[four-agent residence configuration](examples/world-residence.json).

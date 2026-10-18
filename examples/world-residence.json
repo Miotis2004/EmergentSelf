@@ -1,0 +1,155 @@
+{
+  "runId": "residence-world-v1",
+  "agentIds": [
+    "bob",
+    "sara",
+    "walter",
+    "mckee"
+  ],
+  "initialTopic": "",
+  "maxTurns": 100,
+  "llmConfig": {
+    "baseUrl": "http://127.0.0.1:8080/v1",
+    "model": "SELECT_LOADED_MODEL_ID",
+    "maxTokens": 2048,
+    "outputMode": "json_schema"
+  },
+  "memoryConfig": {
+    "mode": "enabled"
+  },
+  "operationalConfig": {
+    "enabled": true,
+    "locations": [
+      {
+        "id": "room-bob",
+        "name": "Bob's room"
+      },
+      {
+        "id": "room-sara",
+        "name": "Sara's room"
+      },
+      {
+        "id": "room-walter",
+        "name": "Walter's room"
+      },
+      {
+        "id": "room-mckee",
+        "name": "Mckee's room"
+      },
+      {
+        "id": "supply",
+        "name": "Supply room"
+      },
+      {
+        "id": "kitchen",
+        "name": "Kitchen"
+      }
+    ],
+    "observationPolicy": "co_located"
+  },
+  "worldConfig": {
+    "version": 1,
+    "enabled": true,
+    "initialMinute": 0,
+    "minutesPerTurn": 15,
+    "initialPositions": {
+      "bob": "room-bob",
+      "sara": "room-sara",
+      "walter": "room-walter",
+      "mckee": "room-mckee"
+    },
+    "items": [
+      {
+        "id": "food",
+        "name": "Food",
+        "unit": "portion",
+        "stackable": true,
+        "consumable": true
+      }
+    ],
+    "inventories": [
+      {
+        "id": "supply-food",
+        "ownerType": "location",
+        "ownerId": "supply",
+        "visibility": "local",
+        "authorizedAgentIds": [],
+        "quantities": {
+          "food": 12
+        }
+      },
+      {
+        "id": "kitchen-food",
+        "ownerType": "location",
+        "ownerId": "kitchen",
+        "visibility": "local",
+        "authorizedAgentIds": [],
+        "quantities": {}
+      },
+      {
+        "id": "bob-bag",
+        "ownerType": "agent",
+        "ownerId": "bob",
+        "visibility": "private",
+        "authorizedAgentIds": [],
+        "quantities": {}
+      },
+      {
+        "id": "sara-bag",
+        "ownerType": "agent",
+        "ownerId": "sara",
+        "visibility": "private",
+        "authorizedAgentIds": [],
+        "quantities": {}
+      },
+      {
+        "id": "walter-bag",
+        "ownerType": "agent",
+        "ownerId": "walter",
+        "visibility": "private",
+        "authorizedAgentIds": [],
+        "quantities": {}
+      },
+      {
+        "id": "mckee-bag",
+        "ownerType": "agent",
+        "ownerId": "mckee",
+        "visibility": "private",
+        "authorizedAgentIds": [],
+        "quantities": {}
+      }
+    ],
+    "events": [
+      {
+        "id": "morning",
+        "atMinute": 480,
+        "intervalMinutes": 1440,
+        "occurrences": 7,
+        "affectedAgentIds": [
+          "bob",
+          "sara",
+          "walter",
+          "mckee"
+        ],
+        "observation": "The morning bell rings.",
+        "wake": true
+      },
+      {
+        "id": "food-delivery",
+        "atMinute": 540,
+        "intervalMinutes": 1440,
+        "occurrences": 7,
+        "inventoryId": "supply-food",
+        "itemId": "food",
+        "quantityDelta": 8,
+        "locationId": "supply",
+        "affectedAgentIds": [],
+        "observation": "Eight food portions were delivered to the supply room.",
+        "wake": true
+      }
+    ],
+    "observationPolicy": "local",
+    "communicationPolicy": "local",
+    "schedulingMode": "event_driven"
+  }
+}
