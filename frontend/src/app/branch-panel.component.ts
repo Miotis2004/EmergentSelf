@@ -11,7 +11,7 @@ export class BranchPanelComponent implements OnInit {
  branchId='';sourceMode='snapshot';sourceId='';actor='';reason='';maxTurns=100;
  overrideModel=false;baseUrl='http://127.0.0.1:8080/v1';model='';modelVersion='';models:{id:string}[]=[];
  operations:any[]=[];kind='withhold';agentId='';entryIds='';donorSnapshotId='';donorAgentId='';otherAgentId='';otherEntryIds='';relationshipMap='';otherRelationshipMap='';
- fromBranchId='';operationIndex=0;statKey='';statValue=5;historyMode='clear';
+ fromBranchId='';operationIndex=0;statKey='';statValue=5;historyMode='clear';operationalOperations='[]';
  selectedBranch='';saved:any=null;probeId='';postTurnIndex=-1;modelPolicy='same_branch';contextPolicy='isolated';pair:any=null;
  busy=false;error='';message='';
  constructor(private experiments:ExperimentService){}
@@ -27,7 +27,8 @@ export class BranchPanelComponent implements OnInit {
   const ids=(value:string)=>value.split(/\s+/).filter(Boolean);
   const mapping=(value:string)=>value.trim()?JSON.parse(value):{};
   let op:any={kind:this.kind};
-  if(['withhold','restore','transplant','swap','attributes'].includes(this.kind))op.agentId=this.agentId;
+  if(this.kind==='operational'){op.operations=JSON.parse(this.operationalOperations);if(!Array.isArray(op.operations))throw new Error('Expected operation array');}
+  if(['withhold','restore','transplant','swap','attributes','operational'].includes(this.kind))op.agentId=this.agentId;
   if(['withhold','restore','transplant','swap'].includes(this.kind))op.entryIds=ids(this.entryIds);
   if(this.kind==='restore'||this.kind==='reverse')op={...op,fromBranchId:this.fromBranchId,operationIndex:this.operationIndex};
   if(this.kind==='transplant')op={...op,donorSnapshotId:this.donorSnapshotId,donorAgentId:this.donorAgentId,relationshipMap:mapping(this.relationshipMap)};
@@ -35,7 +36,7 @@ export class BranchPanelComponent implements OnInit {
   if(this.kind==='attributes')op.values={[this.statKey]:this.statValue};
   if(this.kind==='history')op={...op,mode:this.historyMode,...(this.historyMode==='replace'?{donorSnapshotId:this.donorSnapshotId}:{})};
   this.operations=[...this.operations,op];
- }catch{this.error='Subject mappings must be JSON objects containing participant IDs.';}}
+ }catch{this.error=this.kind==='operational'?'Operational interventions must be a JSON array of operations.':'Subject mappings must be JSON objects containing participant IDs.';}}
  removeOperation(index:number){if(!this.busy&&!this.running)this.operations=this.operations.filter((_,i)=>i!==index);}
  create(){this.act('POST','',{branchId:this.branchId,...(this.sourceMode==='snapshot'?{sourceSnapshotId:this.sourceId}:{sourceBranchId:this.sourceId}),
   operations:structuredClone(this.operations),actor:this.actor,reason:this.reason,maxTurns:this.maxTurns,

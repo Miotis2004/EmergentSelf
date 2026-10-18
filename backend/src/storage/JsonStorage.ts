@@ -1,3 +1,4 @@
+import {validateOperationalState} from '../operations/state';
 import fs from 'fs/promises';
 import path from 'path';
 import { WorkingState, importLegacy } from '../memory/types';
@@ -146,6 +147,7 @@ export class JsonStorage {
 
     async createClone(agentId: string, state: WorkingState): Promise<void> {
         if (state.identity.id !== agentId) throw new Error('Invalid clone identity');
+        validateOperationalState(state.operational);
         validateStartingDemeanor(state.identity.startingDemeanor);
         const dir = this.getAgentDir(agentId);
         await this.ensureDir(path.dirname(dir));
@@ -156,6 +158,7 @@ export class JsonStorage {
 
     async saveWorkingState(agentId: string, state: WorkingState): Promise<void> {
         if (state.identity.id !== agentId || state.schemaVersion !== 2) throw new Error('Invalid working state identity/version');
+        validateOperationalState(state.operational);
         await this.assertDemeanorUnchanged(agentId, state.identity);
         const dir = this.getAgentDir(agentId);
         await this.ensureDir(dir);

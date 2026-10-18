@@ -6,6 +6,7 @@ export interface ExperimentConfig {
     runId: string;
     agentIds: string[];
     initialTopic?: string;
+    operationalConfig?: any;
     memoryConfig?: Record<string, string | number>;
     socialConfig?: any;
     taskConfig?: any;

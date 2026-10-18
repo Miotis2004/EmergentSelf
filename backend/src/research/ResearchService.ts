@@ -1,3 +1,4 @@
+import {resolveOperational, operationalContext, operationalInstructions} from '../operations/state';
 import { ParticipantIdentity } from '../memory/operationGuide';
 import { compactTurn, inheritedContext } from '../branches/context';
 import { verifiedBranch } from '../branches/interventions';
@@ -67,6 +68,7 @@ export class ResearchService {
             const models = await new LlmAdapter(llmConfig).getModels();
             if (!models.some(model => model.id === llmConfig.model)) throw new Error('Selected model is not loaded');
             const memoryConfig = resolveMemoryConfig(input.memoryConfig);
+            const operational = resolveOperational(input.operationalConfig);
             const environment = resolveEnvironment(input);
             const states: Record<string, WorkingState> = Object.create(null);
             let source: any = {sourceRunId:null,sourceTurnIndex:null};
@@ -79,7 +81,7 @@ export class ResearchService {
             const snapshotId = `${templateId}-start`; id(snapshotId);
             const protocol = normalizeProtocol({...input.protocol, stateScope:'trial', snapshotId, initialStateHash:hash(states),templateId},memoryConfig.mode);
             if (protocol.attributeMode === 'role' && input.agentIds.some(agentId => !Object.hasOwn(protocol.roles, agentId))) throw new Error('Each participant requires a role description');
-            const { runId, ...configuration } = { ...input, agentIds:[...input.agentIds], initialTopic:normalizeInitialTopic(input.initialTopic), llmConfig, memoryConfig, ...((input.socialConfig || input.taskConfig || input.feedbackConfig) ? environment : {}), protocol };
+            const { runId, ...configuration } = { ...input, ...(input.operationalConfig === undefined ? {} : {operationalConfig:operational}), agentIds:[...input.agentIds], initialTopic:normalizeInitialTopic(input.initialTopic), llmConfig, memoryConfig, ...((input.socialConfig || input.taskConfig || input.feedbackConfig) ? environment : {}), protocol };
             const template = {schemaVersion:3,templateId,createdAt:new Date().toISOString(),configuration,configurationHash:hash(configuration)};
             // Snapshot-first failures leave an explicit artifact, never overwrite data.
             await this.saveSnapshot(snapshotId,states,source);
@@ -156,22 +158,26 @@ export class ResearchService {
                 const participant = id === agentId ? sourceState : (await this.logs.memoryHistory(runId,id,turnIndex)).state;
                 participants.push({id,name:participant.identity.name});
             }
+            const opConfig=resolveOperational(config.operationalConfig), otherStates=[];
+            if(opConfig.enabled&&opConfig.observationPolicy==='co_located')for(const id of config.agentIds)if(id!==agentId)otherStates.push((await this.logs.memoryHistory(runId,id,turnIndex)).state);
+            const opContext=opConfig.enabled?operationalContext(state,opConfig,otherStates):undefined;
             const probeSessionId=randomUUID();
             const messages: {role:string;content:string}[]=[];
             const results:any[]=[];
             for (const [probeTurn,prompt] of definition.prompts.entries()) {
                 // Dedicated probe conversation: no main transcript and no state writes.
                 const rendered=renderProtocol(state,resolveMemoryConfig(config.memoryConfig),protocol,options.historyOverride??[],prompt,participants);
+                if(opContext)rendered.system+=operationalInstructions(opContext)+'\nThis research probe is read-only: operational proposals are recorded but never applied.';
                 messages.push({role:'user',content:prompt});
                 const record:any={schemaVersion:3,id:randomUUID(),probeSessionId,probeId,probeHash:definition.promptHash,runId,agentId,
                     turnIndex,probeTurn,actor,reason,configHash:hash(config),timestamp:new Date().toISOString(),
-                    prompt:{system:rendered.system,messages:structuredClone(messages)},retrieval:rendered.retrieval,sourceStateHash:hash(sourceState),stateHash:hash(state),probeContextHash:hash(options.historyOverride??[]),memoryPolicy:'read-only',llmConfig:options.llmOverride??config.llmConfig,
+                    prompt:{system:rendered.system,messages:structuredClone(messages)},retrieval:rendered.retrieval,sourceStateHash:hash(sourceState),stateHash:hash(state),probeContextHash:hash(options.historyOverride??[]),memoryPolicy:'read-only',...(opContext?{operationalContext:opContext,operationalPolicy:'read-only'}:{}),llmConfig:options.llmOverride??config.llmConfig,
                     ...(options.comparison?{comparison:options.comparison}:{}),
                     ...(options.benchmark?{benchmark:{...options.benchmark,final:probeTurn===definition.prompts.length-1}}:{})};
                 adapter.lastParsedResponse=undefined; adapter.lastRequest=undefined; adapter.lastRawContent=undefined; adapter.lastDiagnostics=undefined; adapter.lastValidation=undefined;
                 try {
                     if(rendered.system.length+messages.reduce((n,m)=>n+m.content.length,0)>protocol.inputCharLimit) throw new Error('Probe exceeds the recorded input character limit');
-                    const response=await adapter.generateTurn(rendered.system,messages,protocol.inputCharLimit);
+                    const response=await adapter.generateTurn(rendered.system,messages,protocol.inputCharLimit,false,false,opConfig.enabled);
                     Object.assign(record,{status:'success',request:adapter.lastRequest,rawResponse:adapter.lastRawContent,response,llmValidation:adapter.lastValidation,diagnostics:adapter.lastDiagnostics});
                     messages.push({role:'assistant',content:response.response});
                 } catch(error) {

@@ -59,6 +59,11 @@
                 <strong>Starting Demeanor:</strong> {{demeanorLabel(demeanor.type)}}<br>
                 <small>{{demeanor.description}}</small>
             </p>
+            <div *ngIf="operationalFor(a.id) as operational" class="agent-operational">
+                <strong>Location:</strong> {{operational.location.name}}<br>
+                <strong>Current Action:</strong> {{operational.action.description}}<br>
+                {{operational.action.type}} / {{operational.action.status}} (unverified outcome)
+            </div>
             <label class="participation-choice">
                 <input type="checkbox" [ngModel]="selectedAgentIds.has(a.id)"
                     (ngModelChange)="setAgentIncluded(a.id, $event)" [disabled]="configurationLocked">
@@ -155,6 +160,7 @@
             </details>
         </fieldset>
 
+        <app-operational-controls [config]="operationalConfig" [locked]="configurationLocked"></app-operational-controls>
         <app-publication-panel [running]="experimentStatus === 'running'"></app-publication-panel>
         <app-branch-panel [running]="experimentStatus === 'running'"></app-branch-panel>
         <app-social-controls [social]="socialConfig" [task]="taskConfig" [feedback]="feedbackConfig" [locked]="configurationLocked" [running]="experimentStatus === 'running'" [runId]="savedAgentIds ? runId : ''" (recorded)="handleServerEvent({type:'environment_event',data:$event})"></app-social-controls>
@@ -172,7 +178,14 @@
                         {{turn.turnRecord.timestamp | date:'mediumTime'}}
                     </span>
                 </div>
-                <div class="turn-content">{{turn.turnRecord.response}}</div>
+                <div class="turn-content">{{turn.turnRecord.response || (turn.turnRecord.turnKind ? 'Speech: None (intentional)' : '')}}</div>
+                <div *ngIf="turn.turnRecord.operationalState as operational" class="turn-operational">
+                    <strong>{{turn.turnRecord.turnKind}}</strong><br>
+                    Location: {{operational.location.name}}<br>
+                    Action: {{operational.action.description}} ({{operational.action.type}} / {{operational.action.status}})<br>
+                    Outcome remains unverified.
+                </div>
+                <div *ngFor="let audit of turn.turnRecord.operationalAudit">{{audit.status}}: {{audit.operation | json}}</div>
             </div>
 
             <div *ngIf="activeTurnAgent" style="padding: 10px; font-style: italic; color: #666;">
@@ -203,6 +216,9 @@
                         </div>
                         <i style="color: #666;">"{{op.operation.reason}}"</i>
                     </div>
+                </div>
+                <div *ngFor="let audit of evt.operationalAudit" class="operational-audit">
+                    {{audit.status}}: {{audit.operation | json}} <span *ngIf="audit.error">{{audit.error}}</span>
                 </div>
                 <div *ngIf="evt.type !== 'memory_update'">
                     {{ evt | json }}

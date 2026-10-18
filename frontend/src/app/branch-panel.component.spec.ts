@@ -17,6 +17,11 @@ describe('Phase VI branches and interventions',()=>{
   expect(service.branches).toHaveBeenCalledWith('POST','',{branchId:'new-branch',sourceSnapshotId:'point',operations:[{kind:'withhold',agentId:'bob',entryIds:['a','b']}],actor:'R',reason:'Controlled change',maxTurns:12});
   expect(service.branches.calls.allArgs().some((a:any[])=>a[1].endsWith('/start'))).toBeFalse();
  });
+ it('records operational interventions explicitly and rejects malformed arrays',()=>{
+  panel.kind='operational';panel.agentId='bob';panel.operationalOperations='[{"action":"set_location","location_id":"garden","reason":"Intervention"}]';panel.addOperation();
+  expect(panel.operations[0]).toEqual({kind:'operational',agentId:'bob',operations:[{action:'set_location',location_id:'garden',reason:'Intervention'}]});
+  panel.operationalOperations='{}';panel.addOperation();expect(panel.operations.length).toBe(1);expect(panel.error).toContain('JSON array');
+ });
  it('builds reversible memory, attribute, swap and history operations in explicit order',()=>{
   panel.kind='attributes';panel.agentId='bob';panel.statKey='curiosity';panel.statValue=8;panel.addOperation();
   panel.kind='history';panel.historyMode='clear';panel.addOperation();panel.kind='reverse';panel.fromBranchId='source-branch';panel.operationIndex=1;panel.addOperation();

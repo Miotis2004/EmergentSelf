@@ -13,7 +13,7 @@
    <label>Loaded model <input list="branch-models" [(ngModel)]="model"></label><label>Model version / weight hash (or explicit unverified declaration) <input [(ngModel)]="modelVersion"></label>
   </div>
   <fieldset><legend>Ordered interventions (leave empty for a control clone)</legend>
-   <label>Intervention <select [(ngModel)]="kind"><option value="withhold">Withhold selected memories</option><option value="restore">Restore withheld memories</option><option value="transplant">Transplant from donor snapshot</option><option value="swap">Swap selected memories</option><option value="attributes">Change current numeric attribute</option><option value="history">Change conversational history only</option><option value="reverse">Reverse a recorded intervention</option></select></label>
+   <label>Intervention <select [(ngModel)]="kind"><option value="withhold">Withhold selected memories</option><option value="restore">Restore withheld memories</option><option value="transplant">Transplant from donor snapshot</option><option value="swap">Swap selected memories</option><option value="operational">Change recorded operational state</option><option value="attributes">Change current numeric attribute</option><option value="history">Change conversational history only</option><option value="reverse">Reverse a recorded intervention</option></select></label>
    <label *ngIf="kind !== 'history' && kind !== 'reverse'">Target agent ID <input [(ngModel)]="agentId"></label>
    <label *ngIf="['withhold','restore','transplant','swap'].includes(kind)">Selected active entry IDs (whitespace separated) <textarea [(ngModel)]="entryIds"></textarea></label>
    <div *ngIf="kind === 'restore' || kind === 'reverse'"><label>Branch containing the original intervention <input list="branch-ids" [(ngModel)]="fromBranchId"></label><label>Original operation index (starts at 0) <input type="number" min="0" [(ngModel)]="operationIndex"></label></div>
@@ -24,6 +24,7 @@
     <label>Mapping into target agent (JSON object, optional) <textarea [(ngModel)]="relationshipMap" placeholder='{"bob":"sara"}'></textarea></label>
     <label *ngIf="kind === 'swap'">Mapping into other participant (JSON object, optional) <textarea [(ngModel)]="otherRelationshipMap"></textarea></label>
    </details>
+   <div *ngIf="kind === 'operational'"><label>Operational operations (JSON array) <textarea [(ngModel)]="operationalOperations"></textarea></label><p>Uses the source run location registry; creates an explicit, reversible branch intervention without verified outcomes.</p></div>
    <div *ngIf="kind === 'attributes'"><label>Existing stat key <input [(ngModel)]="statKey"></label><label>Current value (0–10) <input type="number" min="0" max="10" [(ngModel)]="statValue"></label><p>Initial stats remain immutable. Requires structured memory and numeric/arbitrary attribute presentation.</p></div>
    <label *ngIf="kind === 'history'">History operation <select [(ngModel)]="historyMode"><option value="clear">Clear inherited conversation</option><option value="replace">Replace with donor snapshot context</option></select></label>
    <button (click)="addOperation()" [disabled]="operations.length >= 20">Add intervention</button>

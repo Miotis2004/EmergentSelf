@@ -560,3 +560,13 @@ No additional dependencies or services are required. Capture a historical snapsh
 ## Phase VII synthesis and publication artifacts
 
 No additional dependencies or services are required. A full checkout (including `examples/phase-vii`) supports code/archive provenance. Use **Research synthesis & publication readiness** after preparing trial batches/branches. [PHASE_VII.md](PHASE_VII.md) documents prospective registration, local-model replication, private/aggregate packages and offline reconstruction. `npm run example:publication --prefix backend -- --check` validates the anonymous synthetic example without inference.
+
+## Location, action and operational state
+
+New runs can enable **Location & activity**, define up to 30 named destinations,
+and choose own-state-only or explicit recorded co-location observations. Saved run
+configuration stays locked. Silent action and continuation turns are supported;
+completed statuses remain agent-reported and unverified. Older runs omit this
+feature and keep their original contract. See [OPERATIONS.md](OPERATIONS.md) for
+response schemas, atomic validation, state-scope and snapshot compatibility, audit
+provenance, branch interventions, and the recommended local garden experiment.

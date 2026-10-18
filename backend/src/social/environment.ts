@@ -30,6 +30,7 @@ export function validateDecision(response:any,config:any,agentId:string){
     const {socialConfig:social,taskConfig:task}=resolveEnvironment(config);
     if(!social.enabled){if(response.social!==undefined||response.task_decision!==undefined)throw new ProtocolError('Social decisions are disabled in this experiment');return;}
     if(!response.social||!['speak','decline'].includes(response.social.action))throw new ProtocolError('Social runs require an explicit speak or decline decision');
+    if(config.operationalConfig?.enabled && response.response === '' && response.social.action === 'speak')throw new ProtocolError('Silent operational turns must explicitly decline speech and abstain from the social task');
     const recipient=response.social.recipient_id;
     if(recipient!==null&&(!config.agentIds.includes(recipient)||recipient===agentId))throw new ProtocolError('Recipient must be another selected participant or null for all');
     if(response.social.action==='decline'&&(response.response!==''||recipient!==null||response.memory_operations.length||response.task_decision!==undefined))throw new ProtocolError('Decline requires empty response, no recipient, no memory operations and no task decision');
@@ -44,6 +45,7 @@ export function socialInstructions(config:any,turnIndex:number){
         result+=`Task rule v1: ${task.kind}, round ${Math.floor(turnIndex/config.agentIds.length)}. Each participant chooses once per round, sequentially. Supply task_decision.amount as an integer from 0 to ${task.endowment}. Declining explicitly abstains and scores zero. Decisions are settled only after all participants have a scheduled turn. Structured amounts are not disclosed before settlement, although speech can reveal them.\n`;
         result+=task.kind==='public_goods'?`Amount is a contribution. For active players, net score = ${task.multiplier} * sum(contributions) / ${config.agentIds.length} - own contribution. Abstainers receive zero; the divisor includes all selected participants.\n`:`Amount is a bid. For active players, net score = -own bid + (${task.prize} / number of highest bidders if own bid is highest; otherwise 0). Tied highest bidders split the prize, including ties at zero.\n`;
     }
+    if(config.operationalConfig?.enabled)result+='Silent action-only or continuation turns use social.action decline (task abstention), response empty, recipient null, memory_operations empty; operational_operations may still change your own state.\n';
     return result;
 }
 export function dueTurn(feedback:FeedbackConfig,afterTurn:number){return afterTurn+1+(feedback.timing==='delayed'?feedback.delayTurns:0);}

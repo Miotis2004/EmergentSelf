@@ -1,3 +1,4 @@
+import {OperationalControlsComponent} from './operational-controls.component';
 import { Component, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewChecked } from '@angular/core';
 import { PublicationPanelComponent } from './publication-panel.component';
 import { BranchPanelComponent } from './branch-panel.component';
@@ -15,7 +16,7 @@ import { Subscription } from 'rxjs';
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, FormsModule, MemoryInspectorComponent, ResearchPanelComponent, AnalysisPanelComponent, RouterOutlet, SocialControlsComponent, BranchPanelComponent, PublicationPanelComponent],
+  imports: [OperationalControlsComponent, CommonModule, FormsModule, MemoryInspectorComponent, ResearchPanelComponent, AnalysisPanelComponent, RouterOutlet, SocialControlsComponent, BranchPanelComponent, PublicationPanelComponent],
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.css']
 })
@@ -28,6 +29,10 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
   selectedAgentIds = new Set<string>();
   savedAgentIds: string[] | null = null;
   initialTopic = '';
+  operationalConfig:any={enabled:true,locations:[],observationPolicy:'self_only'};
+  operationalStates:Record<string,any>={};
+  operationalFor(id:string){return this.operationalStates[id] ?? this.availableAgents.find(a=>a.id===id)?.operationalState;}
+
   socialConfig = {enabled:false};
   taskConfig = {kind:'none',endowment:10,multiplier:1.5,prize:20};
   feedbackConfig = {enabled:false,source:'researcher',timing:'immediate',delayTurns:1,visibility:'private',positiveScore:1,negativeScore:-1,maxVisible:20};
@@ -54,7 +59,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
 
   get researchConfiguration() {
       return {runId:this.runId,agentIds:this.savedAgentIds ? [...this.savedAgentIds] : this.nextParticipantIds,initialTopic:this.initialTopic,
-          socialConfig:{...this.socialConfig},taskConfig:{...this.taskConfig},feedbackConfig:{...this.feedbackConfig},maxTurns:this.maxTurns,memoryConfig:{...this.memoryConfig},llmConfig:{baseUrl:this.llmBaseUrl,model:this.selectedModel,maxTokens:this.maxTokens,outputMode:this.outputMode}};
+          operationalConfig:structuredClone(this.operationalConfig),socialConfig:{...this.socialConfig},taskConfig:{...this.taskConfig},feedbackConfig:{...this.feedbackConfig},maxTurns:this.maxTurns,memoryConfig:{...this.memoryConfig},llmConfig:{baseUrl:this.llmBaseUrl,model:this.selectedModel,maxTokens:this.maxTokens,outputMode:this.outputMode}};
   }
 
   get configurationLocked(): boolean { return this.requestPending || this.experimentStatus !== 'idle'; }
@@ -218,7 +223,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
           runId: this.runId,
           agentIds,
           initialTopic,
-          socialConfig:{...this.socialConfig},taskConfig:{...this.taskConfig},feedbackConfig:{...this.feedbackConfig},
+          operationalConfig:structuredClone(this.operationalConfig),socialConfig:{...this.socialConfig},taskConfig:{...this.taskConfig},feedbackConfig:{...this.feedbackConfig},
           memoryConfig: { ...this.memoryConfig },
           maxTurns: this.maxTurns,
           llmConfig: {
@@ -269,6 +274,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
           this.socialConfig = {enabled:false,...state.config.socialConfig};
           this.taskConfig = {kind:'none',endowment:10,multiplier:1.5,prize:20,...state.config.taskConfig};
           this.feedbackConfig = {enabled:false,source:'researcher',timing:'immediate',delayTurns:1,visibility:'private',positiveScore:1,negativeScore:-1,maxVisible:20,...state.config.feedbackConfig};
+          this.operationalConfig=structuredClone(state.config.operationalConfig ?? {enabled:false,locations:[],observationPolicy:'self_only'});
           this.initialTopic = state.config.initialTopic ?? '';
           this.memoryConfig = { ...this.defaultMemoryConfig, ...state.config.memoryConfig };
           this.runId = state.config.runId;
@@ -279,6 +285,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
           this.outputMode = state.config.llmConfig.outputMode;
       } else {
           this.savedAgentIds = null;
+          this.operationalStates={};
       }
   }
 
@@ -288,12 +295,15 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
           this.applyState(event.data);
           this.turns = event.data.turns.map((turn: any) => ({ turnRecord: turn, auditTrail: turn.auditTrail || [] }));
           this.auditEvents = event.data.events;
+          this.operationalStates={...(event.data.operationalStates??{})};
+          for(const turn of event.data.turns)if(turn.operationalState)this.operationalStates[turn.agentId]=turn.operationalState;
       } else if (event.type === 'status_changed') {
           this.applyState(event.data);
       } else if (event.type === 'turn_started') {
           this.activeTurnAgent = event.data.agentId;
       } else if (event.type === 'turn_completed') {
           this.activeTurnAgent = null;
+          if(event.data.turnRecord.operationalState)this.operationalStates[event.data.turnRecord.agentId]=event.data.turnRecord.operationalState;
           if (!this.turns.some(t => t.turnRecord.turnIndex === event.data.turnRecord.turnIndex)) {
               this.turns.push(event.data);
               this.turns.sort((a, b) => a.turnRecord.turnIndex - b.turnRecord.turnIndex);

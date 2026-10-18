@@ -1,3 +1,4 @@
+import {OperationalConfig, OperationalError, resolveOperational, prepareOperational, operationalContext, operationalInstructions, currentOperational} from '../operations/state';
 import { memoryOperationGuide, participantDirectory, ParticipantIdentity } from '../memory/operationGuide';
 import { demeanorContext } from '../agents/startingDemeanor';
 import { inheritedContext } from '../branches/context';
@@ -20,6 +21,7 @@ export interface ExperimentConfig {
     agentIds: string[]; // Immutable participant order for the sequential scheduler.
     memoryConfig?: Partial<MemoryConfig>;
     protocol?: Partial<Protocol>;
+    operationalConfig?: Partial<OperationalConfig>;
     initialTopic?: string; // Legacy configurations omit this field.
     socialConfig?: Partial<SocialConfig>;
     taskConfig?: Partial<TaskConfig>;
@@ -88,7 +90,15 @@ export class ExperimentController {
         const state = this.getState();
         const turns = runId ? await this.jsonlStorage.getConversationHistory(runId) : [];
         const events = runId ? [...await this.jsonlStorage.getEventHistory(runId), ...await this.jsonlStorage.readResearch(runId, 'feedback')] : [];
-        return { ...state, turns, events };
+        const operationalStates:Record<string,any>={};
+        let baseline:any;
+        if(runId)try{baseline=await this.jsonlStorage.loadBaseline(runId);}catch(error:any){if(error.code!=='ENOENT')throw error;}
+        for(const id of this.config?.agentIds??[]){
+            const last=[...turns].reverse().find(turn=>turn.agentId===id);
+            const saved=last ? (last.stateAfter ?? {}) : (baseline?.states[id] ?? await this.activeStorage.loadWorkingState(id));
+            operationalStates[id]=currentOperational(saved);
+        }
+        return { ...state, turns, events, operationalStates };
     }
     notifyEnvironmentEvent(event:any) {
         this.assertResearchLease();
@@ -141,6 +151,7 @@ export class ExperimentController {
             if (!/^[A-Za-z0-9_-]+$/.test(config.runId) || !Number.isSafeInteger(config.maxTurns) || config.maxTurns < 1 ||
                 !Array.isArray(config.agentIds) || config.agentIds.length < 2 || new Set(config.agentIds).size !== config.agentIds.length ||
                 !config.agentIds.every(id => typeof id === 'string' && /^[A-Za-z0-9_-]+$/.test(id))) throw new Error('Invalid run ID, agent IDs or turn limit');
+            const operational = resolveOperational(config.operationalConfig);
             const environment = resolveEnvironment(config);
             const initialTopic = normalizeInitialTopic(config.initialTopic);
             const memoryConfig = resolveMemoryConfig(config.memoryConfig);
@@ -187,7 +198,7 @@ export class ExperimentController {
                     if (protocol.initialStateHash && protocol.initialStateHash !== initialHash) throw new Error('Shared starting-state hash mismatch');
                     protocol.initialStateHash = initialHash;
                 }
-                const resolved = { ...config, agentIds: [...config.agentIds], initialTopic, llmConfig, memoryConfig, ...((config.socialConfig || config.taskConfig || config.feedbackConfig) ? environment : {}), ...(protocol ? { protocol } : {}) };
+                const resolved = { ...config, ...(config.operationalConfig === undefined ? {} : {operationalConfig:operational}), agentIds: [...config.agentIds], initialTopic, llmConfig, memoryConfig, ...((config.socialConfig || config.taskConfig || config.feedbackConfig) ? environment : {}), ...(protocol ? { protocol } : {}) };
                 if (existing && !isDeepStrictEqual({ ...existing, initialTopic: normalizeInitialTopic(existing.initialTopic), memoryConfig: resolveMemoryConfig(existing.memoryConfig), ...resolveEnvironment(existing) }, { ...resolved, ...environment })) throw new Error('Run ID already has different metadata; use a new run ID to change participants, topic, model or settings');
                 const history = await this.jsonlStorage.getConversationHistory(config.runId);
                 const events = [...await this.jsonlStorage.getEventHistory(config.runId), ...await this.jsonlStorage.readResearch(config.runId,'feedback')];
@@ -210,7 +221,7 @@ export class ExperimentController {
                 this.lastError = null;
                 if (this.currentTurnIndex < config.maxTurns) await this.recordControl(existing ? 'restart' : 'start');
                 this.status = this.currentTurnIndex >= config.maxTurns ? 'completed' : 'running';
-                this.emit('snapshot', { ...this.getState(), turns: history, events });
+                this.emit('snapshot', await this.getSnapshot());
                 this.publishStatus();
                 if (this.status === 'running') this.launchLoop();
                 else await this.jsonlStorage.releaseWriter(this.writerId);
@@ -285,7 +296,7 @@ export class ExperimentController {
                 this.lastError = {
                     id: randomUUID(), type: 'experiment_error', runId: this.config.runId,
                     turnIndex: error instanceof TurnProjectionError ? this.currentTurnIndex - 1 : this.currentTurnIndex, agentId,
-                    message: (error instanceof LlmError || error instanceof MemoryValidationError || error instanceof ProtocolError || error instanceof TurnProjectionError) ? error.message : 'Turn execution failed; check backend storage and configuration',
+                    message: (error instanceof LlmError || error instanceof MemoryValidationError || error instanceof OperationalError || error instanceof ProtocolError || error instanceof TurnProjectionError) ? error.message : 'Turn execution failed; check backend storage and configuration',
                     ...(error instanceof LlmError ? { diagnostics: error.diagnostics } : {}),
                     timestamp: new Date().toISOString()
                 };
@@ -351,19 +362,31 @@ ${transcript || '(No conversation supplied)'}${memoryOperationGuide(config)}${pa
     private async executeTurn(agentId: string) {
         this.emit('turn_started', { agentId, turnIndex: this.currentTurnIndex });
         const prompt = await this.buildPrompt(agentId);
+        const opConfig = resolveOperational(this.config!.operationalConfig);
+        if(opConfig.enabled && !(this.currentTurnIndex === 0 && this.config!.initialTopic) &&
+            (!this.config!.protocol?.turnPrompt || this.config!.protocol.turnPrompt === 'It is your turn to speak, {name}.')) {
+            prompt.messages[0].content=`It is your turn to choose speech, an action, or silent continuation, ${prompt.state.identity.name}.`;
+        }
+        const observedStates = [];
+        if(opConfig.enabled && opConfig.observationPolicy === 'co_located') for(const id of this.config!.agentIds) if(id !== agentId) observedStates.push(await this.activeStorage.loadWorkingState(id));
+        const opContext = opConfig.enabled ? operationalContext(prompt.state,opConfig,observedStates) : undefined;
+        if(opContext) prompt.system += operationalInstructions(opContext);
         const environment = resolveEnvironment(this.config!);
         const pastEvents = [...await this.jsonlStorage.getEventHistory(this.config!.runId), ...await this.jsonlStorage.readResearch(this.config!.runId, 'feedback')];
         const feedback = visibleFeedback(this.config!, agentId, this.currentTurnIndex, pastEvents);
         prompt.system += socialInstructions(this.config!, this.currentTurnIndex) + feedbackContext(feedback);
         (prompt.retrieval as any).feedbackIds = feedback.map(event=>event.id);
-        this.currentAttempt = { startedAt: new Date().toISOString(), prompt: { system: prompt.system, messages: prompt.messages }, retrieval: prompt.retrieval };
+        this.currentAttempt = { startedAt: new Date().toISOString(), prompt: { system: prompt.system, messages: prompt.messages }, retrieval: prompt.retrieval, ...(opContext ? {operationalContext:opContext} : {}) };
         this.llmAdapter.updateConfig(this.config!.llmConfig);
-        const response = await this.llmAdapter.generateTurn(prompt.system, prompt.messages, this.config!.protocol?.inputCharLimit, environment.socialConfig.enabled, environment.taskConfig.kind !== 'none');
+        const response = await this.llmAdapter.generateTurn(prompt.system, prompt.messages, this.config!.protocol?.inputCharLimit, environment.socialConfig.enabled, environment.taskConfig.kind !== 'none', opConfig.enabled);
         this.currentAttempt.parsedResponse = response;
         validateDecision(response, this.config!, agentId);
         const eventId = randomUUID();
         const config = resolveMemoryConfig(this.config!.memoryConfig);
-        const prepared = this.memoryManager.prepareOperations(prompt.state, response.memory_operations, {
+        const operational = prepareOperational(prompt.state,response.operational_operations ?? [],opConfig,{runId:this.config!.runId,turnIndex:this.currentTurnIndex,eventId});
+        if(opConfig.enabled)this.currentAttempt.operationalAudit=operational.audit;
+        if(operational.error)throw new OperationalError(operational.error);
+        const prepared = this.memoryManager.prepareOperations(operational.state, response.memory_operations, {
             source: { runId: this.config!.runId, turnIndex: this.currentTurnIndex, eventId },
             participants: this.config!.agentIds, config
         });
@@ -371,6 +394,8 @@ ${transcript || '(No conversation supplied)'}${memoryOperationGuide(config)}${pa
             schemaVersion: 2, eventId, stateScope: this.config!.protocol?.stateScope ?? 'shared', configHash: this.configHash, runId: this.config!.runId,
             turnIndex: this.currentTurnIndex, agentId, agentName: prompt.state.identity.name,
             ...(environment.socialConfig.enabled ? {social:response.social,taskDecision:response.task_decision} : {}),
+            ...(opConfig.enabled ? {operationalContext:opContext,operationalAudit:operational.audit,operationalState:currentOperational(prepared.state),
+                turnKind:response.response ? (operational.audit.length ? 'speech_and_action':'speech') : (operational.audit.length ? 'action_only':'intentional_noop')} : {}),
             environmentEvents: [] as any[],
             response: response.response, timestamp: new Date().toISOString(),
             auditTrail: prepared.auditTrail, stateBefore: prompt.state, stateAfter: prepared.state,

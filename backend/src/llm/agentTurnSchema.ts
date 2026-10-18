@@ -1,3 +1,4 @@
+import { operationalOperationsSchema } from '../operations/state';
 import Ajv from 'ajv';
 
 // Complete anyOf object variants work with llama.cpp constrained generation;
@@ -45,15 +46,17 @@ export const socialTurnSchema = {
 const {task_decision, ...socialOnlyProperties} = socialTurnSchema.properties;
 const socialOnlySchema = {...socialTurnSchema, properties:socialOnlyProperties};
 
-export function responseSchema(social = false, task = false) {
+function withOperational(schema:any) { return {...schema,properties:{...schema.properties,operational_operations:operationalOperationsSchema},required:[...schema.required,'operational_operations']}; }
+export function responseSchema(social = false, task = false, operational = false) {
     if (task && !social) throw new Error('Task output requires social capability');
-    return social ? (task ? socialTurnSchema : socialOnlySchema) : agentTurnSchema;
+    const schema = social ? (task ? socialTurnSchema : socialOnlySchema) : agentTurnSchema;
+    return operational ? withOperational(schema) : schema;
 }
 const ajv = new Ajv({ strict: false, strictNumbers: true });
-const validators = [ajv.compile(agentTurnSchema), ajv.compile(socialOnlySchema), ajv.compile(socialTurnSchema)];
+const validators = [agentTurnSchema,socialOnlySchema,socialTurnSchema].flatMap(schema=>[ajv.compile(schema),ajv.compile(withOperational(schema))]);
 
-export function validateAgentTurn(value: unknown, social = false, task = false): asserts value is import('./LlmAdapter').AgentTurnResponse {
-    const validate = validators[social ? (task ? 2 : 1) : 0];
+export function validateAgentTurn(value: unknown, social = false, task = false, operational = false): asserts value is import('./LlmAdapter').AgentTurnResponse {
+    const validate = validators[(social ? (task ? 2 : 1) : 0)*2+Number(operational)];
     if (!validate(value)) {
         // Explain reference-shape errors without exposing memory content in diagnostics.
         const operations = (value as any)?.memory_operations;
