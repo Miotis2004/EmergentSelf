@@ -1,3 +1,4 @@
+import {WorldConfig, WorldState, WorldError, assertWorldCompatible, schedule, resolveWorld, advanceWorld, nextAgent, nextWakeMinute, prepareWorld, worldContext, worldInstructions, visibleHistory} from '../world/simulation';
 import {OperationalConfig, OperationalError, resolveOperational, prepareOperational, operationalContext, operationalInstructions, currentOperational} from '../operations/state';
 import { memoryOperationGuide, participantDirectory, ParticipantIdentity } from '../memory/operationGuide';
 import { demeanorContext } from '../agents/startingDemeanor';
@@ -22,6 +23,7 @@ export interface ExperimentConfig {
     memoryConfig?: Partial<MemoryConfig>;
     protocol?: Partial<Protocol>;
     operationalConfig?: Partial<OperationalConfig>;
+    worldConfig?: Partial<WorldConfig>;
     initialTopic?: string; // Legacy configurations omit this field.
     socialConfig?: Partial<SocialConfig>;
     taskConfig?: Partial<TaskConfig>;
@@ -60,6 +62,7 @@ export class ExperimentController {
     private activeStorage: JsonStorage;
     private researchLease = false;
     private configHash = '';
+    private world:WorldState|undefined;
 
     constructor(jsonStorage: JsonStorage, jsonlStorage: JsonlStorage, llmAdapter: LlmAdapter) {
         this.jsonStorage = jsonStorage;
@@ -83,7 +86,7 @@ export class ExperimentController {
     getTurnIndex() { return this.currentTurnIndex; }
     getState() {
         return { status: this.status, config: this.getConfig(), currentTurnIndex: this.currentTurnIndex,
-            activeAgentId: this.activeAgentId, error: this.lastError };
+            activeAgentId: this.activeAgentId, error: this.lastError, ...(this.world?{worldState:structuredClone(this.world)}:{}) };
     }
     async getSnapshot() {
         const runId = this.config?.runId;
@@ -97,6 +100,7 @@ export class ExperimentController {
             const last=[...turns].reverse().find(turn=>turn.agentId===id);
             const saved=last ? (last.stateAfter ?? {}) : (baseline?.states[id] ?? await this.activeStorage.loadWorkingState(id));
             operationalStates[id]=currentOperational(saved);
+            if(this.world){const location=this.config!.operationalConfig!.locations!.find(l=>l.id===this.world!.positions[id]);if(location)operationalStates[id].location=structuredClone(location);}
         }
         return { ...state, turns, events, operationalStates };
     }
@@ -152,6 +156,7 @@ export class ExperimentController {
                 !Array.isArray(config.agentIds) || config.agentIds.length < 2 || new Set(config.agentIds).size !== config.agentIds.length ||
                 !config.agentIds.every(id => typeof id === 'string' && /^[A-Za-z0-9_-]+$/.test(id))) throw new Error('Invalid run ID, agent IDs or turn limit');
             const operational = resolveOperational(config.operationalConfig);
+            const worldConfig=resolveWorld(config.worldConfig,config.agentIds,operational);
             const environment = resolveEnvironment(config);
             const initialTopic = normalizeInitialTopic(config.initialTopic);
             const memoryConfig = resolveMemoryConfig(config.memoryConfig);
@@ -171,6 +176,7 @@ export class ExperimentController {
                     const snapshot = await this.jsonlStorage.loadArtifact('snapshots', protocol.snapshotId!);
                     if (hash(snapshot.states) !== snapshot.stateHash || protocol.initialStateHash !== snapshot.stateHash) throw new Error('Frozen starting snapshot hash mismatch');
                     if (!isDeepStrictEqual(Object.keys(snapshot.states).sort(), [...config.agentIds].sort())) throw new Error('Snapshot participant IDs differ from the run');
+                    if(snapshot.worldState&&worldConfig?.enabled)assertWorldCompatible(snapshot.worldState,worldConfig,config.agentIds,operational.locations.map(l=>l.id));
                     startingStates = snapshot.states;
                 }
                 if (protocol?.attributeMode === 'role' && config.agentIds.some(id => !Object.hasOwn(protocol.roles, id))) throw new Error('Each participant requires an explicit role description');
@@ -198,7 +204,7 @@ export class ExperimentController {
                     if (protocol.initialStateHash && protocol.initialStateHash !== initialHash) throw new Error('Shared starting-state hash mismatch');
                     protocol.initialStateHash = initialHash;
                 }
-                const resolved = { ...config, ...(config.operationalConfig === undefined ? {} : {operationalConfig:operational}), agentIds: [...config.agentIds], initialTopic, llmConfig, memoryConfig, ...((config.socialConfig || config.taskConfig || config.feedbackConfig) ? environment : {}), ...(protocol ? { protocol } : {}) };
+                const resolved = { ...config, ...(worldConfig?{worldConfig}:{}), ...(config.operationalConfig === undefined ? {} : {operationalConfig:operational}), agentIds: [...config.agentIds], initialTopic, llmConfig, memoryConfig, ...((config.socialConfig || config.taskConfig || config.feedbackConfig) ? environment : {}), ...(protocol ? { protocol } : {}) };
                 if (existing && !isDeepStrictEqual({ ...existing, initialTopic: normalizeInitialTopic(existing.initialTopic), memoryConfig: resolveMemoryConfig(existing.memoryConfig), ...resolveEnvironment(existing) }, { ...resolved, ...environment })) throw new Error('Run ID already has different metadata; use a new run ID to change participants, topic, model or settings');
                 const history = await this.jsonlStorage.getConversationHistory(config.runId);
                 const events = [...await this.jsonlStorage.getEventHistory(config.runId), ...await this.jsonlStorage.readResearch(config.runId,'feedback')];
@@ -209,10 +215,12 @@ export class ExperimentController {
                 }
                 if (history.length < config.maxTurns) {
                     const states: Record<string, Awaited<ReturnType<JsonStorage['loadWorkingState']>>> = Object.create(null);
-                    for (const id of config.agentIds) states[id] = await this.activeStorage.loadWorkingState(id);
+                    const worldBaseline=worldConfig?.enabled?await this.jsonlStorage.worldAt(config.runId):undefined;
+                    for (const id of config.agentIds) {states[id] = await this.activeStorage.loadWorkingState(id);if(worldBaseline){states[id].operational=currentOperational(states[id]);states[id].operational!.location=operational.locations.find(l=>l.id===worldBaseline.positions[id])!;}}
                     await this.jsonlStorage.ensureMemoryBaseline(config.runId, history.length - 1, states);
                 }
                 this.config = resolved;
+                this.world = await this.jsonlStorage.worldAt(config.runId);
                 this.configHash = hash(existing ?? resolved);
                 this.llmAdapter.updateConfig(llmConfig);
                 this.currentTurnIndex = history.length;
@@ -271,6 +279,7 @@ export class ExperimentController {
         await this.jsonlStorage.releaseWriter(this.writerId);
         this.status = 'idle';
         this.config = null;
+        this.world = undefined;
         this.currentTurnIndex = 0;
         this.activeAgentId = null;
         this.lastError = null;
@@ -282,9 +291,16 @@ export class ExperimentController {
     private async runLoop() {
         if (!this.config) return;
         while (this.status === 'running' && this.currentTurnIndex < this.config.maxTurns && !this.shouldPause && !this.shouldStop) {
-            const agentId = this.config.agentIds[this.currentTurnIndex % this.config.agentIds.length];
-            this.activeAgentId = agentId;
+            const agentId = this.world ? nextAgent(this.world,this.config.worldConfig as WorldConfig,this.config.agentIds,this.currentTurnIndex,resolveEnvironment(this.config).taskConfig.kind!=='none') : this.config.agentIds[this.currentTurnIndex % this.config.agentIds.length];
             try {
+                if(!agentId && this.world){
+                    const minute=nextWakeMinute(this.world,this.config.worldConfig as WorldConfig);
+                    if(minute===undefined){this.status='paused';this.shouldPause=true;this.publishStatus();break;}
+                    await this.commitWorldAdvance(minute,'scheduler');
+                    continue;
+                }
+                if(!agentId)break;
+                this.activeAgentId = agentId;
                 await this.executeTurn(agentId);
                 if (this.currentTurnIndex >= this.config.maxTurns && !this.shouldStop) {
                     await this.jsonlStorage.releaseWriter(this.writerId);
@@ -296,7 +312,8 @@ export class ExperimentController {
                 this.lastError = {
                     id: randomUUID(), type: 'experiment_error', runId: this.config.runId,
                     turnIndex: error instanceof TurnProjectionError ? this.currentTurnIndex - 1 : this.currentTurnIndex, agentId,
-                    message: (error instanceof LlmError || error instanceof MemoryValidationError || error instanceof OperationalError || error instanceof ProtocolError || error instanceof TurnProjectionError) ? error.message : 'Turn execution failed; check backend storage and configuration',
+                    ...(this.world?{simulationMinute:this.world.minute}:{}),
+                    message: (error instanceof LlmError || error instanceof MemoryValidationError || error instanceof OperationalError || error instanceof WorldError || error instanceof ProtocolError || error instanceof TurnProjectionError) ? error.message : 'Turn execution failed; check backend storage and configuration',
                     ...(error instanceof LlmError ? { diagnostics: error.diagnostics } : {}),
                     timestamp: new Date().toISOString()
                 };
@@ -316,8 +333,34 @@ export class ExperimentController {
         }
     }
 
+    private async commitWorldAdvance(minute:number,actor:string) {
+        if(!this.world||!this.config)throw new WorldError('World simulation is disabled');
+        const commitId=`${this.config.runId}:world:${this.world.revision+1}`;
+        const result=advanceWorld(this.world,this.config.worldConfig as WorldConfig,minute,this.config.agentIds,commitId);
+        const record={id:commitId,type:'world_checkpoint',beforeTurn:this.currentTurnIndex,actor,simulationMinute:minute,worldAfter:result.state,events:result.events};
+        await this.jsonlStorage.appendEvent(this.config.runId,record);
+        this.world=result.state;
+        for(const event of result.events)this.emit('environment_event',event);
+        this.publishStatus();
+    }
+    advanceTime(minute:number,actor:string,reason:string){return this.researchAction(async()=>{
+        if(typeof actor!=='string'||!actor.trim()||actor.length>200||typeof reason!=='string'||!reason.trim()||reason.length>4000)throw new WorldError('Researcher and advancement reason are required');
+        if(this.config)this.world=await this.jsonlStorage.worldAt(this.config.runId);
+        await this.commitWorldAdvance(minute,`${actor}: ${reason}`);
+        return this.getState();
+    });}
+    wakeAgent(agentId:string,actor:string,reason:string){return this.researchAction(async()=>{
+        if(!this.world||!this.config?.agentIds.includes(agentId)||typeof actor!=='string'||!actor.trim()||actor.length>200||typeof reason!=='string'||!reason.trim()||reason.length>4000)throw new WorldError('Select a world participant and record researcher/reason');
+        this.world=(await this.jsonlStorage.worldAt(this.config.runId))!;
+        const state=structuredClone(this.world);delete state.waits[agentId];(state.wakeReasons[agentId]??=[]).push('researcher');state.revision++;
+        const record={id:`${this.config.runId}:world:${state.revision}`,type:'world_checkpoint',beforeTurn:this.currentTurnIndex,actor,reason,agentId,simulationMinute:state.minute,worldAfter:state,events:[{id:`${this.config.runId}:world:${state.revision}:wake`,type:'world_wake',agentId,reason,simulationMinute:state.minute}]};
+        await this.jsonlStorage.appendEvent(this.config.runId,record);
+        this.world=state;this.emit('environment_event',record);this.publishStatus();return this.getState();
+    });}
+
     private async buildPrompt(agentId: string) {
         const state = await this.activeStorage.loadWorkingState(agentId);
+        if(this.world){const location=this.config!.operationalConfig!.locations!.find(l=>l.id===this.world!.positions[agentId]);if(location){state.operational=currentOperational(state);state.operational.location=structuredClone(location);}}
         const config = resolveMemoryConfig(this.config!.memoryConfig);
         const identity = state.identity;
         const participants: ParticipantIdentity[] = [];
@@ -327,7 +370,7 @@ export class ExperimentController {
             participants.push({id,name:participant.name});
         }
         const retrieved = retrieveMemory(state, config);
-        const history = [...await inheritedContext(this.jsonlStorage,this.config),...await this.jsonlStorage.getConversationHistory(this.config!.runId)];
+        const history = visibleHistory([...await inheritedContext(this.jsonlStorage,this.config),...await this.jsonlStorage.getConversationHistory(this.config!.runId)],agentId,this.config!.worldConfig as WorldConfig);
         if (this.config!.protocol) return renderProtocol(state, config, normalizeProtocol(this.config!.protocol, config.mode), history,
             this.currentTurnIndex === 0 && this.config!.initialTopic ? this.config!.initialTopic : undefined, participants);
         const transcript = boundedTranscript(history, config);
@@ -360,6 +403,7 @@ ${transcript || '(No conversation supplied)'}${memoryOperationGuide(config)}${pa
     }
 
     private async executeTurn(agentId: string) {
+        if(this.world&&schedule(this.config!.worldConfig as WorldConfig).some(o=>o.minute<=this.world!.minute&&!this.world!.executed.includes(o.id)))await this.commitWorldAdvance(this.world.minute,'scheduler');
         this.emit('turn_started', { agentId, turnIndex: this.currentTurnIndex });
         const prompt = await this.buildPrompt(agentId);
         const opConfig = resolveOperational(this.config!.operationalConfig);
@@ -368,17 +412,20 @@ ${transcript || '(No conversation supplied)'}${memoryOperationGuide(config)}${pa
             prompt.messages[0].content=`It is your turn to choose speech, an action, or silent continuation, ${prompt.state.identity.name}.`;
         }
         const observedStates = [];
-        if(opConfig.enabled && opConfig.observationPolicy === 'co_located') for(const id of this.config!.agentIds) if(id !== agentId) observedStates.push(await this.activeStorage.loadWorkingState(id));
+        if(opConfig.enabled && opConfig.observationPolicy === 'co_located' && (!this.world || this.config!.worldConfig!.observationPolicy==='local')) for(const id of this.config!.agentIds) if(id !== agentId) {const other=await this.activeStorage.loadWorkingState(id);if(this.world){other.operational=currentOperational(other);other.operational.location=opConfig.locations.find(l=>l.id===this.world!.positions[id])!;}observedStates.push(other);}
         const opContext = opConfig.enabled ? operationalContext(prompt.state,opConfig,observedStates) : undefined;
         if(opContext) prompt.system += operationalInstructions(opContext);
+        const schedulerDecision=this.world?{agentId,mode:this.config!.worldConfig!.schedulingMode,eligibility:resolveEnvironment(this.config!).taskConfig.kind!=='none'?'task_decision':this.config!.worldConfig!.schedulingMode==='round_robin'?'round_robin':'ready',wakeReasons:this.world.wakeReasons[agentId]??[]}:undefined;
+        const worldObservation=this.world?worldContext(this.world,this.config!.worldConfig as WorldConfig,agentId):undefined;
+        if(worldObservation)prompt.system+=worldInstructions(worldObservation);
         const environment = resolveEnvironment(this.config!);
         const pastEvents = [...await this.jsonlStorage.getEventHistory(this.config!.runId), ...await this.jsonlStorage.readResearch(this.config!.runId, 'feedback')];
         const feedback = visibleFeedback(this.config!, agentId, this.currentTurnIndex, pastEvents);
         prompt.system += socialInstructions(this.config!, this.currentTurnIndex) + feedbackContext(feedback);
         (prompt.retrieval as any).feedbackIds = feedback.map(event=>event.id);
-        this.currentAttempt = { startedAt: new Date().toISOString(), prompt: { system: prompt.system, messages: prompt.messages }, retrieval: prompt.retrieval, ...(opContext ? {operationalContext:opContext} : {}) };
+        this.currentAttempt = { startedAt: new Date().toISOString(), prompt: { system: prompt.system, messages: prompt.messages }, retrieval: prompt.retrieval, ...(opContext ? {operationalContext:opContext} : {}),...(worldObservation?{worldObservation,schedulerDecision}:{}) };
         this.llmAdapter.updateConfig(this.config!.llmConfig);
-        const response = await this.llmAdapter.generateTurn(prompt.system, prompt.messages, this.config!.protocol?.inputCharLimit, environment.socialConfig.enabled, environment.taskConfig.kind !== 'none', opConfig.enabled);
+        const response = await this.llmAdapter.generateTurn(prompt.system, prompt.messages, this.config!.protocol?.inputCharLimit, environment.socialConfig.enabled, environment.taskConfig.kind !== 'none', opConfig.enabled, !!this.world);
         this.currentAttempt.parsedResponse = response;
         validateDecision(response, this.config!, agentId);
         const eventId = randomUUID();
@@ -390,13 +437,21 @@ ${transcript || '(No conversation supplied)'}${memoryOperationGuide(config)}${pa
             source: { runId: this.config!.runId, turnIndex: this.currentTurnIndex, eventId },
             participants: this.config!.agentIds, config
         });
+        let worldResult:ReturnType<typeof prepareWorld>|undefined;
+        if(this.world){
+            this.currentAttempt.worldOperations=structuredClone(response.world_operations);
+            try{worldResult=prepareWorld(this.world,this.config!.worldConfig as WorldConfig,agentId,response.world_operations,currentOperational(prepared.state).location.id,this.config!.agentIds,`${this.config!.runId}:turn:${this.currentTurnIndex}`,response.response,response.social?.recipient_id??null);}
+            catch(error){this.currentAttempt.worldValidation={status:'rejected',error:(error as Error).message};throw error;}
+            this.currentAttempt.worldValidation={status:'passed'};
+        }
         const record = {
             schemaVersion: 2, eventId, stateScope: this.config!.protocol?.stateScope ?? 'shared', configHash: this.configHash, runId: this.config!.runId,
             turnIndex: this.currentTurnIndex, agentId, agentName: prompt.state.identity.name,
             ...(environment.socialConfig.enabled ? {social:response.social,taskDecision:response.task_decision} : {}),
             ...(opConfig.enabled ? {operationalContext:opContext,operationalAudit:operational.audit,operationalState:currentOperational(prepared.state),
                 turnKind:response.response ? (operational.audit.length ? 'speech_and_action':'speech') : (operational.audit.length ? 'action_only':'intentional_noop')} : {}),
-            environmentEvents: [] as any[],
+            environmentEvents: [...(worldResult?.events??[])],
+            ...(worldResult?{simulationMinute:this.world!.minute,worldBefore:this.world,worldAfter:worldResult.state,worldObservation,schedulerDecision,worldOperations:response.world_operations,worldValidation:{status:'passed'},messageRecipients:worldResult.recipients}:{}),
             response: response.response, timestamp: new Date().toISOString(),
             auditTrail: prepared.auditTrail, stateBefore: prompt.state, stateAfter: prepared.state,
             memoryMode: config.mode, retrieval: prompt.retrieval,
@@ -407,12 +462,13 @@ ${transcript || '(No conversation supplied)'}${memoryOperationGuide(config)}${pa
         };
         if (environment.taskConfig.kind !== 'none' && (this.currentTurnIndex + 1) % this.config!.agentIds.length === 0) {
             const previous = await this.jsonlStorage.getConversationHistory(this.config!.runId);
-            record.environmentEvents = settleRound(this.config!, [...previous.slice(-(this.config!.agentIds.length - 1)), record]);
+            record.environmentEvents.push(...settleRound(this.config!, [...previous.slice(-(this.config!.agentIds.length - 1)), record]));
         }
         // Commit before touching editable state. Recovery reapplies this exact state,
         // never the model's operations, so retries cannot duplicate adds or inference.
         await this.jsonlStorage.appendConversationTurn(this.config!.runId, record);
         this.currentTurnIndex++;
+        if(worldResult)this.world=worldResult.state;
         try { await this.jsonlStorage.projectTurn(this.config!.runId, record, this.jsonStorage); }
         catch { throw new TurnProjectionError('Turn is committed, but its working-state/audit update failed. Resume will repair it before the next inference'); }
         const { stateBefore, stateAfter, prompt: renderedPrompt, parsedResponse, rawResponse, ...turnRecord } = record;

@@ -1,3 +1,5 @@
+import {WorldControlsComponent,defaultWorldConfig} from './world-controls.component';
+import {WorldStateComponent} from './world-state.component';
 import {OperationalControlsComponent} from './operational-controls.component';
 import { Component, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewChecked } from '@angular/core';
 import { PublicationPanelComponent } from './publication-panel.component';
@@ -16,7 +18,7 @@ import { Subscription } from 'rxjs';
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [OperationalControlsComponent, CommonModule, FormsModule, MemoryInspectorComponent, ResearchPanelComponent, AnalysisPanelComponent, RouterOutlet, SocialControlsComponent, BranchPanelComponent, PublicationPanelComponent],
+  imports: [WorldControlsComponent,WorldStateComponent,OperationalControlsComponent, CommonModule, FormsModule, MemoryInspectorComponent, ResearchPanelComponent, AnalysisPanelComponent, RouterOutlet, SocialControlsComponent, BranchPanelComponent, PublicationPanelComponent],
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.css']
 })
@@ -30,6 +32,11 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
   savedAgentIds: string[] | null = null;
   initialTopic = '';
   operationalConfig:any={enabled:true,locations:[],observationPolicy:'self_only'};
+  worldConfig:any=defaultWorldConfig();
+  worldState:any;
+  worldConfigurationValid=true;
+  worldControl(action:string,body:any){this.perform(this.experimentService.world(action,body));}
+  simulationTime(minute:number){return `Day ${Math.floor(minute/1440)+1} ${String(Math.floor(minute%1440/60)).padStart(2,'0')}:${String(minute%60).padStart(2,'0')}`;}
   operationalStates:Record<string,any>={};
   operationalFor(id:string){return this.operationalStates[id] ?? this.availableAgents.find(a=>a.id===id)?.operationalState;}
 
@@ -59,7 +66,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
 
   get researchConfiguration() {
       return {runId:this.runId,agentIds:this.savedAgentIds ? [...this.savedAgentIds] : this.nextParticipantIds,initialTopic:this.initialTopic,
-          operationalConfig:structuredClone(this.operationalConfig),socialConfig:{...this.socialConfig},taskConfig:{...this.taskConfig},feedbackConfig:{...this.feedbackConfig},maxTurns:this.maxTurns,memoryConfig:{...this.memoryConfig},llmConfig:{baseUrl:this.llmBaseUrl,model:this.selectedModel,maxTokens:this.maxTokens,outputMode:this.outputMode}};
+          ...(this.worldConfig.enabled?{worldConfig:structuredClone(this.worldConfig)}:{}),operationalConfig:structuredClone(this.operationalConfig),socialConfig:{...this.socialConfig},taskConfig:{...this.taskConfig},feedbackConfig:{...this.feedbackConfig},maxTurns:this.maxTurns,memoryConfig:{...this.memoryConfig},llmConfig:{baseUrl:this.llmBaseUrl,model:this.selectedModel,maxTokens:this.maxTokens,outputMode:this.outputMode}};
   }
 
   get configurationLocked(): boolean { return this.requestPending || this.experimentStatus !== 'idle'; }
@@ -209,6 +216,8 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
       if (this.selectedTab === 'conversation' && this.transcriptContainer) this.transcriptContainer.nativeElement.scrollTop = this.transcriptContainer.nativeElement.scrollHeight;
   }
 
+  get worldEvents():any[]{return this.auditEvents.flatMap(event=>event.type==='world_checkpoint'?event.events??[]:event.type?.startsWith('world_')?[event]:[]).filter(event=>event.type==='world_scheduled_event');}
+
   get rejectedOperationalAttempts(): any[] {
       return this.auditEvents.filter(event => event.type === 'experiment_error' && event.attempt?.operationalAudit?.length);
   }
@@ -264,6 +273,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
   }
 
   startExperiment() {
+      if(this.worldConfig.enabled&&!this.worldConfigurationValid){this.diagnostic='Correct World Simulation JSON fields before starting.';return;}
       if (this.requestPending || (this.experimentStatus !== 'idle' && this.experimentStatus !== 'stopped')) return;
       const agentIds = this.experimentStatus === 'stopped' && this.savedAgentIds ? [...this.savedAgentIds] : this.nextParticipantIds;
       if (agentIds.length < 2) {
@@ -277,7 +287,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
           runId: this.runId,
           agentIds,
           initialTopic,
-          operationalConfig:structuredClone(this.operationalConfig),socialConfig:{...this.socialConfig},taskConfig:{...this.taskConfig},feedbackConfig:{...this.feedbackConfig},
+          ...(this.worldConfig.enabled?{worldConfig:structuredClone(this.worldConfig)}:{}),operationalConfig:structuredClone(this.operationalConfig),socialConfig:{...this.socialConfig},taskConfig:{...this.taskConfig},feedbackConfig:{...this.feedbackConfig},
           memoryConfig: { ...this.memoryConfig },
           maxTurns: this.maxTurns,
           llmConfig: {
@@ -340,6 +350,8 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
           this.socialConfig = {enabled:false,...state.config.socialConfig};
           this.taskConfig = {kind:'none',endowment:10,multiplier:1.5,prize:20,...state.config.taskConfig};
           this.feedbackConfig = {enabled:false,source:'researcher',timing:'immediate',delayTurns:1,visibility:'private',positiveScore:1,negativeScore:-1,maxVisible:20,...state.config.feedbackConfig};
+          this.worldState=state.worldState;
+          this.worldConfig=structuredClone(state.config.worldConfig??defaultWorldConfig());
           this.operationalConfig=structuredClone(state.config.operationalConfig ?? {enabled:false,locations:[],observationPolicy:'self_only'});
           this.initialTopic = state.config.initialTopic ?? '';
           this.memoryConfig = { ...this.defaultMemoryConfig, ...state.config.memoryConfig };
@@ -352,6 +364,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
       } else {
           this.savedAgentIds = null;
           this.operationalStates={};
+          this.worldState=undefined;
           this.currentTurnIndex = 0;
           this.followLatest = true;
           this.unseenTurns = 0;
@@ -377,6 +390,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
           this.activeTurnAgent = event.data.agentId;
       } else if (event.type === 'turn_completed') {
           this.activeTurnAgent = null;
+          if(event.data.turnRecord.worldAfter&&(!this.worldState||event.data.turnRecord.worldAfter.revision>this.worldState.revision))this.worldState=event.data.turnRecord.worldAfter;
           if(event.data.turnRecord.operationalState)this.operationalStates[event.data.turnRecord.agentId]=event.data.turnRecord.operationalState;
           if (!this.turns.some(t => t.turnRecord.turnIndex === event.data.turnRecord.turnIndex)) {
               if (!this.followLatest || this.selectedTab !== 'conversation') this.unseenTurns++;

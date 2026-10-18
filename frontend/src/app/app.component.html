@@ -73,7 +73,7 @@
     <main class="panel middle-panel" aria-label="Experiment workspace">
         <header class="experiment-toolbar">
             <div class="toolbar-heading">
-                <h2>Experiment</h2>
+                <h2>Experiment</h2><span *ngIf="worldState">{{simulationTime(worldState.minute)}}</span>
                 <span class="status-badge status-{{experimentStatus}}" role="status">{{experimentStatus | uppercase}}</span>
             </div>
         <div class="controls">
@@ -102,6 +102,7 @@
         </div>
         <section id="conversation-panel" class="tab-panel conversation-view" role="tabpanel" aria-labelledby="conversation-tab" [hidden]="selectedTab !== 'conversation'">
         <div class="transcript" id="conversation-transcript" #transcriptContainer (scroll)="onTranscriptScroll()" tabindex="0" role="region" aria-label="Conversation transcript">
+            <details *ngIf="worldEvents.length"><summary>Environmental events ({{worldEvents.length}})</summary><div *ngFor="let event of worldEvents">{{simulationTime(event.simulationMinute)}} · {{event.eventId}} · {{event.status}} {{event.effects | json}}</div></details>
             <details *ngIf="rejectedOperationalAttempts.length" class="rejected-attempts">
                 <summary>Rejected operational attempts ({{rejectedOperationalAttempts.length}})</summary>
                 <aside *ngFor="let event of rejectedOperationalAttempts" class="turn rejected-attempt">
@@ -122,6 +123,9 @@
                     </span>
                 </div>
                 <div class="turn-content">{{turn.turnRecord.response || (turn.turnRecord.turnKind ? 'Speech: None (intentional)' : '')}}</div>
+                <p *ngIf="turn.turnRecord.simulationMinute !== undefined">{{simulationTime(turn.turnRecord.simulationMinute)}}</p>
+                <details *ngIf="turn.turnRecord.worldOperations?.length"><summary>World interactions</summary><pre>{{turn.turnRecord.worldOperations | json}}</pre></details>
+                <div *ngFor="let event of turn.turnRecord.environmentEvents"><span *ngIf="event.type==='world_operation'">Committed {{event.requestedOperation.action}} · {{event.changes | json}}</span><span *ngIf="event.type==='world_scheduled_event'">{{simulationTime(event.simulationMinute)}} · {{event.eventId}} · {{event.status}} {{event.effects | json}}</span></div>
                 <div *ngIf="turn.turnRecord.operationalState as operational" class="turn-operational">
                     <strong>{{turn.turnRecord.turnKind}}</strong><br>
                     Location: {{operational.location.name}}<br>
@@ -215,6 +219,7 @@
             </details>
         </fieldset>
 
+        <app-world-controls [config]="worldConfig" [locked]="configurationLocked" [agentIds]="savedAgentIds || nextParticipantIds" (validityChange)="worldConfigurationValid=$event"></app-world-controls>
         <app-operational-controls [config]="operationalConfig" [locked]="configurationLocked"></app-operational-controls>
         <app-publication-panel [running]="experimentStatus === 'running'"></app-publication-panel>
         <app-branch-panel [running]="experimentStatus === 'running'"></app-branch-panel>
@@ -227,6 +232,7 @@
 
     <!-- Right: Audit Log & Memory -->
     <div class="panel right-panel">
+        <app-world-state [state]="worldState" [config]="worldConfig" [running]="experimentStatus==='running' || requestPending" (advance)="worldControl('advance',$event)" (wake)="worldControl('wake',$event)"></app-world-state>
         <div class="header">
             <h2>Audit & State Events</h2>
         </div>

@@ -10,11 +10,13 @@ function selected(state:any,entryIds:any){
 }
 export async function verifiedBranch(logs:JsonlStorage,branchId:string){
     const record=await logs.loadArtifact('branches',id(branchId));const {manifestHash,...data}=record;
+    if(record.snapshot.worldState&&hash(record.snapshot.worldState)!==record.snapshot.worldHash)throw new Error('Branch world hash mismatch');
     if(hash(data)!==manifestHash||hash(record.snapshot.states)!==record.snapshot.stateHash||hash(record.snapshot.context)!==record.snapshot.contextHash)throw new Error('Branch manifest hash mismatch');
     return record;
 }
 export async function verifiedSnapshot(logs:JsonlStorage,snapshotId:string){
     const snapshot=await logs.loadArtifact('snapshots',id(snapshotId));
+    if(snapshot.worldState&&hash(snapshot.worldState)!==snapshot.worldHash)throw new Error('Snapshot world hash mismatch');
     if(hash(snapshot.states)!==snapshot.stateHash)throw new Error('Snapshot state hash mismatch');return snapshot;
 }
 export async function applyInterventions(logs:JsonlStorage,branchId:string,states:any,context:any[],operations:any[],operationalConfig?:any){

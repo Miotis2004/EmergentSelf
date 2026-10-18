@@ -7,6 +7,7 @@ export interface ExperimentConfig {
     agentIds: string[];
     initialTopic?: string;
     operationalConfig?: any;
+    worldConfig?: any;
     memoryConfig?: Record<string, string | number>;
     socialConfig?: any;
     taskConfig?: any;
@@ -34,6 +35,8 @@ export class ExperimentService {
   startExperiment(config: ExperimentConfig): Observable<any> {
     return this.http.post(`${this.apiUrl}/start`, config);
   }
+
+  world(action:string,body:any):Observable<any>{return this.http.post(`${this.apiUrl}/world/${action}`,body);}
 
   pauseExperiment(): Observable<any> {
     return this.http.post(`${this.apiUrl}/pause`, {});
