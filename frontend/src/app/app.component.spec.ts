@@ -47,9 +47,12 @@ describe('Experiment participants and initial topic', () => {
 
     afterEach(() => fixture.destroy());
 
+    const selectParticipants = () => { component.setAgentIncluded('bob', true); component.setAgentIncluded('sara', true); };
+
     const completedTurn = (index: number, response = 'Actual model words') => ({type:'turn_completed',data:{turnRecord:{turnIndex:index,agentId:'bob',agentName:'Bob',response},auditTrail:[]}});
 
     it('records recovery settings and keeps correction diagnostics separate from conversation text',()=>{
+        selectParticipants();
         component.startExperiment();expect(experiments.startExperiment.calls.mostRecent().args[0].recoveryConfig.correctiveRetries).toBe(3);
         const recovery={phase:'correcting',agentId:'bob',turnIndex:56,correctiveRetry:2,correctiveLimit:3,reason:'Conflicting activity transitions',code:'CONFLICTING_OPERATIONAL_TRANSITIONS'};
         events.next({type:'status_changed',data:{status:'running',config:{...savedConfig,recoveryConfig:component.recoveryConfig},currentTurnIndex:56,recovery}});
@@ -74,6 +77,7 @@ describe('Experiment participants and initial topic', () => {
     });
 
     it('starts in Conversation and retains mounted research forms and run state while switching tabs', async () => {
+        selectParticipants();
         const research=fixture.debugElement.query(By.css('app-research-panel')).componentInstance;
         research.templateId='preserve-this-template';
         const transcript=fixture.nativeElement.querySelector('.transcript');
@@ -99,7 +103,7 @@ describe('Experiment participants and initial topic', () => {
         events.next({type:'status_changed',data:{status:'completed',config:savedConfig,currentTurnIndex:1}});
         component.resetExperiment();expect(component.turns.length).toBe(1);expect(experiments.resetExperiment).toHaveBeenCalled();
         events.next({type:'snapshot',data:{status:'idle',config:null,currentTurnIndex:0,turns:[],events:[]}});
-        expect(component.turns.length).toBe(0);expect(component.currentTurnIndex).toBe(0);expect(component.availableAgents.length).toBe(3);expect(agents.createAgent).not.toHaveBeenCalled();
+        expect(component.nextParticipantIds).toEqual([]);expect(component.turns.length).toBe(0);expect(component.currentTurnIndex).toBe(0);expect(component.availableAgents.length).toBe(3);expect(agents.createAgent).not.toHaveBeenCalled();
     });
 
     it('follows turns near the bottom, preserves manual reading across tabs and offers an explicit latest action', () => {
@@ -188,7 +192,7 @@ describe('Experiment participants and initial topic', () => {
     });
 
     it('sends and freezes operational configuration, then displays validated silent turns without inventing speech', () => {
-        component.operationalConfig.locations=[{id:'garden',name:'Garden'}];component.startExperiment();
+        component.operationalConfig.locations=[{id:'garden',name:'Garden'}];selectParticipants();component.startExperiment();
         expect(experiments.startExperiment.calls.mostRecent().args[0].operationalConfig.locations[0].id).toBe('garden');
         const operational={location:{id:'garden',name:'Garden'},action:{type:'working',description:'Preparing rows',status:'in_progress'},outcomeVerified:false};
         const turn={turnIndex:0,agentId:'bob',agentName:'Bob',response:'',turnKind:'action_only',operationalState:operational,operationalAudit:[{status:'accepted',operation:{action:'set_location',location_id:'garden'}}]};
@@ -199,39 +203,44 @@ describe('Experiment participants and initial topic', () => {
         expect(fixture.nativeElement.querySelector('app-operational-controls fieldset').disabled).toBeTrue();
     });
 
-    it('defaults all agents to selected and keeps deterministic ID order', () => {
-        expect(component.nextParticipantIds).toEqual(['bob','charlie','sara']);
+    it('starts with all agents unchecked and submits explicitly selected agents in deterministic order', () => {
+        expect(component.nextParticipantIds).toEqual([]);
         const checkboxes = fixture.nativeElement.querySelectorAll('.agent-card input[type=checkbox]');
         expect(checkboxes.length).toBe(3);
-        expect(Array.from(checkboxes).every((input: any) => input.checked)).toBeTrue();
+        expect(Array.from(checkboxes).every((input: any) => !input.checked)).toBeTrue();
+        component.startExperiment();
+        expect(experiments.startExperiment).not.toHaveBeenCalled();
+        component.setAgentIncluded('sara', true); component.setAgentIncluded('bob', true); component.setAgentIncluded('charlie', true);
         component.startExperiment();
         expect(experiments.startExperiment.calls.mostRecent().args[0].agentIds).toEqual(['bob','charlie','sara']);
     });
 
-    it('sends exactly two checked agents and retains unchecked choices when agents reload', () => {
-        const checkbox = fixture.nativeElement.querySelectorAll('.agent-card input[type=checkbox]')[1] as HTMLInputElement;
-        checkbox.click(); fixture.detectChanges();
+    it('sends exactly two checked agents and retains choices when agents reload', () => {
+        const checkboxes = fixture.nativeElement.querySelectorAll('.agent-card input[type=checkbox]');
+        (checkboxes[2] as HTMLInputElement).click(); (checkboxes[0] as HTMLInputElement).click(); fixture.detectChanges();
         component.loadAgents();
         expect(component.nextParticipantIds).toEqual(['bob','sara']);
         component.startExperiment();
         expect(experiments.startExperiment.calls.mostRecent().args[0].agentIds).toEqual(['bob','sara']);
     });
 
-    it('defaults newly discovered agents to selected without reselecting unchecked agents', () => {
-        component.setAgentIncluded('charlie', false);
+    it('leaves newly discovered agents unchecked while preserving explicit selections', () => {
+        selectParticipants();
         agents.getAgents.and.returnValue(of([agent('sara'),agent('new'),agent('bob'),agent('charlie')]));
         component.loadAgents();
-        expect(component.nextParticipantIds).toEqual(['bob','new','sara']);
+        expect(component.nextParticipantIds).toEqual(['bob','sara']);
+        expect(component.selectedAgentIds.has('new')).toBeFalse();
     });
 
     it('rejects fewer than two selections with an inline diagnostic and no start request', () => {
-        component.setAgentIncluded('charlie', false); component.setAgentIncluded('sara', false);
+        component.setAgentIncluded('bob', true);
         component.startExperiment(); fixture.detectChanges();
         expect(experiments.startExperiment).not.toHaveBeenCalled();
         expect(fixture.nativeElement.querySelector('[role=alert]').textContent).toContain('Select at least two agents');
     });
 
     it('trims the optional multiline topic and rejects oversized topics', () => {
+        selectParticipants();
         component.initialTopic = ' \nWhat makes someone trustworthy?\n ';
         component.startExperiment();
         expect(experiments.startExperiment.calls.mostRecent().args[0].initialTopic).toBe('What makes someone trustworthy?');
@@ -260,6 +269,7 @@ describe('Experiment participants and initial topic', () => {
     });
 
     it('records memory condition and limits, restores them, and freezes controls during runs', async () => {
+        selectParticipants();
         component.memoryConfig.mode = 'none';
         component.setMemoryLimit('retrievalEntries', 4);
         component.startExperiment();
@@ -295,6 +305,6 @@ describe('Experiment participants and initial topic', () => {
         expect(component.savedAgentIds).toEqual(['sara','bob']);
         events.next({ type: 'snapshot', data: { status: 'idle', config: null, turns: [], events: [] } });
         expect(component.configurationLocked).toBeFalse();
-        expect(component.nextParticipantIds).toEqual(['bob','sara']);
+        expect(component.nextParticipantIds).toEqual([]);
     });
 });

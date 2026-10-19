@@ -160,7 +160,7 @@ stops with a failure on invalid inference output and never substitutes dialogue.
 ## Participants and conversation topics
 
 Each available agent has an **Include in Next Experiment** checkbox. Agents
-initially default to included. Uncheck anyone who should not participate; at least
+initially default to unchecked. Check the agents who should participate; at least
 two selected agents are required. The dashboard submits checked IDs in ascending
 ID order, which becomes the fixed round-robin turn order. More than two agents
 are supported. Only participating agents receive turns or memory/stat changes.
