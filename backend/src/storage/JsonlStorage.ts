@@ -132,6 +132,12 @@ export class JsonlStorage {
         return state;
     }
 
+    async latestExecution(runId:string):Promise<any|undefined> {
+        const events=await this.getEventHistory(runId);
+        const last=events.filter(event=>event.type==='execution_checkpoint'||event.type==='recovery_attempt').at(-1);
+        return last?.checkpoint;
+    }
+
     trialStorage(runId: string) { return new JsonStorage(path.join(this.getExperimentDir(runId), 'working-state')); }
     async loadBaseline(runId: string): Promise<any> {
         return JSON.parse(await fs.readFile(path.join(this.getExperimentDir(runId), 'memory-baseline.json'), 'utf8'));

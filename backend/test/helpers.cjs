@@ -26,6 +26,7 @@ async function fixture(t, reply, agentIds = ['bob', 'sara']) {
     const n = requests++;
     const content = await reply(n, JSON.parse(raw));
     concurrent--;
+    if(content&&typeof content==='object'){res.statusCode=content.status??503;res.end(JSON.stringify(content.body??{error:'temporarily unavailable'}));return;}
     res.end(JSON.stringify({ model: 'real-loaded-id', choices: [{ finish_reason: 'stop', message: { content } }] }));
   });
   await new Promise(r => server.listen(0, '127.0.0.1', r));
@@ -37,8 +38,8 @@ async function fixture(t, reply, agentIds = ['bob', 'sara']) {
   };
   const controller = createController();
   t.after(async () => { for (const c of controllers) await c.stop(); await new Promise(r => server.close(r)); await rm(root, { recursive: true, force: true }); });
-  const config = { runId: 'test-run', agentIds: ['bob', 'sara'], maxTurns: 100, llmConfig: { baseUrl: `http://127.0.0.1:${server.address().port}/v1`, model: '' } };
-  return { root, controller, createController, storage, logs, config, stats: () => ({ requests, maximum }) };
+  const config = { recoveryConfig:{enabled:false}, runId: 'test-run', agentIds: ['bob', 'sara'], maxTurns: 100, llmConfig: { baseUrl: `http://127.0.0.1:${server.address().port}/v1`, model: '' } };
+  return { root, controller, createController, storage, logs, config, modelServer:server, stats: () => ({ requests, maximum }) };
 }
 
 module.exports = { fixture, until, sleep };

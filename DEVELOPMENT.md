@@ -218,3 +218,10 @@ transactional world operations, local communication, event-driven waits and rese
 controls are integrated with turn commits and identity branches. Legacy runs remain opt-out.
 See [World simulation architecture and limits](docs/WORLD_SIMULATION.md) and the
 [four-agent residence configuration](examples/world-residence.json).
+
+## Automatic recovery foundation
+
+Experiments default to bounded corrective retries and technical backoff with persistent LLM
+reconnection recovery. Frozen pending contexts, private rejection feedback, canonical commit
+checks and restart cursors preserve the logical turn and research evidence. Explicit Pause and
+Stop take precedence. See [Error recovery architecture and manual suspension conditions](docs/ERROR_RECOVERY.md).
