@@ -1,0 +1,143 @@
+{
+  "version": 1,
+  "enabled": true,
+  "initialMinute": 0,
+  "minutesPerTurn": 1,
+  "initialPositions": {
+    "marcus": "maintenance",
+    "gideon": "maintenance"
+  },
+  "items": [
+    {
+      "id": "seal",
+      "name": "Seal",
+      "unit": "unit",
+      "stackable": true,
+      "consumable": false
+    },
+    {
+      "id": "repair-kit",
+      "name": "Repair Kit",
+      "unit": "unit",
+      "stackable": false,
+      "consumable": false
+    },
+    {
+      "id": "valve",
+      "name": "Valve",
+      "unit": "unit",
+      "stackable": false,
+      "consumable": false,
+      "properties": {
+        "condition": "damaged"
+      }
+    }
+  ],
+  "inventories": [
+    {
+      "id": "supplies",
+      "ownerType": "location",
+      "ownerId": "maintenance",
+      "visibility": "local",
+      "authorizedAgentIds": [],
+      "quantities": {
+        "seal": 1,
+        "repair-kit": 1,
+        "valve": 1
+      }
+    },
+    {
+      "id": "marcus-bag",
+      "ownerType": "agent",
+      "ownerId": "marcus",
+      "visibility": "private",
+      "authorizedAgentIds": [],
+      "quantities": {}
+    },
+    {
+      "id": "gideon-bag",
+      "ownerType": "agent",
+      "ownerId": "gideon",
+      "visibility": "private",
+      "authorizedAgentIds": [],
+      "quantities": {}
+    },
+    {
+      "id": "bench",
+      "ownerType": "location",
+      "ownerId": "maintenance",
+      "visibility": "local",
+      "authorizedAgentIds": [],
+      "quantities": {}
+    }
+  ],
+  "events": [],
+  "observationPolicy": "local",
+  "communicationPolicy": "local",
+  "schedulingMode": "event_driven",
+  "transformations": {
+    "version": 1,
+    "recipes": [
+      {
+        "id": "repair-valve",
+        "name": "Repair Valve",
+        "description": "Researcher-defined repair-valve",
+        "inputs": [
+          {
+            "itemId": "seal",
+            "quantity": 1
+          }
+        ],
+        "requiredTools": [
+          {
+            "itemId": "repair-kit",
+            "quantity": 1
+          }
+        ],
+        "catalysts": [],
+        "outputs": [],
+        "requiredEnvironment": {},
+        "environmentChanges": {
+          "water-system": "repaired"
+        },
+        "itemRequirements": {
+          "valve": {
+            "condition": "damaged"
+          }
+        },
+        "itemChanges": {
+          "valve": {
+            "condition": "repaired"
+          }
+        },
+        "durationMinutes": 30,
+        "minParticipants": 2,
+        "consumption": "completion",
+        "interruption": "fail_if_participant_leaves",
+        "failurePolicy": "return_unconsumed",
+        "requiredLocation": "maintenance"
+      }
+    ],
+    "workspaces": [
+      {
+        "id": "maintenance-work",
+        "inventoryId": "bench",
+        "locationId": "maintenance",
+        "authorizedAgentIds": [
+          "marcus",
+          "gideon"
+        ]
+      }
+    ],
+    "initialEnvironment": {
+      "water-system": "damaged"
+    },
+    "locationCapabilities": {
+      "maintenance": [
+        "repair"
+      ]
+    },
+    "knowledgePolicy": "all",
+    "initialKnowledge": {}
+  }
+}
