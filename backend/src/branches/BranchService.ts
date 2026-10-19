@@ -43,7 +43,8 @@ export class BranchService {
         const snapshotId=`branch-${hash(branchId).slice(0,48)}`;
         const worldState=source.worldState?structuredClone(source.worldState):undefined;
         if(worldState)for(const audit of result.interventions)for(const agentId of Object.keys(audit.afterStates))if(audit.operation.kind==='operational'||audit.operation.kind==='reverse')worldState.positions[agentId]=audit.afterStates[agentId].operational?.location.id??worldState.positions[agentId];
-        const snapshot={schemaVersion:6,snapshotId,...(worldState?{worldState,worldHash:hash(worldState)}:{}),sourceRunId:branchId,sourceTurnIndex:-1,states:result.states,stateHash:hash(result.states),context:result.context,contextHash:hash(result.context)};
+        const taskHistory=[];for(const agentId of sourceConfig.agentIds)taskHistory.push(...await this.logs.snapshotTaskHistory(source,agentId));
+        const snapshot={schemaVersion:6,snapshotId,taskHistory,taskHistoryHash:hash(taskHistory),...(worldState?{worldState,worldHash:hash(worldState)}:{}),sourceRunId:branchId,sourceTurnIndex:-1,states:result.states,stateHash:hash(result.states),context:result.context,contextHash:hash(result.context)};
         const {templateId,batchId,trialIndex,repeatIndex,randomizationSeed,snapshotId:oldSnapshot,initialStateHash,branchId:oldBranch,historySnapshotId,historyContextHash,...baseProtocol}=sourceConfig.protocol;
         const protocol=normalizeProtocol({...baseProtocol,stateScope:'trial',snapshotId,initialStateHash:snapshot.stateHash,branchId,historySnapshotId:snapshotId,historyContextHash:snapshot.contextHash},memoryConfig.mode);
         const configuration={...structuredClone(sourceConfig),runId:branchId,maxTurns,llmConfig,memoryConfig,protocol,initialTopic:result.context.length?'':sourceConfig.initialTopic??''};

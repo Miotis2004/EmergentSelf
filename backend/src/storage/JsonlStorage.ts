@@ -1,3 +1,4 @@
+import {projectHistory, queryHistory, validateHistory, HistoryQuery, TaskHistoryRecord} from '../taskHistory/history';
 import {hash} from '../research/protocol';
 import {WorldState, initialWorld, assertWorldCompatible} from '../world/simulation';
 import { randomUUID } from 'crypto';
@@ -11,6 +12,120 @@ export class TurnProjectionError extends Error {}
 
 export class JsonlStorage {
     private baseDir: string;
+    private historyWrites=new Map<string,Promise<any>>();
+
+    private historySources=new Map<string,{signature:string;size:number;ino:number;records:any[]}>();
+    private sourceSignature(stat:any){return [stat.ino,stat.size,stat.mtimeMs,stat.ctimeMs].join(':');}
+    private compactHistorySource(record:any,kind:'turn'|'event'):any|null {
+        if(kind==='turn')return {schemaVersion:record.schemaVersion,eventId:record.eventId,turnIndex:record.turnIndex,agentId:record.agentId,response:record.response?true:false,timestamp:record.timestamp,environmentEvents:record.environmentEvents,operationalAudit:record.operationalAudit};
+        if(record.type==='world_checkpoint')return {id:record.id,type:record.type,beforeTurn:record.beforeTurn,simulationMinute:record.simulationMinute,events:record.events,timestamp:record.timestamp};
+        if(record.type==='recovery_attempt'||record.type==='experiment_error')return {id:record.id,type:record.type,agentId:record.agentId,category:record.category,code:record.code,turnIndex:record.turnIndex,logicalTurnIndex:record.logicalTurnIndex,stateCommitted:record.stateCommitted,timestamp:record.timestamp,explanation:record.explanation,message:record.message,proposedOperations:{world:record.proposedOperations?.world??record.proposal?.parsed?.world_operations??record.attempt?.parsedResponse?.world_operations??record.attempt?.worldOperations},attempt:{operationalAudit:record.attempt?.operationalAudit,worldValidation:record.attempt?.worldValidation}};
+        if(record.type==='task_history_control'||record.type?.startsWith('transformation_')||record.type==='resource_reserved'||record.type==='resource_released'||record.type==='world_operation')return record;
+        return null;
+    }
+    private async historySource(file:string,kind:'turn'|'event'){
+        let stat;try{stat=await fs.stat(file);}catch(error:any){if(error.code==='ENOENT')return [];throw error;}
+        const signature=this.sourceSignature(stat),cached=this.historySources.get(file);
+        if(cached?.signature===signature)return cached.records;
+        const records=(await this.readJsonl<any>(file)).map(r=>this.compactHistorySource(r,kind)).filter(Boolean);
+        const after=await fs.stat(file);
+        if(this.sourceSignature(after)===signature)this.historySources.set(file,{signature,size:stat.size,ino:stat.ino,records});
+        return records;
+    }
+
+    async reconcileTaskHistory(runId:string):Promise<TaskHistoryRecord[]> {
+        const previous=this.historyWrites.get(runId)??Promise.resolve();
+        const work=previous.catch(()=>{}).then(async()=>{
+            const config=await this.loadConfig(runId);if(!config?.worldConfig?.enabled)return [];
+            const dirPath=this.getExperimentDir(runId);
+            const turns=await this.historySource(path.join(dirPath,'conversation.jsonl'),'turn');
+            const events=await this.historySource(path.join(dirPath,'events.jsonl'),'event');
+            const records=projectHistory(runId,config,turns,events);
+            const projection={version:1,sourceHash:hash([config,turns.map(t=>[t.eventId,t.turnIndex,t.environmentEvents,t.operationalAudit,!!t.response,t.timestamp]),events]),records};
+            const dir=path.join(this.baseDir,'task-history');
+            const target=path.join(dir,runId+'.jsonl');
+            const cached=new Map<string,TaskHistoryRecord>();
+            for(const batch of await this.readJsonl<any>(target)){
+                if(batch.version!==1)throw new Error('Unsupported history projection version');
+                for(const record of batch.updates??[])cached.set(record.id,record);
+                for(const id of batch.removedIds??[])cached.delete(id);
+            }
+            const updates=records.filter(r=>hash(cached.get(r.id)??null)!==hash(r));
+            const ids=new Set(records.map(r=>r.id)),removedIds=[...cached.keys()].filter(id=>!ids.has(id));
+            if(updates.length||removedIds.length){await this.ensureDir(dir);await this.appendJsonl(target,{version:1,sourceHash:projection.sourceHash,updates,removedIds});}
+            return structuredClone(records);
+        });
+        this.historyWrites.set(runId,work);
+        try{return await work;}catch(error:any){throw Object.assign(new Error(`Task-history projection needs repair: ${error.message}`),{code:'EIO'});}
+        finally{if(this.historyWrites.get(runId)===work)this.historyWrites.delete(runId);}
+    }
+
+    async rebuildTaskHistory(runId:string,owner:string){
+        if(!this.ownsWriter(owner))throw new Error('History rebuild requires the research writer lease');
+        const dir=this.getExperimentDir(runId);
+        if(!await this.loadConfig(runId))throw new Error('Unknown run');
+        // Validate canonical JSON before quarantining a disposable projection.
+        await this.getConversationHistory(runId);await this.getEventHistory(runId);
+        this.historySources.delete(path.join(dir,'conversation.jsonl'));this.historySources.delete(path.join(dir,'events.jsonl'));
+        const target=path.join(this.baseDir,'task-history',runId+'.jsonl');
+        let quarantined:string|null=null;
+        try {await fs.access(target);const quarantine=path.join(this.baseDir,'task-history','quarantine');await this.ensureDir(quarantine);quarantined=path.join(quarantine,runId+'.'+randomUUID()+'.jsonl');await fs.rename(target,quarantined);}
+        catch(error:any){if(error.code!=='ENOENT')throw error;}
+        const records=await this.reconcileTaskHistory(runId);return {runId,records:records.length,quarantined};
+    }
+
+    async taskHistory(agentId:string,query:HistoryQuery={}) {
+        // Validate before filesystem reads. Per-run projection is keyed by agent/run/task
+        // and rebuildable exclusively from canonical records; cache is never evidence.
+        queryHistory([],agentId,query);
+        const runs=query.runId?[query.runId]:await this.listRuns();
+        const records:TaskHistoryRecord[]=[];
+        for(const runId of runs){const config=await this.loadConfig(runId);if(config?.agentIds?.includes(agentId))records.push(...await this.reconcileTaskHistory(runId));}
+        return queryHistory(records,agentId,query);
+    }
+
+    async snapshotTaskHistory(snapshot:any,agentId:string):Promise<TaskHistoryRecord[]> {
+        if(snapshot.taskHistory){if(hash(snapshot.taskHistory)!==snapshot.taskHistoryHash)throw new Error('Snapshot task history hash mismatch');validateHistory(snapshot.taskHistory);return snapshot.taskHistory.filter((r:TaskHistoryRecord)=>r.agentId===agentId);}
+        if(!snapshot.sourceRunId||!Number.isSafeInteger(snapshot.sourceTurnIndex))return [];
+        const runId=snapshot.sourceRunId,config=await this.loadConfig(runId);if(!config)return [];
+        const turns=(await this.getConversationHistory(runId)).filter(t=>t.turnIndex<=snapshot.sourceTurnIndex);
+        const events=(await this.getEventHistory(runId)).filter(e=>e.type==='world_checkpoint'?e.beforeTurn<=snapshot.sourceTurnIndex:['recovery_attempt','experiment_error','task_history_control'].includes(e.type)&&e.turnIndex<=snapshot.sourceTurnIndex);
+        const own=projectHistory(runId,config,turns,events).filter(r=>r.agentId===agentId);
+        return [...await this.historyBaseline(runId,agentId),...own];
+    }
+
+    private async historyBaseline(runId:string,agentId:string):Promise<TaskHistoryRecord[]> {
+        try {const saved=JSON.parse(await fs.readFile(path.join(this.getExperimentDir(runId),'task-history-baseline.json'),'utf8'));if(hash(saved.records)!==saved.hash)throw new Error('Task history baseline hash mismatch');validateHistory(saved.records);return saved.records.filter((r:TaskHistoryRecord)=>r.agentId===agentId);}
+        catch(error:any){if(error.code==='ENOENT')return [];throw error;}
+    }
+
+    async ensureTaskHistoryBaseline(runId:string,agents:string[],protocol:any,fresh:boolean){
+        const target=path.join(this.getExperimentDir(runId),'task-history-baseline.json');
+        try{await fs.access(target);for(const agent of agents)await this.historyBaseline(runId,agent);return;}
+        catch(error:any){if(error.code!=='ENOENT')throw error;}
+        if(!fresh&&!protocol?.snapshotId)return;
+        const records:TaskHistoryRecord[]=[];
+        for(const agent of agents){
+            const history=protocol?.snapshotId?await this.snapshotTaskHistory(await this.loadArtifact('snapshots',protocol.snapshotId),agent):fresh?await this.allTaskHistory(agent):[];
+            records.push(...queryHistory(history.filter(r=>r.runId!==runId&&r.taskType!=='report'),agent,{limit:500}).records);
+        }
+        const value={version:1,hash:hash(records),records};
+        // Publish complete immutable baseline. Never adopt later experience into an old run.
+        const temporary=target+'.'+randomUUID()+'.tmp';
+        try{await fs.writeFile(temporary,JSON.stringify(value));await fs.link(temporary,target);}
+        catch(error:any){if(error.code!=='EEXIST')throw error;}
+        finally{await fs.rm(temporary,{force:true});}
+    }
+
+    async inferenceTaskHistory(runId:string,agentId:string):Promise<TaskHistoryRecord[]> {
+        return [...await this.historyBaseline(runId,agentId),...(await this.reconcileTaskHistory(runId)).filter(r=>r.agentId===agentId)];
+    }
+
+    async allTaskHistory(agentId:string):Promise<TaskHistoryRecord[]> {
+        const records:TaskHistoryRecord[]=[];
+        for(const runId of await this.listRuns()){const config=await this.loadConfig(runId);if(config?.agentIds?.includes(agentId))records.push(...(await this.reconcileTaskHistory(runId)).filter(r=>r.agentId===agentId));}
+        return records;
+    }
 
     constructor(baseDir: string = path.join(process.cwd(), '../researcher')) {
         this.baseDir = baseDir;
@@ -30,7 +145,18 @@ export class JsonlStorage {
      */
     private async appendJsonl(filePath: string, data: any): Promise<void> {
         const line = JSON.stringify(data) + '\n';
+        const cached=this.historySources.get(filePath);
+        let current:any;
+        if(cached){try{current=await fs.stat(filePath);}catch(error:any){if(error.code!=='ENOENT')throw error;}}
         await fs.appendFile(filePath, line, 'utf-8');
+        if(cached&&current&&this.sourceSignature(current)===cached.signature){
+            const after=await fs.stat(filePath);
+            if(after.ino===cached.ino&&after.size===cached.size+Buffer.byteLength(line)){
+                const compact=this.compactHistorySource(data,path.basename(filePath)==='conversation.jsonl'?'turn':'event');
+                if(compact)cached.records.push(structuredClone(compact));
+                cached.size=after.size;cached.signature=this.sourceSignature(after);
+            }else this.historySources.delete(filePath);
+        }else if(cached)this.historySources.delete(filePath);
     }
 
     /**
@@ -96,6 +222,7 @@ export class JsonlStorage {
         const existingEvents = await this.getEventHistory(runId);
         const recorded = new Set(existingEvents.map(event=>event.id));
         for (const event of record.environmentEvents ?? []) if (!recorded.has(event.id)) await this.appendEvent(runId, event);
+        await this.reconcileTaskHistory(runId);
         await this.appendEvent(runId, {
             schemaVersion: 2, id: record.eventId, type: 'memory_update',
             turnIndex: record.turnIndex, agentId: record.agentId, timestamp: record.timestamp,
@@ -115,6 +242,7 @@ export class JsonlStorage {
             for (const record of history) {
                 if (record.schemaVersion === 2 && !projected.has(record.eventId)) await this.projectTurn(run.name, record, storage);
             }
+            await this.reconcileTaskHistory(run.name);
         }
     }
 
@@ -219,6 +347,7 @@ export class JsonlStorage {
         const expDir = this.getExperimentDir(runId);
         await this.ensureDir(expDir);
         await this.appendJsonl(path.join(expDir, 'events.jsonl'), event);
+        if(['world_checkpoint','task_history_control'].includes(event.type)||event.type==='recovery_attempt'&&['invalid_action','schema_validation'].includes(event.category)||event.type==='experiment_error'&&(event.attempt?.worldValidation?.status==='rejected'||event.attempt?.operationalAudit?.some((a:any)=>a.status==='rejected')))await this.reconcileTaskHistory(runId);
     }
 
     /**

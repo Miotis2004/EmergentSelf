@@ -15,6 +15,7 @@ export interface AgentIdentity {
     name: string;
     stats: Record<string, AgentStat>;
     startingDemeanor?: StartingDemeanor;
+    archived?: boolean;
     operationalState?: any;
 }
 
@@ -43,6 +44,13 @@ export class AgentService {
   getAgentDetails(id: string): Observable<AgentDetails> {
     return this.http.get<AgentDetails>(`${this.apiUrl}/${id}`);
   }
+
+  getTaskHistory(id:string,query:Record<string,any>={}):Observable<any>{
+    const params=Object.fromEntries(Object.entries(query).filter(([,value])=>value!==''&&value!==undefined).map(([key,value])=>[key,String(value)]));
+    return this.http.get(`${this.apiUrl}/${encodeURIComponent(id)}/task-history`,{params});
+  }
+
+  archiveAgent(id:string):Observable<any>{return this.http.post(`${this.apiUrl}/${encodeURIComponent(id)}/archive`,{});}
 
   createAgent(agent: any): Observable<AgentIdentity> {
     return this.http.post<AgentIdentity>(this.apiUrl, agent);

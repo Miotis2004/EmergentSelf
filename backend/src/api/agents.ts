@@ -1,9 +1,11 @@
+import type {ExperimentController} from '../experiments/ExperimentController';
+import type {JsonlStorage} from '../storage/JsonlStorage';
 import {currentOperational} from '../operations/state';
 import { Router, Request, Response } from 'express';
 import { JsonStorage, AgentState } from '../storage/JsonStorage';
 import { DEMEANORS, validateStartingDemeanor } from '../agents/startingDemeanor';
 
-export function createAgentsRouter(storage: JsonStorage): Router {
+export function createAgentsRouter(storage: JsonStorage, controller?:ExperimentController, logs?:JsonlStorage): Router {
     const router = Router();
 
     router.get('/demeanors', (_req, res) => res.json(DEMEANORS));
@@ -57,6 +59,25 @@ export function createAgentsRouter(storage: JsonStorage): Router {
         } catch (error: any) {
             res.status(500).json({ error: error.message });
         }
+    });
+
+    router.get('/:id/task-history',async(req,res)=>{
+        try {
+            if(!logs)return res.status(503).json({error:'Task history unavailable'});
+            const agentId=String(req.params.id);
+            if(!await storage.loadAgentIdentity(agentId))return res.status(404).json({error:'Agent not found'});
+            const text=(key:string)=>{const value=req.query[key];if(value!==undefined&&typeof value!=='string')throw new Error('Invalid history filter');return value as string|undefined;};
+            const number=(key:string)=>{const value=text(key);if(value===undefined)return undefined;if(!/^\d+$/.test(value))throw new Error('Invalid history pagination');return Number(value);};
+            res.json(await logs.taskHistory(agentId,{runId:text('runId'),taskId:text('taskId'),status:text('status') as any,limit:number('limit'),offset:number('offset')}));
+        }catch(error:any){res.status(error.code==='EIO'?503:400).json({error:error.message});}
+    });
+
+    router.post('/:id/archive',async(req,res)=>{
+        try {
+            if(!controller)return res.status(503).json({error:'Agent archival safeguards unavailable'});
+            await controller.archiveAgent(String(req.params.id));
+            res.json({success:true,archived:true});
+        }catch(error:any){res.status(error.status??409).json({error:error.message});}
     });
 
     // Get specific agent details (identity, memory, beliefs)

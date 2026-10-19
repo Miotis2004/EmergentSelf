@@ -1,3 +1,4 @@
+import {HistoryConfig,resolveHistoryConfig,retrieveTaskHistory} from '../taskHistory/history';
 import {RecoveryConfig, resolveRecovery, classifyFailure, correctionMessage, RecoveryCancelled, ProposalError} from '../recovery/recovery';
 import {WorldConfig, WorldState, WorldError, assertWorldCompatible, schedule, resolveWorld, advanceWorld, nextAgent, nextWakeMinute, prepareWorld, worldContext, worldInstructions, visibleHistory} from '../world/simulation';
 import {OperationalConfig, OperationalError, resolveOperational, prepareOperational, operationalContext, operationalInstructions, currentOperational} from '../operations/state';
@@ -26,6 +27,7 @@ export interface ExperimentConfig {
     operationalConfig?: Partial<OperationalConfig>;
     worldConfig?: Partial<WorldConfig>;
     recoveryConfig?: Partial<RecoveryConfig>;
+    taskHistoryConfig?: Partial<HistoryConfig>;
     initialTopic?: string; // Legacy configurations omit this field.
     socialConfig?: Partial<SocialConfig>;
     taskConfig?: Partial<TaskConfig>;
@@ -165,6 +167,14 @@ export class ExperimentController {
         return result;
     }
 
+    archiveAgent(agentId:string) {return this.command(async()=>{
+        if((this.status==='running'||this.status==='paused')&&this.config?.agentIds.includes(agentId))throw Object.assign(new Error('Cannot remove an agent participating in an active experiment. Stop the experiment first.'),{status:409});
+        const owned=this.jsonlStorage.ownsWriter(this.writerId);
+        await this.jsonlStorage.acquireWriter(this.writerId);
+        try {await this.jsonStorage.setArchived(agentId,true);}
+        finally {if(!owned)await this.jsonlStorage.releaseWriter(this.writerId);}
+    });}
+
     assertResearchLease() {
         if (!this.researchLease || !this.jsonlStorage.ownsWriter(this.writerId)) throw new Error('Research operation requires the shared inference/write lease');
     }
@@ -175,6 +185,14 @@ export class ExperimentController {
             schemaVersion:3,id:randomUUID(),runId:this.config.runId,turnIndex:this.currentTurnIndex-1,
             actor:'unspecified',action,reason:`Explicit ${action} control`,timestamp:new Date().toISOString(),activeAgentId:this.activeAgentId
         });
+    }
+
+    private async recordHistoryControl(action:string){
+        if(!this.config?.worldConfig?.enabled)return;
+        const owned=this.jsonlStorage.ownsWriter(this.writerId);
+        if(!owned)await this.jsonlStorage.acquireWriter(this.writerId);
+        try{await this.jsonlStorage.appendEvent(this.config.runId,{id:randomUUID(),type:'task_history_control',runId:this.config.runId,action,turnIndex:this.currentTurnIndex,simulationMinute:this.world?.minute??null,timestamp:new Date().toISOString()});}
+        finally{if(!owned)await this.jsonlStorage.releaseWriter(this.writerId);}
     }
 
     private launchLoop() {
@@ -195,6 +213,7 @@ export class ExperimentController {
             const environment = resolveEnvironment(config);
             const initialTopic = normalizeInitialTopic(config.initialTopic);
             const memoryConfig = resolveMemoryConfig(config.memoryConfig);
+            resolveHistoryConfig(config.taskHistoryConfig);
             const protocol = config.protocol === undefined ? undefined : normalizeProtocol(config.protocol, memoryConfig.mode);
             await this.jsonlStorage.acquireWriter(this.writerId);
             try {
@@ -221,6 +240,7 @@ export class ExperimentController {
                 const llmConfig = resolveLlmConfig(config.llmConfig);
                 if (protocol && !llmConfig.modelVersion) throw new Error('Phase III runs require a model version/hash or an explicit unverified declaration');
                 const existing = await this.jsonlStorage.loadConfig(config.runId);
+                if(!existing)for(const agentId of config.agentIds)if((await this.jsonStorage.loadAgentIdentity(agentId))?.archived)throw new Error(`Archived agent ${agentId} cannot participate in a new experiment`);
                 const previousExecution=restored??(existing?await this.jsonlStorage.latestExecution(config.runId):undefined);
                 const recoveryConfig=resolveRecovery(config.recoveryConfig??existing?.recoveryConfig??previousExecution?.recoveryPolicy);
                 const discovery = new LlmAdapter(llmConfig);
@@ -254,6 +274,7 @@ export class ExperimentController {
                 const events = [...await this.jsonlStorage.getEventHistory(config.runId), ...await this.jsonlStorage.readResearch(config.runId,'feedback')];
                 if (!existing && (history.length || events.length)) throw new Error('Run already has research logs without configuration; use a new run ID');
                 if (!existing) await this.jsonlStorage.saveConfig(config.runId, resolved);
+                if(!existing||history.length<config.maxTurns)await this.jsonlStorage.ensureTaskHistoryBaseline(config.runId,config.agentIds,protocol,!existing);
                 if (startingStates) for (const id of config.agentIds) {
                     if (!await this.activeStorage.loadAgentIdentity(id)) await this.activeStorage.saveWorkingState(id, startingStates[id]);
                 }
@@ -283,7 +304,7 @@ export class ExperimentController {
                     this.pending.lastFailure={category:'inference_connection',code:'ATTEMPT_INTERRUPTED',explanation:'The backend restarted before this inference attempt was acknowledged.',retry:'technical'};
                     await this.jsonlStorage.appendEvent(config.runId,{id:`${this.pending.logicalTurnId}:attempt:${this.pending.attemptNumber}:interrupted`,type:'recovery_attempt',runId:config.runId,agentId:this.pending.agentId,turnIndex:this.currentTurnIndex,logicalTurnIndex:this.currentTurnIndex,attemptNumber:this.pending.attemptNumber,category:'inference_connection',code:'ATTEMPT_INTERRUPTED',stateCommitted:false,simulationMinute:this.world?.minute??null,recoveryAction:'restart_retry',attempt:{request:this.pending.preparedRequest},checkpoint:this.checkpoint()});
                 }
-                if (this.currentTurnIndex < config.maxTurns) await this.recordControl(existing ? 'restart' : 'start');
+                if (this.currentTurnIndex < config.maxTurns) {await this.recordControl(existing ? 'restart' : 'start');if(existing&&(!restored||restored.lifecycle==='running'))await this.recordHistoryControl('resumed');}
                 this.status = this.currentTurnIndex >= config.maxTurns ? 'completed' : restored&&restored.lifecycle!=='running'?(restored.lifecycle==='stopped'?'stopped':'paused'):'running';
                 this.shouldPause=this.status==='paused';this.shouldStop=this.status==='stopped';
                 await this.saveExecution();
@@ -320,6 +341,7 @@ export class ExperimentController {
         this.shouldStop = false;
         this.lastError = null;
         await this.recordControl('resume');
+        await this.recordHistoryControl('resumed');
         this.status = this.currentTurnIndex >= this.config.maxTurns ? 'completed' : 'running';
         this.recovery={...this.recovery,phase:'idle'};await this.saveExecution();
         this.emit('snapshot', await this.getSnapshot());
@@ -333,7 +355,7 @@ export class ExperimentController {
         await this.recordControl('stop');
         this.publishStatus();
         await this.activePromise;
-        try{if (this.jsonlStorage.ownsWriter(this.writerId)) await this.jsonlStorage.recoverPendingTurns(this.jsonStorage);}
+        try{if (this.jsonlStorage.ownsWriter(this.writerId)) await this.jsonlStorage.recoverPendingTurns(this.jsonStorage);await this.recordHistoryControl('stopped');}
         catch{this.recovery={phase:'stopped',category:'storage_failure',code:'STOPPED_WITH_PENDING_REPAIR',reason:'Stopped by researcher; committed projections still require storage repair before another run.'};await this.saveExecution().catch(()=>{});this.publishStatus();}
         finally{await this.jsonlStorage.releaseWriter(this.writerId);}
     }); }
@@ -343,6 +365,7 @@ export class ExperimentController {
         await this.activePromise;
         if (this.jsonlStorage.ownsWriter(this.writerId)) await this.jsonlStorage.recoverPendingTurns(this.jsonStorage);
         if(this.pending?.unwrittenAudit){await this.jsonlStorage.acquireWriter(this.writerId);await this.flushUnwrittenAudit();}
+        await this.recordHistoryControl('reset');
         await this.saveExecution({lifecycle:'reset',pending:null});
         await this.jsonlStorage.releaseWriter(this.writerId);
         this.pending=null;this.recovery={phase:'idle'};
@@ -374,8 +397,8 @@ export class ExperimentController {
                 this.activeAgentId = agentId;
                 await this.executeTurn(agentId);
                 if (this.currentTurnIndex >= this.config.maxTurns && !this.shouldStop) {
-                    this.status = 'completed';await this.saveExecution();
-                    await this.jsonlStorage.releaseWriter(this.writerId);
+                    await this.recordHistoryControl('limit_reached');
+                    if(!this.shouldStop){await this.saveExecution({lifecycle:'completed'});await this.jsonlStorage.releaseWriter(this.writerId);this.status='completed';}
                 }
             } catch (error: any) {
                 if(this.recoveryConfig.enabled){await this.handleRecoverableFailure(error,agentId);continue;}
@@ -509,12 +532,23 @@ export class ExperimentController {
         }
     }
 
+    private async appendWorldCheckpoint(record:any){
+        try{await this.jsonlStorage.appendEvent(this.config!.runId,record);}
+        catch(error){
+            // The checkpoint itself may already be durable when only its derived
+            // history projection failed. Reconcile that committed world before retry.
+            const found=(await this.jsonlStorage.getEventHistory(this.config!.runId)).filter(e=>e.id===record.id);
+            if(found.length&&found.every(e=>hash(e)===hash(record)))this.world=structuredClone(record.worldAfter);
+            throw error;
+        }
+    }
+
     private async commitWorldAdvance(minute:number,actor:string) {
         if(!this.world||!this.config)throw new WorldError('World simulation is disabled');
         const commitId=`${this.config.runId}:world:${this.world.revision+1}`;
         const result=advanceWorld(this.world,this.config.worldConfig as WorldConfig,minute,this.config.agentIds,commitId);
-        const record={id:commitId,type:'world_checkpoint',beforeTurn:this.currentTurnIndex,actor,simulationMinute:minute,worldAfter:result.state,events:result.events};
-        await this.jsonlStorage.appendEvent(this.config.runId,record);
+        const record={id:commitId,type:'world_checkpoint',beforeTurn:this.currentTurnIndex,actor,simulationMinute:minute,worldAfter:result.state,events:result.events,timestamp:new Date().toISOString()};
+        await this.appendWorldCheckpoint(record);
         this.world=result.state;
         for(const event of result.events)this.emit('environment_event',event);
         this.publishStatus();
@@ -531,8 +565,8 @@ export class ExperimentController {
         if(!this.world||!this.config?.agentIds.includes(agentId)||typeof actor!=='string'||!actor.trim()||actor.length>200||typeof reason!=='string'||!reason.trim()||reason.length>4000)throw new WorldError('Select a world participant and record researcher/reason');
         this.world=(await this.jsonlStorage.worldAt(this.config.runId))!;
         const state=structuredClone(this.world);delete state.waits[agentId];(state.wakeReasons[agentId]??=[]).push('researcher');state.revision++;
-        const record={id:`${this.config.runId}:world:${state.revision}`,type:'world_checkpoint',beforeTurn:this.currentTurnIndex,actor,reason,agentId,simulationMinute:state.minute,worldAfter:state,events:[{id:`${this.config.runId}:world:${state.revision}:wake`,type:'world_wake',agentId,reason,simulationMinute:state.minute}]};
-        await this.jsonlStorage.appendEvent(this.config.runId,record);
+        const record={id:`${this.config.runId}:world:${state.revision}`,type:'world_checkpoint',beforeTurn:this.currentTurnIndex,actor,reason,agentId,simulationMinute:state.minute,worldAfter:state,events:[{id:`${this.config.runId}:world:${state.revision}:wake`,type:'world_wake',agentId,reason,simulationMinute:state.minute}],timestamp:new Date().toISOString()};
+        await this.appendWorldCheckpoint(record);
         this.world=state;this.emit('environment_event',record);this.publishStatus();return this.getState();
     });}
 
@@ -595,6 +629,10 @@ ${transcript || '(No conversation supplied)'}${memoryOperationGuide(config)}${pa
         const schedulerDecision=this.world?{agentId,mode:this.config!.worldConfig!.schedulingMode,eligibility:resolveEnvironment(this.config!).taskConfig.kind!=='none'?'task_decision':this.config!.worldConfig!.schedulingMode==='round_robin'?'round_robin':'ready',wakeReasons:this.world.wakeReasons[agentId]??[]}:undefined;
         const worldObservation=this.world?worldContext(this.world,this.config!.worldConfig as WorldConfig,agentId):undefined;
         if(worldObservation)prompt.system+=worldInstructions(worldObservation);
+        const historyConfig=resolveHistoryConfig(this.config!.taskHistoryConfig);
+        const history=retrieveTaskHistory(historyConfig.enabled?await this.jsonlStorage.inferenceTaskHistory(this.config!.runId,agentId):[],agentId,this.config!.runId,worldObservation,historyConfig);
+        prompt.system+=history.text;
+        (prompt.retrieval as any).taskHistory=history.metadata;
         const environment = resolveEnvironment(this.config!);
         const pastEvents = [...await this.jsonlStorage.getEventHistory(this.config!.runId), ...await this.jsonlStorage.readResearch(this.config!.runId, 'feedback')];
         const feedback = visibleFeedback(this.config!, agentId, this.currentTurnIndex, pastEvents);
