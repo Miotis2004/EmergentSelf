@@ -89,7 +89,7 @@ app.get('/health', (req, res) => {
 export { app, controller };
 
 if (require.main === module) {
-    app.listen(port, () => {
+    controller.restore().catch(error=>{controller.reportRestoreFailure(error);console.error('Automatic restore suspended:',error.message);}).finally(()=>app.listen(port, () => {
         console.log(`Backend server listening at http://localhost:${port}`);
-    });
+    }));
 }
