@@ -71,7 +71,7 @@ export class LlmError extends Error {
 }
 
 export function resolveLlmConfig(config: Partial<LlmConfig> = {}): LlmConfig {
-    const requestTimeoutMs=config.requestTimeoutMs??Number(process.env.LLM_REQUEST_TIMEOUT_MS??300000);
+    const requestTimeoutMs=config.requestTimeoutMs??Number(process.env.LLM_REQUEST_TIMEOUT_MS??600000);
     if(!Number.isSafeInteger(requestTimeoutMs)||requestTimeoutMs<10||requestTimeoutMs>900000)throw new Error('LLM request timeout must be 10–900000 milliseconds');
     const maxTokens = config.maxTokens ?? Number(process.env.LLM_MAX_TOKENS ?? 2048);
     const outputMode = config.outputMode ?? process.env.LLM_OUTPUT_MODE ?? 'json_schema';
