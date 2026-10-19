@@ -77,7 +77,7 @@ test('HTTP endpoints: independent SSE subscribers, inline error data, retry, and
   const llmBase = `http://127.0.0.1:${model.address().port}/v1`;
   const discovered = await (await fetch(`${base}/api/llm/models?baseUrl=${encodeURIComponent(llmBase)}`)).json();
   assert.deepEqual(discovered, [{ id: 'local-model' }]);
-  await post('/api/experiment/start', { runId: 'sse-run', initialTopic: '  Starting topic  ', agentIds: ['bob','sara'], maxTurns: 3, llmConfig: { baseUrl: llmBase, model: 'local-model' } });
+  await post('/api/experiment/start', { recoveryConfig:{enabled:false},runId: 'sse-run', initialTopic: '  Starting topic  ', agentIds: ['bob','sara'], maxTurns: 3, llmConfig: { baseUrl: llmBase, model: 'local-model' } });
   await until(() => b.events.some(e => e.type === 'status_changed' && e.data.status === 'paused'));
   assert.equal(b.events.filter(e => e.type === 'turn_completed').length, 1);
   const error = b.events.find(e => e.type === 'experiment_error').data;

@@ -1,3 +1,5 @@
+import {RecoveryControlsComponent,defaultRecoveryConfig} from './recovery-controls.component';
+import {RecoveryStatusComponent,RecoveryAuditComponent} from './recovery-status.component';
 import {WorldControlsComponent,defaultWorldConfig} from './world-controls.component';
 import {WorldStateComponent} from './world-state.component';
 import {OperationalControlsComponent} from './operational-controls.component';
@@ -18,7 +20,7 @@ import { Subscription } from 'rxjs';
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [WorldControlsComponent,WorldStateComponent,OperationalControlsComponent, CommonModule, FormsModule, MemoryInspectorComponent, ResearchPanelComponent, AnalysisPanelComponent, RouterOutlet, SocialControlsComponent, BranchPanelComponent, PublicationPanelComponent],
+  imports: [RecoveryControlsComponent,RecoveryStatusComponent,RecoveryAuditComponent,WorldControlsComponent,WorldStateComponent,OperationalControlsComponent, CommonModule, FormsModule, MemoryInspectorComponent, ResearchPanelComponent, AnalysisPanelComponent, RouterOutlet, SocialControlsComponent, BranchPanelComponent, PublicationPanelComponent],
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.css']
 })
@@ -32,6 +34,8 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
   savedAgentIds: string[] | null = null;
   initialTopic = '';
   operationalConfig:any={enabled:true,locations:[],observationPolicy:'self_only'};
+  recoveryConfig:any=defaultRecoveryConfig();
+  recovery:any={phase:'idle'};
   worldConfig:any=defaultWorldConfig();
   worldState:any;
   worldConfigurationValid=true;
@@ -66,7 +70,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
 
   get researchConfiguration() {
       return {runId:this.runId,agentIds:this.savedAgentIds ? [...this.savedAgentIds] : this.nextParticipantIds,initialTopic:this.initialTopic,
-          ...(this.worldConfig.enabled?{worldConfig:structuredClone(this.worldConfig)}:{}),operationalConfig:structuredClone(this.operationalConfig),socialConfig:{...this.socialConfig},taskConfig:{...this.taskConfig},feedbackConfig:{...this.feedbackConfig},maxTurns:this.maxTurns,memoryConfig:{...this.memoryConfig},llmConfig:{baseUrl:this.llmBaseUrl,model:this.selectedModel,maxTokens:this.maxTokens,outputMode:this.outputMode}};
+          ...(this.worldConfig.enabled?{worldConfig:structuredClone(this.worldConfig)}:{}),recoveryConfig:structuredClone(this.recoveryConfig),operationalConfig:structuredClone(this.operationalConfig),socialConfig:{...this.socialConfig},taskConfig:{...this.taskConfig},feedbackConfig:{...this.feedbackConfig},maxTurns:this.maxTurns,memoryConfig:{...this.memoryConfig},llmConfig:{baseUrl:this.llmBaseUrl,model:this.selectedModel,maxTokens:this.maxTokens,outputMode:this.outputMode}};
   }
 
   get configurationLocked(): boolean { return this.requestPending || this.experimentStatus !== 'idle'; }
@@ -273,6 +277,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
   }
 
   startExperiment() {
+      if(!RecoveryControlsComponent.valid(this.recoveryConfig)){this.diagnostic='Correct Error Recovery settings before starting.';return;}
       if(this.worldConfig.enabled&&!this.worldConfigurationValid){this.diagnostic='Correct World Simulation JSON fields before starting.';return;}
       if (this.requestPending || (this.experimentStatus !== 'idle' && this.experimentStatus !== 'stopped')) return;
       const agentIds = this.experimentStatus === 'stopped' && this.savedAgentIds ? [...this.savedAgentIds] : this.nextParticipantIds;
@@ -287,7 +292,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
           runId: this.runId,
           agentIds,
           initialTopic,
-          ...(this.worldConfig.enabled?{worldConfig:structuredClone(this.worldConfig)}:{}),operationalConfig:structuredClone(this.operationalConfig),socialConfig:{...this.socialConfig},taskConfig:{...this.taskConfig},feedbackConfig:{...this.feedbackConfig},
+          ...(this.worldConfig.enabled?{worldConfig:structuredClone(this.worldConfig)}:{}),recoveryConfig:structuredClone(this.recoveryConfig),operationalConfig:structuredClone(this.operationalConfig),socialConfig:{...this.socialConfig},taskConfig:{...this.taskConfig},feedbackConfig:{...this.feedbackConfig},
           memoryConfig: { ...this.memoryConfig },
           maxTurns: this.maxTurns,
           llmConfig: {
@@ -341,6 +346,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
       }
       if (Number.isSafeInteger(state.currentTurnIndex)) this.currentTurnIndex = state.currentTurnIndex;
       if (state.status === 'running' && (previousStatus === 'idle' || previousStatus === 'stopped' || previousRunId !== state.config?.runId)) this.selectTab('conversation');
+      this.recovery=state.recovery??{phase:'idle'};
       this.experimentStatus = state.status;
       this.activeTurnAgent = state.activeAgentId ?? null;
       this.diagnostic = state.error?.message || '';
@@ -350,6 +356,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
           this.socialConfig = {enabled:false,...state.config.socialConfig};
           this.taskConfig = {kind:'none',endowment:10,multiplier:1.5,prize:20,...state.config.taskConfig};
           this.feedbackConfig = {enabled:false,source:'researcher',timing:'immediate',delayTurns:1,visibility:'private',positiveScore:1,negativeScore:-1,maxVisible:20,...state.config.feedbackConfig};
+          this.recoveryConfig={...defaultRecoveryConfig(),enabled:false,...state.config.recoveryConfig};
           this.worldState=state.worldState;
           this.worldConfig=structuredClone(state.config.worldConfig??defaultWorldConfig());
           this.operationalConfig=structuredClone(state.config.operationalConfig ?? {enabled:false,locations:[],observationPolicy:'self_only'});
@@ -402,6 +409,9 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
               this.auditEvents.push({ type: 'memory_update', turnIndex: event.data.turnRecord.turnIndex,
                   agentId: event.data.turnRecord.agentId, operations: event.data.auditTrail });
           }
+      } else if (event.type === 'recovery_attempt') {
+          this.activeTurnAgent=null;
+          if(!this.auditEvents.some(e=>e.id===event.data.id))this.auditEvents.push(event.data);
       } else if (event.type === 'environment_event') {
           if (!this.auditEvents.some(e=>e.id===event.data.id)) this.auditEvents.push(event.data);
       } else if (event.type === 'experiment_error') {

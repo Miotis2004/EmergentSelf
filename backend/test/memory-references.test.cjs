@@ -86,14 +86,14 @@ test('schema-rejected UPDATE is journaled with its unmodified proposal and missi
  assert.equal((await f.storage.loadWorkingState('bob')).entries.length,0);
 });
 
-test('semantic target rejections remain in committed per-operation research audit records',async t=>{
+test('semantic target rejections reject the complete turn while retaining every proposed memory operation',async t=>{
  const operations=[op('update',{target_id:'absent'}),op('update',{target_id:'wrong-category'}),op('update',{target_id:'inactive'})];
  const f=await fixture(t,()=>output(operations));await f.storage.saveAgentMemory('bob',[{id:'wrong-category',content:'An episodic observation'}]);
  const state=await f.storage.loadWorkingState('bob');state.entries.push({...state.entries[0],type:'belief',id:'inactive',status:'retired'});await f.storage.saveWorkingState('bob',state);
- const frozen=hash(state);await f.controller.start({...f.config,maxTurns:1});await until(()=>f.controller.getStatus()==='completed');
- const turn=(await f.logs.getConversationHistory('test-run'))[0];assert.equal(turn.response,'Exact conversational words.');
- assert.equal(hash(turn.stateAfter),frozen);assert.deepEqual(turn.auditTrail.map(record=>record.operation),operations);
- assert.match(turn.auditTrail[0].error,/Nonexistent target/);assert.match(turn.auditTrail[1].error,/Category mismatch/);assert.match(turn.auditTrail[2].error,/Inactive target/);
+ const frozen=hash(state);await f.controller.start({...f.config,maxTurns:1});await until(()=>f.controller.getStatus()==='paused');
+ assert.equal((await f.logs.getConversationHistory('test-run')).length,0);assert.equal(hash(await f.storage.loadWorkingState('bob')),frozen);
+ const audit=(await f.logs.getEventHistory('test-run')).find(event=>event.type==='experiment_error').attempt.memoryAudit;assert.deepEqual(audit.map(record=>record.operation),operations);
+ assert.match(audit[0].error,/Nonexistent target/);assert.match(audit[1].error,/Category mismatch/);assert.match(audit[2].error,/Inactive target/);
 });
 
 test('active retrieval groups exact IDs by category without changing ranking, contents, originals or budgets',async t=>{

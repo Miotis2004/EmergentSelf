@@ -1,3 +1,4 @@
+import {resolveRecovery} from '../recovery/recovery';
 import {assertWorldCompatible, resolveWorld, worldHash, worldContext, worldInstructions, visibleHistory} from '../world/simulation';
 import {resolveOperational, currentOperational, operationalContext, operationalInstructions} from '../operations/state';
 import { ParticipantIdentity } from '../memory/operationGuide';
@@ -86,7 +87,7 @@ export class ResearchService {
             const snapshotId = `${templateId}-start`; id(snapshotId);
             const protocol = normalizeProtocol({...input.protocol, stateScope:'trial', snapshotId, initialStateHash:hash(states),templateId},memoryConfig.mode);
             if (protocol.attributeMode === 'role' && input.agentIds.some(agentId => !Object.hasOwn(protocol.roles, agentId))) throw new Error('Each participant requires a role description');
-            const { runId, ...configuration } = { ...input,...(worldConfig?{worldConfig}:{}), ...(input.operationalConfig === undefined ? {} : {operationalConfig:operational}), agentIds:[...input.agentIds], initialTopic:normalizeInitialTopic(input.initialTopic), llmConfig, memoryConfig, ...((input.socialConfig || input.taskConfig || input.feedbackConfig) ? environment : {}), protocol };
+            const { runId, ...configuration } = { ...input,recoveryConfig:resolveRecovery(input.recoveryConfig),...(worldConfig?{worldConfig}:{}), ...(input.operationalConfig === undefined ? {} : {operationalConfig:operational}), agentIds:[...input.agentIds], initialTopic:normalizeInitialTopic(input.initialTopic), llmConfig, memoryConfig, ...((input.socialConfig || input.taskConfig || input.feedbackConfig) ? environment : {}), protocol };
             const template = {schemaVersion:3,templateId,createdAt:new Date().toISOString(),configuration,configurationHash:hash(configuration)};
             // Snapshot-first failures leave an explicit artifact, never overwrite data.
             await this.saveSnapshot(snapshotId,states,source);

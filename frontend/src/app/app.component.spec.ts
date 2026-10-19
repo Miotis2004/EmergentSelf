@@ -49,6 +49,14 @@ describe('Experiment participants and initial topic', () => {
 
     const completedTurn = (index: number, response = 'Actual model words') => ({type:'turn_completed',data:{turnRecord:{turnIndex:index,agentId:'bob',agentName:'Bob',response},auditTrail:[]}});
 
+    it('records recovery settings and keeps correction diagnostics separate from conversation text',()=>{
+        component.startExperiment();expect(experiments.startExperiment.calls.mostRecent().args[0].recoveryConfig.correctiveRetries).toBe(3);
+        const recovery={phase:'correcting',agentId:'bob',turnIndex:56,correctiveRetry:2,correctiveLimit:3,reason:'Conflicting activity transitions',code:'CONFLICTING_OPERATIONAL_TRANSITIONS'};
+        events.next({type:'status_changed',data:{status:'running',config:{...savedConfig,recoveryConfig:component.recoveryConfig},currentTurnIndex:56,recovery}});
+        events.next({type:'recovery_attempt',data:{id:'attempt-56-1',type:'recovery_attempt',logicalTurnIndex:56,agentId:'bob',attemptNumber:1,code:recovery.code,recoveryAction:'corrective_retry',stateCommitted:false,correctionMessage:'Private corrective feedback'}});
+        fixture.detectChanges();expect(fixture.nativeElement.querySelector('app-recovery-status').textContent).toContain('Corrective retry 2 of 3');expect(component.turns.length).toBe(0);expect(component.auditEvents.length).toBe(1);expect(fixture.nativeElement.querySelector('.transcript').textContent).not.toContain('Private corrective feedback');expect(fixture.nativeElement.querySelector('app-recovery-controls fieldset').disabled).toBeTrue();
+    });
+
     it('separates all setup controls from a single independently scrollable transcript and persistent toolbar', () => {
         const root=fixture.nativeElement;
         expect(component.selectedTab).toBe('setup');

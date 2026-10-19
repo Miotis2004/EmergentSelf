@@ -90,7 +90,8 @@
                 <progress aria-label="Completed experiment turns" [value]="currentTurnIndex" [max]="maxTurns"></progress>
             </div>
         </header>
-        <div *ngIf="diagnostic" class="diagnostic" role="alert">{{ diagnostic }}</div>
+        <app-recovery-status [state]="recovery" [agentLabel]="recovery.agentId ? participantLabel(recovery.agentId) : ''"></app-recovery-status>
+        <div *ngIf="diagnostic && recovery.phase !== 'suspended'" class="diagnostic" role="alert">{{ diagnostic }}</div>
         <div *ngIf="connectionMessage" class="connection-message" role="status">{{ connectionMessage }}</div>
         <div class="workspace-tabs" role="tablist" aria-label="Experiment workspace views">
             <button id="conversation-tab" type="button" role="tab" aria-controls="conversation-panel"
@@ -219,6 +220,7 @@
             </details>
         </fieldset>
 
+        <app-recovery-controls [config]="recoveryConfig" [locked]="configurationLocked"></app-recovery-controls>
         <app-world-controls [config]="worldConfig" [locked]="configurationLocked" [agentIds]="savedAgentIds || nextParticipantIds" (validityChange)="worldConfigurationValid=$event"></app-world-controls>
         <app-operational-controls [config]="operationalConfig" [locked]="configurationLocked"></app-operational-controls>
         <app-publication-panel [running]="experimentStatus === 'running'"></app-publication-panel>
@@ -257,7 +259,8 @@
                 <div *ngFor="let audit of evt.operationalAudit" class="operational-audit">
                     {{audit.status}}: {{audit.operation | json}} <span *ngIf="audit.error">{{audit.error}}</span>
                 </div>
-                <div *ngIf="evt.type !== 'memory_update'">
+                <app-recovery-audit *ngIf="evt.type==='recovery_attempt'" [event]="evt"></app-recovery-audit>
+                <div *ngIf="evt.type !== 'memory_update' && evt.type !== 'recovery_attempt'">
                     {{ evt | json }}
                 </div>
             </div>

@@ -8,6 +8,7 @@ export interface ExperimentConfig {
     initialTopic?: string;
     operationalConfig?: any;
     worldConfig?: any;
+    recoveryConfig?: any;
     memoryConfig?: Record<string, string | number>;
     socialConfig?: any;
     taskConfig?: any;
@@ -92,7 +93,7 @@ export class ExperimentService {
   connectEvents() {
     if (this.eventSource) return;
     this.eventSource = new EventSource('http://localhost:3000/api/events');
-    for (const type of ['snapshot', 'status_changed', 'turn_started', 'turn_completed', 'experiment_error', 'environment_event', 'connection_error']) {
+    for (const type of ['snapshot', 'status_changed', 'turn_started', 'turn_completed', 'experiment_error', 'environment_event', 'recovery_attempt', 'connection_error']) {
         this.eventSource.addEventListener(type, (event: MessageEvent) => {
             this.zone.run(() => {
                 try { this.events$.next({ type, data: JSON.parse(event.data) }); }
