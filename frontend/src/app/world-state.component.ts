@@ -6,6 +6,10 @@ import {FormsModule} from '@angular/forms';
 <p>Revision {{state.revision}}. World facts are separate from agent beliefs. Model sampling remains variable.</p>
 <h4>Locations and wake state</h4><div *ngFor="let position of state.positions | keyvalue">{{position.key}}: {{position.value}} · {{state.waits[$any(position.key)] ? ('waiting ' + json(state.waits[$any(position.key)])) : 'eligible'}} <button [disabled]="running || !actor.trim() || !reason.trim()" (click)="wake.emit({agentId:position.key,actor,reason})">Request next turn</button></div>
 <h4>Inventories</h4><div *ngFor="let inventory of state.inventories"><strong>{{inventory.id}}</strong> · {{inventory.ownerType}} {{inventory.ownerId}} · {{inventory.visibility}}<pre>{{inventory.quantities | json}}</pre></div>
+<section *ngIf="state.transformations"><h4>Verified transformations</h4>
+<div *ngFor="let task of state.transformations.tasks"><strong>{{task.id}} · {{task.recipeId}} · {{task.status}}</strong><div>Participants: {{task.participants.join(', ')}} · Workspace: {{task.workspaceId}}</div><div *ngIf="task.completionMinute !== undefined">Completion: {{time(task.completionMinute)}}</div><div *ngIf="task.failureReason" role="status">{{task.failureReason}}</div><details><summary>Contributions and reservations</summary><pre>{{task.contributions | json}}</pre></details></div>
+<h4>Item properties</h4><pre>{{state.transformations.itemProperties | json}}</pre>
+<details><summary>Verified production, consumption and modification audit</summary><pre>{{state.transformations.ledger | json}}</pre></details></section>
 <h4>Environmental state</h4><pre>{{state.environment | json}}</pre>
 <h4>Upcoming scheduled occurrences</h4><div *ngFor="let event of upcoming()">{{event.id}} · {{time(event.minute)}}</div>
 <h4>Deterministic researcher controls</h4><label>Researcher <input [(ngModel)]="actor" [disabled]="running"></label><label>Reason <input [(ngModel)]="reason" [disabled]="running"></label>

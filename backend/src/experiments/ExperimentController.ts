@@ -238,7 +238,12 @@ export class ExperimentController {
                     try { baseline = existing ? await this.jsonlStorage.loadBaseline(config.runId) : undefined; }
                     catch (error: any) { if (error.code !== 'ENOENT') throw error; }
                     const states: any = Object.create(null);
-                    if (!baseline) for (const id of config.agentIds) states[id] = await this.jsonStorage.loadWorkingState(id);
+                    if (!baseline) for (const id of config.agentIds) {
+                        states[id] = await this.jsonStorage.loadWorkingState(id);
+                        // Hash the same logical initial locations that ensureMemoryBaseline stores.
+                        // This changes no persisted agent data or existing run configuration.
+                        if(worldConfig?.enabled){states[id].operational=currentOperational(states[id]);states[id].operational.location=operational.locations.find(l=>l.id===(worldConfig.initialPositions[id]??'unspecified'))!;}
+                    }
                     const initialHash = hash(baseline?.states ?? states);
                     if (protocol.initialStateHash && protocol.initialStateHash !== initialHash) throw new Error('Shared starting-state hash mismatch');
                     protocol.initialStateHash = initialHash;

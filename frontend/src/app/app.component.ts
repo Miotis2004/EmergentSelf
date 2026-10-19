@@ -233,12 +233,12 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
   loadAgents() {
       this.agentService.getAgents().subscribe({
           next: (agents) => {
-              const known = new Set(this.availableAgents.map(agent => agent.id));
               this.availableAgents = [...agents].sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
               if (this.savedAgentIds) this.selectedAgentIds = new Set(this.savedAgentIds);
-              else for (const agent of agents) {
-                  // New discoveries default to included; preserve explicit unchecked choices.
-                  if (!known.has(agent.id)) this.selectedAgentIds.add(agent.id);
+              else {
+                  // Participation is opt-in, including newly created/discovered agents.
+                  const availableIds = new Set(agents.map(agent => agent.id));
+                  this.selectedAgentIds = new Set([...this.selectedAgentIds].filter(id => availableIds.has(id)));
               }
           },
           error: (err) => console.error('Failed to load agents', err)
@@ -369,6 +369,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
           this.maxTokens = state.config.llmConfig.maxTokens;
           this.outputMode = state.config.llmConfig.outputMode;
       } else {
+          if (this.savedAgentIds) this.selectedAgentIds.clear();
           this.savedAgentIds = null;
           this.operationalStates={};
           this.worldState=undefined;
