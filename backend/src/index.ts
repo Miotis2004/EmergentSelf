@@ -32,7 +32,7 @@ const jsonlStorage = new JsonlStorage();
 const llmAdapter = new LlmAdapter();
 const controller = new ExperimentController(jsonStorage, jsonlStorage, llmAdapter);
 
-app.use('/api/agents', createAgentsRouter(jsonStorage));
+app.use('/api/agents', createAgentsRouter(jsonStorage, controller, jsonlStorage));
 const research = new ResearchService(controller, jsonlStorage, jsonStorage);
 app.use('/api/research', createResearchRouter(research));
 app.use('/api/studies',createStudiesRouter(new StudyService(controller,jsonlStorage,research)));

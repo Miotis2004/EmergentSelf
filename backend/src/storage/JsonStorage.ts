@@ -19,6 +19,7 @@ export interface AgentState {
         };
     };
     startingDemeanor?: StartingDemeanor;
+    archived?: boolean; // Selection visibility; missing means false.
     memories: any[]; // Editable working memories
     beliefs: any[]; // Beliefs about the world or other agents
 }
@@ -85,7 +86,10 @@ export class JsonStorage {
     async loadAgentIdentity(agentId: string): Promise<AgentState | null> {
         const agentDir = this.getAgentDir(agentId);
         const state = await this.readJson<WorkingState>(path.join(agentDir, 'state.json'));
-        return state?.identity ?? this.readJson<AgentState>(path.join(agentDir, 'identity.json'));
+        const identity = state?.identity ?? await this.readJson<AgentState>(path.join(agentDir, 'identity.json'));
+        if (!identity) return null;
+        const visibility = await this.readJson<{archived:boolean}>(path.join(agentDir, 'visibility.json'));
+        return visibility ? {...identity, archived: visibility.archived} : identity;
     }
 
     /**
@@ -168,11 +172,23 @@ export class JsonStorage {
     /**
      * Lists all available agent IDs.
      */
-    async listAgents(): Promise<string[]> {
+    async setArchived(agentId:string, archived:boolean):Promise<void> {
+        if(typeof archived!=='boolean')throw new Error('Archived must be boolean');
+        if(!await this.loadAgentIdentity(agentId))throw Object.assign(new Error('Agent not found'),{status:404});
+        // Visibility is separate from snapshot-owned identity/memory files. Replaying an old
+        // working state can never restore visibility or rewrite historical identities.
+        await this.atomicWrite(path.join(this.getAgentDir(agentId),'visibility.json'),{archived});
+    }
+
+    async listAgents(options:{includeArchived?:boolean}={}): Promise<string[]> {
         const agentsDir = path.join(this.baseDir, 'agents');
         try {
             const entries = await fs.readdir(agentsDir, { withFileTypes: true });
-            return entries.filter(dirent => dirent.isDirectory()).map(dirent => dirent.name);
+            const ids=entries.filter(dirent => dirent.isDirectory()).map(dirent => dirent.name);
+            if(options.includeArchived)return ids;
+            const visible=[];
+            for(const id of ids)if((await this.loadAgentIdentity(id))?.archived!==true)visible.push(id);
+            return visible;
         } catch (error: any) {
              if (error.code === 'ENOENT') {
                 return [];

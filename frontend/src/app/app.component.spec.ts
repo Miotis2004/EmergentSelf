@@ -51,6 +51,14 @@ describe('Experiment participants and initial topic', () => {
 
     const completedTurn = (index: number, response = 'Actual model words') => ({type:'turn_completed',data:{turnRecord:{turnIndex:index,agentId:'bob',agentName:'Bob',response},auditTrail:[]}});
 
+    it('shows a removal icon for every available agent and refreshes only after successful archival',()=>{
+        const icons=Array.from(fixture.nativeElement.querySelectorAll('app-agent-archive > button')) as HTMLButtonElement[];
+        expect(icons.length).toBe(component.availableAgents.length);
+        expect(icons.map(b=>b.getAttribute('aria-label'))).toEqual(['Remove BOB (bob)','Remove CHARLIE (charlie)','Remove SARA (sara)']);
+        selectParticipants();agents.getAgents.and.returnValue(of([agent('charlie'),agent('sara')]));component.agentArchived('bob');fixture.detectChanges();
+        expect(component.availableAgents.map(a=>a.id)).toEqual(['charlie','sara']);expect(component.nextParticipantIds).toEqual(['sara']);
+    });
+
     it('records recovery settings and keeps correction diagnostics separate from conversation text',()=>{
         selectParticipants();
         component.startExperiment();expect(experiments.startExperiment.calls.mostRecent().args[0].recoveryConfig.correctiveRetries).toBe(3);
@@ -244,11 +252,11 @@ describe('Experiment participants and initial topic', () => {
         component.initialTopic = ' \nWhat makes someone trustworthy?\n ';
         component.startExperiment();
         expect(experiments.startExperiment.calls.mostRecent().args[0].initialTopic).toBe('What makes someone trustworthy?');
-        expect((fixture.nativeElement.querySelector('#conversation-topic') as HTMLTextAreaElement).maxLength).toBe(1000);
+        expect((fixture.nativeElement.querySelector('#conversation-topic') as HTMLTextAreaElement).maxLength).toBe(8000);
         experiments.startExperiment.calls.reset();
-        component.initialTopic = 'x'.repeat(1001); component.startExperiment();
+        component.initialTopic = 'x'.repeat(8001); component.startExperiment();
         expect(experiments.startExperiment).not.toHaveBeenCalled();
-        expect(component.diagnostic).toContain('1,000');
+        expect(component.diagnostic).toContain('8,000');
     });
 
     it('restores the saved participant order/topic and locks edits for active and completed runs', async () => {

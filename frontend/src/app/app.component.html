@@ -53,6 +53,7 @@
             <h3>Available Agents</h3>
         </div>
         <div class="agent-card" *ngFor="let a of availableAgents">
+            <app-agent-archive [agent]="a" (archived)="agentArchived($event)"></app-agent-archive>
             <strong>{{ a.name }}</strong> ({{ a.id }})<br>
             <small>C: {{a.stats['curiosity']?.initial || 0}}, S: {{a.stats['sociability']?.initial || 0}}</small>
             <p *ngIf="a.startingDemeanor as demeanor" class="starting-demeanor">
@@ -174,6 +175,7 @@
             <small id="topic-help">Optional starting stimulus for the first turn only (up to 8,000 characters).</small>
         </div>
 
+        <app-task-history-controls [config]="taskHistoryConfig" [locked]="configurationLocked"></app-task-history-controls>
         <fieldset [disabled]="configurationLocked" class="model-config">
             <legend>Local model</legend>
             <label for="model-url">API base URL</label>
@@ -239,6 +241,7 @@
             <h2>Audit & State Events</h2>
         </div>
 
+        <app-task-history [agents]="availableAgents" [participantIds]="savedAgentIds || []" [refreshToken]="turns.length + auditEvents.length + experimentStatus"></app-task-history>
         <app-memory-inspector [runId]="savedAgentIds ? runId : ''" [agentIds]="savedAgentIds || []" [refreshToken]="turns.length"></app-memory-inspector>
         <div style="overflow-y: auto;">
             <div *ngIf="auditEvents.length === 0" style="color: #888; font-style: italic;">No events.</div>

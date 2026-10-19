@@ -1,3 +1,5 @@
+import {TaskHistoryComponent,TaskHistoryControlsComponent,defaultTaskHistoryConfig} from './task-history.component';
+import {AgentArchiveComponent} from './agent-archive.component';
 import {RecoveryControlsComponent,defaultRecoveryConfig} from './recovery-controls.component';
 import {RecoveryStatusComponent,RecoveryAuditComponent} from './recovery-status.component';
 import {WorldControlsComponent,defaultWorldConfig} from './world-controls.component';
@@ -20,7 +22,7 @@ import { Subscription } from 'rxjs';
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [RecoveryControlsComponent,RecoveryStatusComponent,RecoveryAuditComponent,WorldControlsComponent,WorldStateComponent,OperationalControlsComponent, CommonModule, FormsModule, MemoryInspectorComponent, ResearchPanelComponent, AnalysisPanelComponent, RouterOutlet, SocialControlsComponent, BranchPanelComponent, PublicationPanelComponent],
+  imports: [TaskHistoryComponent,TaskHistoryControlsComponent,AgentArchiveComponent,RecoveryControlsComponent,RecoveryStatusComponent,RecoveryAuditComponent,WorldControlsComponent,WorldStateComponent,OperationalControlsComponent, CommonModule, FormsModule, MemoryInspectorComponent, ResearchPanelComponent, AnalysisPanelComponent, RouterOutlet, SocialControlsComponent, BranchPanelComponent, PublicationPanelComponent],
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.css']
 })
@@ -35,6 +37,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
   initialTopic = '';
   operationalConfig:any={enabled:true,locations:[],observationPolicy:'self_only'};
   recoveryConfig:any=defaultRecoveryConfig();
+  taskHistoryConfig:any=defaultTaskHistoryConfig();
   recovery:any={phase:'idle'};
   worldConfig:any=defaultWorldConfig();
   worldState:any;
@@ -70,7 +73,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
 
   get researchConfiguration() {
       return {runId:this.runId,agentIds:this.savedAgentIds ? [...this.savedAgentIds] : this.nextParticipantIds,initialTopic:this.initialTopic,
-          ...(this.worldConfig.enabled?{worldConfig:structuredClone(this.worldConfig)}:{}),recoveryConfig:structuredClone(this.recoveryConfig),operationalConfig:structuredClone(this.operationalConfig),socialConfig:{...this.socialConfig},taskConfig:{...this.taskConfig},feedbackConfig:{...this.feedbackConfig},maxTurns:this.maxTurns,memoryConfig:{...this.memoryConfig},llmConfig:{baseUrl:this.llmBaseUrl,model:this.selectedModel,maxTokens:this.maxTokens,outputMode:this.outputMode}};
+          ...(this.worldConfig.enabled?{worldConfig:structuredClone(this.worldConfig)}:{}),taskHistoryConfig:structuredClone(this.taskHistoryConfig),recoveryConfig:structuredClone(this.recoveryConfig),operationalConfig:structuredClone(this.operationalConfig),socialConfig:{...this.socialConfig},taskConfig:{...this.taskConfig},feedbackConfig:{...this.feedbackConfig},maxTurns:this.maxTurns,memoryConfig:{...this.memoryConfig},llmConfig:{baseUrl:this.llmBaseUrl,model:this.selectedModel,maxTokens:this.maxTokens,outputMode:this.outputMode}};
   }
 
   get configurationLocked(): boolean { return this.requestPending || this.experimentStatus !== 'idle'; }
@@ -245,6 +248,12 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
       });
   }
 
+  agentArchived(id:string){
+      this.availableAgents=this.availableAgents.filter(agent=>agent.id!==id);
+      this.selectedAgentIds.delete(id);
+      this.loadAgents();
+  }
+
   createAgent() {
       this.agentCreationError = '';
       if (!this.newAgent.id || !this.newAgent.name) { this.agentCreationError = 'Provide an agent ID and name.'; return; }
@@ -292,7 +301,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
           runId: this.runId,
           agentIds,
           initialTopic,
-          ...(this.worldConfig.enabled?{worldConfig:structuredClone(this.worldConfig)}:{}),recoveryConfig:structuredClone(this.recoveryConfig),operationalConfig:structuredClone(this.operationalConfig),socialConfig:{...this.socialConfig},taskConfig:{...this.taskConfig},feedbackConfig:{...this.feedbackConfig},
+          ...(this.worldConfig.enabled?{worldConfig:structuredClone(this.worldConfig)}:{}),taskHistoryConfig:structuredClone(this.taskHistoryConfig),recoveryConfig:structuredClone(this.recoveryConfig),operationalConfig:structuredClone(this.operationalConfig),socialConfig:{...this.socialConfig},taskConfig:{...this.taskConfig},feedbackConfig:{...this.feedbackConfig},
           memoryConfig: { ...this.memoryConfig },
           maxTurns: this.maxTurns,
           llmConfig: {
@@ -356,6 +365,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
           this.socialConfig = {enabled:false,...state.config.socialConfig};
           this.taskConfig = {kind:'none',endowment:10,multiplier:1.5,prize:20,...state.config.taskConfig};
           this.feedbackConfig = {enabled:false,source:'researcher',timing:'immediate',delayTurns:1,visibility:'private',positiveScore:1,negativeScore:-1,maxVisible:20,...state.config.feedbackConfig};
+          this.taskHistoryConfig={...defaultTaskHistoryConfig(),...state.config.taskHistoryConfig};
           this.recoveryConfig={...defaultRecoveryConfig(),enabled:false,...state.config.recoveryConfig};
           this.worldState=state.worldState;
           this.worldConfig=structuredClone(state.config.worldConfig??defaultWorldConfig());

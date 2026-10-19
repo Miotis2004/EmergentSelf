@@ -100,15 +100,15 @@ test('empty, whitespace-only and absent topics keep the original open-ended mess
   }
 });
 
-test('rejects invalid topics before creating configuration; permits the trimmed 1000-character boundary', async t => {
+test('rejects invalid topics before creating configuration; permits the trimmed 8000-character boundary', async t => {
   const f = await fixture(t, validTurn);
-  for (const initialTopic of [null, 7, {}, 'x'.repeat(1001)]) {
+  for (const initialTopic of [null, 7, {}, 'x'.repeat(8001)]) {
     await assert.rejects(f.controller.start({ ...f.config, initialTopic }), /Conversation topic/);
     assert.equal(await f.logs.loadConfig('test-run'), null);
   }
-  await f.controller.start({ ...f.config, maxTurns: 1, initialTopic: ` ${'x'.repeat(1000)} ` });
+  await f.controller.start({ ...f.config, maxTurns: 1, initialTopic: ` ${'x'.repeat(8000)} ` });
   await until(() => f.controller.getStatus() === 'completed');
-  assert.equal(f.controller.getConfig().initialTopic.length, 1000);
+  assert.equal(f.controller.getConfig().initialTopic.length, 8000);
 });
 
 test('pause, resume and a fresh controller preserve participants, topic, original config bytes and append-only history', async t => {

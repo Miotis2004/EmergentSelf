@@ -152,3 +152,5 @@ Phase VI adds isolated full-state branches, inherited conversation context, reve
 Phase VII adds immutable study protocols, source-linked statistical contrasts and sensitivity, publication packages with archived analysis code, and anonymous synthetic reproduction data. See [PHASE_VII.md](PHASE_VII.md) for the local replication command, dictionary, validity limits and sharing profiles. Cite the exact commit and artifact hash; [CITATION.cff](CITATION.cff) provides software citation metadata.
 
 World simulation also supports cooperative, authoritative item transformations: recipes, reserved inputs/tools, timed completion, repair of existing objects, and traceable production/consumption. See [Item transformations](docs/TRANSFORMATIONS.md) for configuration, task operations, knowledge policies, examples, and limitations.
+
+[Verified task history and agent archival](docs/TASK_HISTORY.md) adds persistent, source-linked task evidence across experiments, bounded history context, a separate researcher inspector, and reversible visibility metadata for removing agents from future selection without deleting their records.

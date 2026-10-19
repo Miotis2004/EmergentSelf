@@ -590,3 +590,9 @@ is separate from successful application response validation. Unavailable servers
 produce an explicit UNVERIFIED result and nonzero exit status. See
 [LLAMA_SCHEMA_COMPATIBILITY.md](LLAMA_SCHEMA_COMPATIBILITY.md) for the exact schema
 change, upstream parser measurements, audit hashes and remaining live validation.
+
+## Verified task history and soft agent removal
+
+The dashboard now provides a separate Task History inspector with agent/run/status filters and source-linked resource evidence. Setup includes bounded verified-history context settings; historical achievements never carry physical resources or equipment state into a new world. See [Task history](docs/TASK_HISTORY.md) for evidence semantics, snapshot isolation and the index repair command.
+
+Use an agent's trashcan action in Available Agents to open its REMOVE/CANCEL confirmation. Removal archives selection visibility after successful backend confirmation. Stop an active participant's experiment first. Identity lookup, memory, relationships, task history and historical experiment participation are preserved; no agent data is deleted.
