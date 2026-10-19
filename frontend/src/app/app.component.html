@@ -168,9 +168,9 @@
             </fieldset>
         <div class="form-group">
             <label for="conversation-topic">Conversation Topic</label>
-            <textarea id="conversation-topic" rows="3" maxlength="1000" [(ngModel)]="initialTopic"
+            <textarea id="conversation-topic" rows="6" maxlength="8000" [(ngModel)]="initialTopic"
                 [disabled]="configurationLocked" aria-describedby="topic-help"></textarea>
-            <small id="topic-help">Optional starting stimulus for the first turn only (up to 1,000 characters).</small>
+            <small id="topic-help">Optional starting stimulus for the first turn only (up to 8,000 characters).</small>
         </div>
 
         <fieldset [disabled]="configurationLocked" class="model-config">

@@ -282,7 +282,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
       }
 
       const initialTopic = this.initialTopic.trim();
-      if (initialTopic.length > 1000) { this.diagnostic = 'Conversation topic must be at most 1,000 characters'; return; }
+      if (initialTopic.length > 8000) { this.diagnostic = 'Conversation topic must be at most 8,000 characters'; return; }
       const config = {
           runId: this.runId,
           agentIds,

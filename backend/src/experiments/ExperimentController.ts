@@ -36,7 +36,7 @@ export function normalizeInitialTopic(value: unknown): string {
     if (value === undefined) return '';
     if (typeof value !== 'string') throw new Error('Conversation topic must be text');
     const topic = value.trim();
-    if (topic.length > 1000) throw new Error('Conversation topic must be at most 1,000 characters');
+    if (topic.length > 8000) throw new Error('Conversation topic must be at most 8,000 characters');
     return topic;
 }
 
