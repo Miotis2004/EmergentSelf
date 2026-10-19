@@ -150,3 +150,5 @@ Phase V adds explicit addressing/abstention, cooperative and competitive tasks, 
 Phase VI adds isolated full-state branches, inherited conversation context, reversible memory/attribute/history interventions, explicit model variants and paired pre/post probes. See [PHASE_VI.md](PHASE_VI.md) for lineage, recovery and continuity-analysis procedures.
 
 Phase VII adds immutable study protocols, source-linked statistical contrasts and sensitivity, publication packages with archived analysis code, and anonymous synthetic reproduction data. See [PHASE_VII.md](PHASE_VII.md) for the local replication command, dictionary, validity limits and sharing profiles. Cite the exact commit and artifact hash; [CITATION.cff](CITATION.cff) provides software citation metadata.
+
+World simulation also supports cooperative, authoritative item transformations: recipes, reserved inputs/tools, timed completion, repair of existing objects, and traceable production/consumption. See [Item transformations](docs/TRANSFORMATIONS.md) for configuration, task operations, knowledge policies, examples, and limitations.

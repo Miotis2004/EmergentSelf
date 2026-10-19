@@ -26,6 +26,7 @@ export function classifyFailure(error:unknown):RecoveryFailure {
   if(error.kind==='configuration')return {category:'configuration_error',code:'LLM_CONFIGURATION_ERROR',explanation:message,retry:'suspend'};
   return {category:'schema_validation',code:'INVALID_STRUCTURED_OUTPUT',explanation:message,retry:'correct'};
  }
+ if(error instanceof WorldError&&error.code)return {category:'invalid_action',code:error.code,explanation:message,retry:'correct'};
  if(error instanceof ProposalError)return {category:'invalid_action',code:error.code,explanation:message,retry:'correct'};
  if(error instanceof OperationalError||error instanceof WorldError||error instanceof MemoryValidationError||error instanceof ProtocolError){
   const codes:[RegExp,string][]=[[/Conflicting transitions/,'CONFLICTING_OPERATIONAL_TRANSITIONS'],[/Communication recipient/,'AGENT_NOT_COLOCATED'],[/Unauthorized inventory inspection/,'INVENTORY_NOT_ACCESSIBLE'],[/authorized accessible inventories|take\/deposit inventory ownership/,'INVENTORY_NOT_ACCESSIBLE'],[/Insufficient quantity/,'INSUFFICIENT_INVENTORY'],[/Unknown item/,'INVALID_ITEM_REFERENCE'],[/Unknown inventory/,'INVALID_INVENTORY_REFERENCE'],[/Unknown location/,'INVALID_LOCATION_REFERENCE'],[/Consumption requires/,'INVALID_CONSUMPTION'],[/operation limit|operation structure/,'INVALID_STRUCTURED_OPERATIONS']];

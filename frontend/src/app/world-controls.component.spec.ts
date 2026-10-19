@@ -16,3 +16,18 @@ describe('World simulation controls',()=>{
   c.config={events:[{id:'delivery',atMinute:1440,intervalMinutes:1440,occurrences:3}]};const before=JSON.stringify(c.state);fixture.detectChanges();expect(fixture.nativeElement.textContent).toContain('Day 2 00:00');expect(fixture.nativeElement.textContent).toContain('bag');expect(c.upcoming().map((e:any)=>e.id)).toEqual(['delivery:1','delivery:2']);expect(JSON.stringify(c.state)).toBe(before);
  });
 });
+
+describe('Transformation configuration and verified state',()=>{
+ it('edits optional versioned rules, rejects malformed drafts and removes the extension explicitly',()=>{
+  const fixture=TestBed.createComponent(WorldControlsComponent),c=fixture.componentInstance;
+  c.update('transformations','{"version":1,"recipes":[]}');expect(c.config.transformations.version).toBe(1);
+  c.update('transformations','[]');expect(c.errors['transformations']).toBeTruthy();expect(c.config.transformations.version).toBe(1);
+  c.update('transformations','null');expect(c.config.transformations).toBeUndefined();expect(c.errors['transformations']).toBeUndefined();
+ });
+ it('keeps saved recipe configuration immutable while locked',()=>{
+  const fixture=TestBed.createComponent(WorldControlsComponent),c=fixture.componentInstance;c.config={...defaultWorldConfig(),transformations:{version:1,recipes:[{id:'cook'}]}};c.locked=true;const before=JSON.stringify(c.config);c.update('transformations','null');fixture.detectChanges();expect(JSON.stringify(c.config)).toBe(before);
+ });
+ it('shows participants, deadline, reservations, item properties and verified consumption separately from speech',()=>{
+  const fixture=TestBed.createComponent(WorldStateComponent),c=fixture.componentInstance;c.state={minute:5,revision:2,positions:{helena:'kitchen'},waits:{},inventories:[],environment:{},executed:[],transformations:{tasks:[{id:'breakfast',recipeId:'cook',workspaceId:'kitchen-work',status:'in_progress',participants:['helena','clara'],completionMinute:25,contributions:[{itemId:'pot',role:'tool',released:false}]}],itemProperties:{stove:{lit:true}},ledger:[{type:'transformation_input_consumed',itemId:'match'}]}};const before=JSON.stringify(c.state);fixture.detectChanges();const text=fixture.nativeElement.textContent;expect(text).toContain('breakfast');expect(text).toContain('helena, clara');expect(text).toContain('00:25');expect(text).toContain('pot');expect(text).toContain('transformation_input_consumed');expect(JSON.stringify(c.state)).toBe(before);
+ });
+});

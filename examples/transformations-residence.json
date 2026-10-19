@@ -1,0 +1,207 @@
+{
+  "version": 1,
+  "enabled": true,
+  "initialMinute": 0,
+  "minutesPerTurn": 1,
+  "initialPositions": {
+    "helena": "kitchen",
+    "clara": "kitchen"
+  },
+  "items": [
+    {
+      "id": "oats",
+      "name": "Oats",
+      "unit": "unit",
+      "stackable": true,
+      "consumable": false
+    },
+    {
+      "id": "water",
+      "name": "Water",
+      "unit": "unit",
+      "stackable": true,
+      "consumable": false
+    },
+    {
+      "id": "match",
+      "name": "Match",
+      "unit": "unit",
+      "stackable": true,
+      "consumable": false
+    },
+    {
+      "id": "pot",
+      "name": "Pot",
+      "unit": "unit",
+      "stackable": false,
+      "consumable": false
+    },
+    {
+      "id": "stove",
+      "name": "Stove",
+      "unit": "unit",
+      "stackable": false,
+      "consumable": false,
+      "properties": {
+        "lit": false
+      }
+    },
+    {
+      "id": "oatmeal",
+      "name": "Oatmeal",
+      "unit": "unit",
+      "stackable": true,
+      "consumable": true
+    }
+  ],
+  "inventories": [
+    {
+      "id": "pantry",
+      "ownerType": "location",
+      "ownerId": "kitchen",
+      "visibility": "local",
+      "authorizedAgentIds": [],
+      "quantities": {
+        "oats": 1,
+        "water": 1,
+        "match": 2,
+        "pot": 1,
+        "stove": 1
+      }
+    },
+    {
+      "id": "helena-bag",
+      "ownerType": "agent",
+      "ownerId": "helena",
+      "visibility": "private",
+      "authorizedAgentIds": [],
+      "quantities": {}
+    },
+    {
+      "id": "clara-bag",
+      "ownerType": "agent",
+      "ownerId": "clara",
+      "visibility": "private",
+      "authorizedAgentIds": [],
+      "quantities": {}
+    },
+    {
+      "id": "counter",
+      "ownerType": "location",
+      "ownerId": "kitchen",
+      "visibility": "local",
+      "authorizedAgentIds": [],
+      "quantities": {}
+    }
+  ],
+  "events": [],
+  "observationPolicy": "local",
+  "communicationPolicy": "local",
+  "schedulingMode": "event_driven",
+  "transformations": {
+    "version": 1,
+    "recipes": [
+      {
+        "id": "light-stove",
+        "name": "Light Stove",
+        "description": "Researcher-defined light-stove",
+        "inputs": [
+          {
+            "itemId": "match",
+            "quantity": 1
+          }
+        ],
+        "requiredTools": [
+          {
+            "itemId": "stove",
+            "quantity": 1
+          }
+        ],
+        "catalysts": [],
+        "outputs": [],
+        "requiredEnvironment": {},
+        "environmentChanges": {
+          "stove-lit": "true"
+        },
+        "itemRequirements": {},
+        "itemChanges": {
+          "stove": {
+            "lit": true
+          }
+        },
+        "durationMinutes": 0,
+        "minParticipants": 1,
+        "consumption": "completion",
+        "interruption": "fail_if_participant_leaves",
+        "failurePolicy": "return_unconsumed"
+      },
+      {
+        "id": "prepare-oatmeal",
+        "name": "Prepare Oatmeal",
+        "description": "Researcher-defined prepare-oatmeal",
+        "inputs": [
+          {
+            "itemId": "oats",
+            "quantity": 1
+          },
+          {
+            "itemId": "water",
+            "quantity": 1
+          }
+        ],
+        "requiredTools": [
+          {
+            "itemId": "pot",
+            "quantity": 1
+          }
+        ],
+        "catalysts": [
+          {
+            "itemId": "stove",
+            "quantity": 1
+          }
+        ],
+        "outputs": [
+          {
+            "itemId": "oatmeal",
+            "quantity": 4
+          }
+        ],
+        "requiredEnvironment": {
+          "stove-lit": "true"
+        },
+        "environmentChanges": {},
+        "itemRequirements": {},
+        "itemChanges": {},
+        "durationMinutes": 20,
+        "minParticipants": 2,
+        "consumption": "completion",
+        "interruption": "fail_if_participant_leaves",
+        "failurePolicy": "return_unconsumed",
+        "requiredLocation": "kitchen"
+      }
+    ],
+    "workspaces": [
+      {
+        "id": "kitchen-work",
+        "inventoryId": "counter",
+        "locationId": "kitchen",
+        "authorizedAgentIds": [
+          "helena",
+          "clara"
+        ]
+      }
+    ],
+    "initialEnvironment": {
+      "stove-lit": "false"
+    },
+    "locationCapabilities": {
+      "kitchen": [
+        "heat",
+        "cooking"
+      ]
+    },
+    "knowledgePolicy": "all",
+    "initialKnowledge": {}
+  }
+}
