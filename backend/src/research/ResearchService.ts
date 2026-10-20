@@ -1,5 +1,6 @@
 import {resolveHistoryConfig,retrieveTaskHistory} from '../taskHistory/history';
 import {resolveRecovery} from '../recovery/recovery';
+import {interactionInstructions,resolveInteraction} from '../interaction/policy';
 import {assertWorldCompatible, resolveWorld, worldHash, worldContext, worldInstructions, visibleHistory} from '../world/simulation';
 import {resolveOperational, currentOperational, operationalContext, operationalInstructions} from '../operations/state';
 import { ParticipantIdentity } from '../memory/operationGuide';
@@ -41,10 +42,12 @@ export class ResearchService {
             // Validate attribution before creating the artifact.
             text(actor, 'Researcher', 200); text(reason, 'Reason');
             const context = [...await inheritedContext(this.logs,config),...(await this.logs.getConversationHistory(runId)).filter(turn=>turn.turnIndex<=turnIndex).map(compactTurn)];
+            let schedulerState=(await this.logs.getConversationHistory(runId)).filter(t=>t.turnIndex<=turnIndex).at(-1)?.schedulerStateAfter;
+            if(!schedulerState&&config.schedulingConfig&&config.protocol?.snapshotId){const baseline=await this.logs.loadArtifact('snapshots',config.protocol.snapshotId);if(baseline.schedulerState){if(hash(baseline.schedulerState)!==baseline.schedulerHash)throw new Error('Snapshot scheduler hash mismatch');schedulerState=baseline.schedulerState;}}
             const worldState=await this.logs.worldAt(runId,turnIndex);
             const taskHistory=[];
             for(const agentId of config.agentIds)taskHistory.push(...await this.logs.snapshotTaskHistory({sourceRunId:runId,sourceTurnIndex:turnIndex},agentId));
-            const result = await this.saveSnapshot(snapshotId, states, {taskHistory,taskHistoryHash:hash(taskHistory),...(worldState?{worldState,worldHash:worldHash(worldState)}:{}),sourceRunId:runId, sourceTurnIndex:turnIndex,context,contextHash:hash(context),configHash:hash(config)});
+            const result = await this.saveSnapshot(snapshotId, states, {...(schedulerState?{schedulerState,schedulerHash:hash(schedulerState)}:{}),taskHistory,taskHistoryHash:hash(taskHistory),...(worldState?{worldState,worldHash:worldHash(worldState)}:{}),sourceRunId:runId, sourceTurnIndex:turnIndex,context,contextHash:hash(context),configHash:hash(config)});
             await this.note(runId, actor, reason, 'snapshot', {snapshotId,sourceTurnIndex:turnIndex}); return result;
         });
     }
@@ -78,16 +81,19 @@ export class ResearchService {
             resolveHistoryConfig(input.taskHistoryConfig);
             const worldConfig=resolveWorld(input.worldConfig,input.agentIds,operational);
             const environment = resolveEnvironment(input);
+            const interaction:any=!input.protocol?.snapshotId||input.decisionConfig||input.schedulingConfig||input.communicationConfig?resolveInteraction(input):{};
+            if(input.decisionConfig?.mode==='unrestricted'){if(!input.communicationConfig)delete interaction.communicationConfig;if(!input.schedulingConfig)delete interaction.schedulingConfig;}
             const states: Record<string, WorkingState> = Object.create(null);
             let source: any = {sourceRunId:null,sourceTurnIndex:null};
             if (input.protocol?.snapshotId) {
                 const snapshot=await this.logs.loadArtifact('snapshots',id(input.protocol.snapshotId));
+                if(snapshot.schedulerState&&hash(snapshot.schedulerState)!==snapshot.schedulerHash)throw new Error('Snapshot scheduler hash mismatch');
                 if(snapshot.worldState&&worldHash(snapshot.worldState)!==snapshot.worldHash)throw new Error('Snapshot world hash mismatch');
                 if (hash(snapshot.states)!==snapshot.stateHash || hash(Object.keys(snapshot.states).sort())!==hash([...input.agentIds].sort())) throw new Error('Snapshot state/participant mismatch');
                 if(snapshot.worldState&&worldConfig?.enabled)assertWorldCompatible(snapshot.worldState,worldConfig,input.agentIds,operational.locations.map(l=>l.id));
                 Object.assign(states,snapshot.states);
                 const taskHistory=[];for(const agentId of input.agentIds)taskHistory.push(...await this.logs.snapshotTaskHistory(snapshot,agentId));
-                source={taskHistory,taskHistoryHash:hash(taskHistory),sourceRunId:snapshot.sourceRunId,sourceTurnIndex:snapshot.sourceTurnIndex,parentSnapshotId:snapshot.snapshotId,...(snapshot.worldState?{worldState:snapshot.worldState,worldHash:snapshot.worldHash}:{})};
+                source={...(snapshot.schedulerState?{schedulerState:snapshot.schedulerState,schedulerHash:snapshot.schedulerHash}:{}),taskHistory,taskHistoryHash:hash(taskHistory),sourceRunId:snapshot.sourceRunId,sourceTurnIndex:snapshot.sourceTurnIndex,parentSnapshotId:snapshot.snapshotId,...(snapshot.worldState?{worldState:snapshot.worldState,worldHash:snapshot.worldHash}:{})};
             } else {
                 const taskHistory=[];
                 for (const agentId of input.agentIds){states[id(agentId)] = await this.storage.loadWorkingState(agentId);taskHistory.push(...await this.logs.allTaskHistory(agentId));}
@@ -96,7 +102,7 @@ export class ResearchService {
             const snapshotId = `${templateId}-start`; id(snapshotId);
             const protocol = normalizeProtocol({...input.protocol, stateScope:'trial', snapshotId, initialStateHash:hash(states),templateId},memoryConfig.mode);
             if (protocol.attributeMode === 'role' && input.agentIds.some(agentId => !Object.hasOwn(protocol.roles, agentId))) throw new Error('Each participant requires a role description');
-            const { runId, operationalInitializationVersion: _freshRunInitialization, ...configuration } = { ...input,recoveryConfig:resolveRecovery(input.recoveryConfig),...(worldConfig?{worldConfig}:{}), ...(input.operationalConfig === undefined ? {} : {operationalConfig:operational}), agentIds:[...input.agentIds], initialTopic:normalizeInitialTopic(input.initialTopic), llmConfig, memoryConfig, ...((input.socialConfig || input.taskConfig || input.feedbackConfig) ? environment : {}), protocol };
+            const { runId, operationalInitializationVersion: _freshRunInitialization, ...configuration } = { ...input,...interaction,recoveryConfig:resolveRecovery(input.recoveryConfig),...(worldConfig?{worldConfig}:{}), ...(input.operationalConfig === undefined ? {} : {operationalConfig:operational}), agentIds:[...input.agentIds], initialTopic:normalizeInitialTopic(input.initialTopic), llmConfig, memoryConfig, ...((input.socialConfig || input.taskConfig || input.feedbackConfig) ? environment : {}), protocol };
             const template = {schemaVersion:3,templateId,createdAt:new Date().toISOString(),configuration,configurationHash:hash(configuration)};
             // Snapshot-first failures leave an explicit artifact, never overwrite data.
             await this.saveSnapshot(snapshotId,states,source);
@@ -178,8 +184,8 @@ export class ResearchService {
             const worldState=options.worldOverride??await this.logs.worldAt(runId,turnIndex);
             if(worldState)for(const agentState of [state,...otherStates]){agentState.operational=currentOperational(agentState);agentState.operational.location=opConfig.locations.find(location=>location.id===worldState.positions[agentState.identity.id])!;}
             if(worldState&&config.worldConfig.observationPolicy==='self_only')otherStates.length=0;
-            const worldObservation=worldState?worldContext(worldState,config.worldConfig,agentId):undefined;
-            const opContext=opConfig.enabled?operationalContext(state,opConfig,otherStates):undefined;
+            const worldObservation=worldState?worldContext(worldState,config.worldConfig,agentId,!!config.communicationConfig):undefined;
+            const opContext=opConfig.enabled?operationalContext(state,opConfig,config.communicationConfig?[]:otherStates):undefined;
             const historyConfig=resolveHistoryConfig(config.taskHistoryConfig);
             const taskHistory=retrieveTaskHistory(historyConfig.enabled?await this.logs.snapshotTaskHistory({sourceRunId:runId,sourceTurnIndex:turnIndex},agentId):[],agentId,runId,worldObservation,historyConfig);
             const probeSessionId=randomUUID();
@@ -188,7 +194,7 @@ export class ResearchService {
             for (const [probeTurn,prompt] of definition.prompts.entries()) {
                 // Dedicated probe conversation: no main transcript and no state writes.
                 const rendered=renderProtocol(state,resolveMemoryConfig(config.memoryConfig),protocol,visibleHistory(options.historyOverride??[],agentId,config.worldConfig),prompt,participants);
-                rendered.system+=taskHistory.text;
+                rendered.system+=taskHistory.text+interactionInstructions(config,agentId);
                 (rendered.retrieval as any).taskHistory=taskHistory.metadata;
                 if(opContext)rendered.system+=operationalInstructions(opContext)+'\nThis research probe is read-only: operational proposals are recorded but never applied.';
                 if(worldObservation)rendered.system+=worldInstructions(worldObservation)+'\nResearch probe: world operations are recorded proposals only, never applied.';
@@ -201,7 +207,7 @@ export class ResearchService {
                 adapter.lastParsedResponse=undefined; adapter.lastRequest=undefined; adapter.lastRawContent=undefined; adapter.lastDiagnostics=undefined; adapter.lastValidation=undefined;
                 try {
                     if(rendered.system.length+messages.reduce((n,m)=>n+m.content.length,0)>protocol.inputCharLimit) throw new Error('Probe exceeds the recorded input character limit');
-                    const response=await adapter.generateTurn(rendered.system,messages,protocol.inputCharLimit,false,false,opConfig.enabled,!!worldState);
+                    const response=await adapter.generateTurn(rendered.system,messages,protocol.inputCharLimit,false,false,opConfig.enabled,!!worldState,undefined,undefined,config.decisionConfig?.mode==='agent_selected',!!config.communicationConfig);
                     Object.assign(record,{status:'success',request:adapter.lastRequest,rawResponse:adapter.lastRawContent,response,llmValidation:adapter.lastValidation,diagnostics:adapter.lastDiagnostics});
                     messages.push({role:'assistant',content:response.response});
                 } catch(error) {

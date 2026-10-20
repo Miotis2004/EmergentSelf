@@ -107,7 +107,7 @@ test('study HTTP routes preserve immutable protocols and return explicit missing
 });
 
 test('documented local replication command registers before sequential inference against the real application APIs',async t=>{
- const f=await fixture(t,reply),research=new ResearchService(f.controller,f.logs,f.storage),studies=new StudyService(f.controller,f.logs,research);
+ const f=await fixture(t,(n,request)=>JSON.stringify({...JSON.parse(reply(n)),decision:{mode:'communicate',reason:'Respond',goal:null},communication:{scope:'global',recipientAgentIds:[]}})),research=new ResearchService(f.controller,f.logs,f.storage),studies=new StudyService(f.controller,f.logs,research);
  const express=require('express'),http=require('node:http'),{createStudiesRouter}=require('../dist/api/studies'),{createAgentsRouter}=require('../dist/api/agents'),{createResearchRouter}=require('../dist/api/research'),{createExperimentRouter}=require('../dist/api/experiment');
  const app=express();app.use(express.json());app.use('/api/studies',createStudiesRouter(studies));app.use('/api/agents',createAgentsRouter(f.storage));app.use('/api/research',createResearchRouter(research));app.use('/api/experiment',createExperimentRouter(f.controller,f.logs));
  app.get('/api/llm/config',(req,res)=>res.json({baseUrl:f.config.llmConfig.baseUrl,maxTokens:2048,outputMode:'json_schema'}));app.get('/api/llm/models',(req,res)=>res.json([{id:'real-loaded-id'}]));

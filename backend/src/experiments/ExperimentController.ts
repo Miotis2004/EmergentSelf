@@ -1,3 +1,5 @@
+import {DecisionConfig,SchedulingConfig,CommunicationConfig,resolveInteraction,validateIntent,routeMessage,interactionInstructions} from '../interaction/policy';
+import {selectAgent,initialScheduler} from '../interaction/scheduler';
 import {HistoryConfig,resolveHistoryConfig,retrieveTaskHistory} from '../taskHistory/history';
 import {RecoveryConfig, resolveRecovery, classifyFailure, correctionMessage, RecoveryCancelled, ProposalError} from '../recovery/recovery';
 import {WorldConfig, WorldState, WorldError, assertWorldCompatible, schedule, resolveWorld, advanceWorld, nextAgent, nextWakeMinute, prepareWorld, worldContext, worldInstructions, visibleHistory} from '../world/simulation';
@@ -20,6 +22,9 @@ import { retrieveMemory, boundedTranscript } from '../memory/retrieval';
 export type RunStatus = 'idle' | 'running' | 'paused' | 'stopped' | 'completed';
 
 export interface ExperimentConfig {
+    decisionConfig?: DecisionConfig;
+    schedulingConfig?: SchedulingConfig;
+    communicationConfig?: CommunicationConfig;
     runId: string;
     operationalInitializationVersion?: 1; // Backend-owned marker; legacy runs omit it.
     agentIds: string[]; // Immutable participant order for the sequential scheduler.
@@ -241,6 +246,9 @@ export class ExperimentController {
                 const llmConfig = resolveLlmConfig(config.llmConfig);
                 if (protocol && !llmConfig.modelVersion) throw new Error('Phase III runs require a model version/hash or an explicit unverified declaration');
                 const existing = await this.jsonlStorage.loadConfig(config.runId);
+                let interaction:any = !existing&&!protocol?.snapshotId ? resolveInteraction(config) : (config.decisionConfig||config.schedulingConfig||config.communicationConfig ? resolveInteraction(config) : {});
+                if(existing)interaction=Object.fromEntries(['decisionConfig','schedulingConfig','communicationConfig'].filter(k=>(config as any)[k]!==undefined||(existing as any)[k]!==undefined).map(k=>[k,(config as any)[k]??(existing as any)[k]]));
+                if(config.decisionConfig?.mode==='unrestricted'){if(!config.communicationConfig)delete interaction.communicationConfig;if(!config.schedulingConfig)delete interaction.schedulingConfig;}
                 let freshBaseline:any;
                 const initializeOperational=!protocol?.snapshotId&&(existing?.operationalInitializationVersion===1||!existing&&operational.enabled);
                 if(initializeOperational){
@@ -289,7 +297,7 @@ export class ExperimentController {
                     protocol.initialStateHash = initialHash;
                 }
                 const {operationalInitializationVersion: _requestedInitialization,...requestedConfig}=config;
-                const resolved = { ...requestedConfig, ...(initializeOperational?{operationalInitializationVersion:1 as const}:{}), recoveryConfig, ...(worldConfig?{worldConfig}:{}), ...(config.operationalConfig === undefined ? {} : {operationalConfig:operational}), agentIds: [...config.agentIds], initialTopic, llmConfig, memoryConfig, ...((config.socialConfig || config.taskConfig || config.feedbackConfig) ? environment : {}), ...(protocol ? { protocol } : {}) };
+                const resolved = { ...requestedConfig, ...interaction, ...(initializeOperational?{operationalInitializationVersion:1 as const}:{}), recoveryConfig, ...(worldConfig?{worldConfig}:{}), ...(config.operationalConfig === undefined ? {} : {operationalConfig:operational}), agentIds: [...config.agentIds], initialTopic, llmConfig, memoryConfig, ...((config.socialConfig || config.taskConfig || config.feedbackConfig) ? environment : {}), ...(protocol ? { protocol } : {}) };
                 if (existing && !isDeepStrictEqual({ ...existing, recoveryConfig:resolveRecovery(existing.recoveryConfig??previousExecution?.recoveryPolicy), llmConfig:resolveLlmConfig(existing.llmConfig), initialTopic: normalizeInitialTopic(existing.initialTopic), memoryConfig: resolveMemoryConfig(existing.memoryConfig), ...resolveEnvironment(existing) }, { ...resolved, ...environment })) throw new Error('Run ID already has different metadata; use a new run ID to change participants, topic, model or settings');
                 const history = await this.jsonlStorage.getConversationHistory(config.runId);
                 const events = [...await this.jsonlStorage.getEventHistory(config.runId), ...await this.jsonlStorage.readResearch(config.runId,'feedback')];
@@ -402,11 +410,22 @@ export class ExperimentController {
         this.publishStatus();
         this.emit('snapshot', await this.getSnapshot());
     }); }
+    private async selection(){
+        const c=this.config!;
+        if(this.world&&schedule(c.worldConfig as WorldConfig).some(o=>o.minute<=this.world!.minute&&!this.world!.executed.includes(o.id)))await this.commitWorldAdvance(this.world.minute,'scheduler');
+        if(!c.schedulingConfig||c.schedulingConfig.mode==='event_driven')return undefined;
+        const history=await this.jsonlStorage.getConversationHistory(c.runId);
+        let before=history.at(-1)?.schedulerStateAfter;
+        if(!before&&c.protocol?.snapshotId){const snapshot=await this.jsonlStorage.loadArtifact('snapshots',c.protocol.snapshotId);if(snapshot.schedulerState){if(hash(snapshot.schedulerState)!==snapshot.schedulerHash)throw new Error('Snapshot scheduler hash mismatch');before=snapshot.schedulerState;}}
+        return selectAgent(c.schedulingConfig,c.agentIds,c.agentIds.filter(id=>c.schedulingConfig!.mode==='round_robin'||!this.world?.waits[id]),this.currentTurnIndex,before??initialScheduler());
+    }
     private async runLoop() {
         if (!this.config) return;
         while (this.status === 'running' && this.currentTurnIndex < this.config.maxTurns && !this.shouldPause && !this.shouldStop) {
-            const agentId = this.pending?.agentId??(this.world ? nextAgent(this.world,this.config.worldConfig as WorldConfig,this.config.agentIds,this.currentTurnIndex,resolveEnvironment(this.config).taskConfig.kind!=='none') : this.config.agentIds[this.currentTurnIndex % this.config.agentIds.length]);
+            let agentId:string|undefined=this.pending?.agentId;
             try {
+            const selection=this.pending?.context?.selection??await this.selection();
+            agentId = this.pending?.agentId??(selection ? selection.agentId : this.world ? nextAgent(this.world,{...this.config.worldConfig,schedulingMode:this.config.schedulingConfig?.mode==='event_driven'?'event_driven':this.config.worldConfig!.schedulingMode} as WorldConfig,this.config.agentIds,this.currentTurnIndex,resolveEnvironment(this.config).taskConfig.kind!=='none') : this.config.agentIds[this.currentTurnIndex % this.config.agentIds.length]);
                 if(this.pending?.retryAt>Date.now()){this.recovery={...this.recovery,phase:this.pending.nextPhase};this.publishStatus();await this.waitForRetry(this.pending.retryAt-Date.now());}
                 if(this.recoveryConfig.enabled&&(this.shouldPause||this.shouldStop))break;
                 if(!agentId && this.world){
@@ -417,7 +436,7 @@ export class ExperimentController {
                 }
                 if(!agentId)break;
                 this.activeAgentId = agentId;
-                await this.executeTurn(agentId);
+                await this.executeTurn(agentId,selection);
                 if (this.currentTurnIndex >= this.config.maxTurns && !this.shouldStop) {
                     await this.recordHistoryControl('limit_reached');
                     if(!this.shouldStop){await this.saveExecution({lifecycle:'completed'});await this.jsonlStorage.releaseWriter(this.writerId);this.status='completed';}
@@ -636,7 +655,7 @@ ${retrieved.text || '(None supplied)'}
 Extractive digest of additional entries (excerpts; originals retained):
 ${retrieved.summary || '(None supplied)'}
 
-Based on the recent conversation transcript below, you must generate a reply.
+${this.config!.decisionConfig?.mode==='agent_selected'?'Review the authorized recent conversations and choose your primary activity. Speech and physical work are optional.':'Based on the recent conversation transcript below, you must generate a reply.'}
 You can also propose changes to your memories or beliefs if you learned something new or changed your mind.
 
 Recent conversation:
@@ -650,20 +669,20 @@ ${transcript || '(No conversation supplied)'}${memoryOperationGuide(config)}${pa
         };
     }
 
-    private async prepareTurnContext(agentId:string) {
+    private async prepareTurnContext(agentId:string,selection?:any) {
         if(this.world&&schedule(this.config!.worldConfig as WorldConfig).some(o=>o.minute<=this.world!.minute&&!this.world!.executed.includes(o.id)))await this.commitWorldAdvance(this.world.minute,'scheduler');
         const prompt = await this.buildPrompt(agentId);
         const opConfig = resolveOperational(this.config!.operationalConfig);
-        if(opConfig.enabled && !(this.currentTurnIndex === 0 && this.config!.initialTopic) &&
+        if((opConfig.enabled||this.config!.decisionConfig?.mode==='agent_selected') && !(this.currentTurnIndex === 0 && this.config!.initialTopic) &&
             (!this.config!.protocol?.turnPrompt || this.config!.protocol.turnPrompt === 'It is your turn to speak, {name}.')) {
             prompt.messages[0].content=`It is your turn to choose speech, an action, or silent continuation, ${prompt.state.identity.name}.`;
         }
         const observedStates = [];
-        if(opConfig.enabled && opConfig.observationPolicy === 'co_located' && (!this.world || this.config!.worldConfig!.observationPolicy==='local')) for(const id of this.config!.agentIds) if(id !== agentId) {const other=await this.runWorkingState(id);if(this.world){other.operational=currentOperational(other);other.operational.location=opConfig.locations.find(l=>l.id===this.world!.positions[id])!;}observedStates.push(other);}
+        if(!this.config!.communicationConfig && opConfig.enabled && opConfig.observationPolicy === 'co_located' && (!this.world || this.config!.worldConfig!.observationPolicy==='local')) for(const id of this.config!.agentIds) if(id !== agentId) {const other=await this.runWorkingState(id);if(this.world){other.operational=currentOperational(other);other.operational.location=opConfig.locations.find(l=>l.id===this.world!.positions[id])!;}observedStates.push(other);}
         const opContext = opConfig.enabled ? operationalContext(prompt.state,opConfig,observedStates) : undefined;
         if(opContext) prompt.system += operationalInstructions(opContext);
-        const schedulerDecision=this.world?{agentId,mode:this.config!.worldConfig!.schedulingMode,eligibility:resolveEnvironment(this.config!).taskConfig.kind!=='none'?'task_decision':this.config!.worldConfig!.schedulingMode==='round_robin'?'round_robin':'ready',wakeReasons:this.world.wakeReasons[agentId]??[]}:undefined;
-        const worldObservation=this.world?worldContext(this.world,this.config!.worldConfig as WorldConfig,agentId):undefined;
+        const schedulerDecision=this.world?{agentId,mode:this.config!.schedulingConfig?.mode??this.config!.worldConfig!.schedulingMode,eligibleAgentIds:this.config!.agentIds.filter(id=>!this.world!.waits[id]),stateBefore:{lastAgentId:this.world!.lastAgentId??null,waits:this.world!.waits},eligibility:resolveEnvironment(this.config!).taskConfig.kind!=='none'?'task_decision':this.config!.worldConfig!.schedulingMode==='round_robin'?'round_robin':'ready',wakeReasons:this.world.wakeReasons[agentId]??[]}:undefined;
+        const worldObservation=this.world?worldContext(this.world,this.config!.worldConfig as WorldConfig,agentId,!!this.config!.communicationConfig):undefined;
         if(worldObservation)prompt.system+=worldInstructions(worldObservation);
         const historyConfig=resolveHistoryConfig(this.config!.taskHistoryConfig);
         const history=retrieveTaskHistory(historyConfig.enabled?await this.jsonlStorage.inferenceTaskHistory(this.config!.runId,agentId):[],agentId,this.config!.runId,worldObservation,historyConfig);
@@ -674,11 +693,12 @@ ${transcript || '(No conversation supplied)'}${memoryOperationGuide(config)}${pa
         const feedback = visibleFeedback(this.config!, agentId, this.currentTurnIndex, pastEvents);
         prompt.system += socialInstructions(this.config!, this.currentTurnIndex) + feedbackContext(feedback);
         (prompt.retrieval as any).feedbackIds = feedback.map(event=>event.id);
-        return {prompt,opConfig,opContext,worldObservation,schedulerDecision,environment};
+        prompt.system+=interactionInstructions(this.config,agentId);
+        return {prompt,opConfig,opContext,worldObservation,schedulerDecision,environment,selection};
     }
-    private async executeTurn(agentId:string){
+    private async executeTurn(agentId:string,selection?:any){
         if(!this.pending){
-            const context=await this.prepareTurnContext(agentId);
+            const context=await this.prepareTurnContext(agentId,selection);
             this.pending={logicalTurnId:`${this.config!.runId}:turn:${this.currentTurnIndex}`,agentId,turnIndex:this.currentTurnIndex,attemptNumber:0,correctiveRetries:0,totalCorrections:0,technicalFailures:0,totalTechnicalFailures:0,startedAt:new Date().toISOString(),context,corrections:[]};
         }
         const {prompt:original,opConfig,opContext,worldObservation,schedulerDecision,environment}=this.pending.context;
@@ -693,11 +713,12 @@ ${transcript || '(No conversation supplied)'}${memoryOperationGuide(config)}${pa
         this.currentAttempt = { startedAt: new Date().toISOString(), prompt: { system: prompt.system, messages: prompt.messages }, retrieval: prompt.retrieval, ...(opContext ? {operationalContext:opContext} : {}),...(worldObservation?{worldObservation,schedulerDecision}:{}) };
         this.llmAdapter.updateConfig(this.config!.llmConfig);
         this.inferenceAbort=this.recoveryConfig.enabled?new AbortController():undefined;
-        const response = await this.llmAdapter.generateTurn(prompt.system, prompt.messages, this.config!.protocol?.inputCharLimit, environment.socialConfig.enabled, environment.taskConfig.kind !== 'none', opConfig.enabled, !!this.world,this.inferenceAbort?.signal,this.recoveryConfig.enabled?async request=>{this.pending.preparedRequest=request;await this.saveExecution();}:undefined);
+        const response = await this.llmAdapter.generateTurn(prompt.system, prompt.messages, this.config!.protocol?.inputCharLimit, environment.socialConfig.enabled, environment.taskConfig.kind !== 'none', opConfig.enabled, !!this.world,this.inferenceAbort?.signal,this.recoveryConfig.enabled?async request=>{this.pending.preparedRequest=request;await this.saveExecution();}:undefined,this.config!.decisionConfig?.mode==='agent_selected',!!this.config!.communicationConfig);
         if(this.recoveryConfig.enabled&&(this.shouldPause||this.shouldStop))throw new RecoveryCancelled();
         this.pending.technicalFailures=0;
         this.currentAttempt.parsedResponse = response;
         validateDecision(response, this.config!, agentId);
+        try{validateIntent(response,this.config!);this.currentAttempt.decisionValidation={status:'passed'};}catch(error){this.currentAttempt.decisionValidation={status:'rejected',error:(error as Error).message};throw error;}
         const eventId = this.pending.logicalTurnId;
         const config = resolveMemoryConfig(this.config!.memoryConfig);
         const operational = prepareOperational(prompt.state,response.operational_operations ?? [],opConfig,{runId:this.config!.runId,turnIndex:this.currentTurnIndex,eventId});
@@ -710,21 +731,27 @@ ${transcript || '(No conversation supplied)'}${memoryOperationGuide(config)}${pa
         this.currentAttempt.memoryAudit=prepared.auditTrail;
         const rejectedMemory=prepared.auditTrail.find((event:any)=>event.status==='failed');
         if(rejectedMemory)throw new ProposalError(rejectedMemory.error);
+        const positions={...this.world?.positions,[agentId]:currentOperational(prepared.state).location.id};
+        let message:ReturnType<typeof routeMessage>;
+        try{message=routeMessage(response,this.config!,agentId,this.currentTurnIndex,positions,this.world?.minute??0);this.currentAttempt.communicationValidation={status:'passed'};}catch(error){this.currentAttempt.communicationValidation={status:'rejected',error:(error as Error).message};throw error;}
         let worldResult:ReturnType<typeof prepareWorld>|undefined;
         if(this.world){
             this.currentAttempt.worldOperations=structuredClone(response.world_operations);
-            try{worldResult=prepareWorld(this.world,this.config!.worldConfig as WorldConfig,agentId,response.world_operations,currentOperational(prepared.state).location.id,this.config!.agentIds,`${this.config!.runId}:turn:${this.currentTurnIndex}`,response.response,response.social?.recipient_id??null);}
+            try{worldResult=prepareWorld(this.world,this.config!.worldConfig as WorldConfig,agentId,response.world_operations,currentOperational(prepared.state).location.id,this.config!.agentIds,`${this.config!.runId}:turn:${this.currentTurnIndex}`,response.response,response.social?.recipient_id??null,this.config!.communicationConfig?message??null:undefined);}
             catch(error){this.currentAttempt.worldValidation={status:'rejected',error:(error as Error).message};throw error;}
             this.currentAttempt.worldValidation={status:'passed'};
         }
         const record = {
-            schemaVersion: 2, eventId, ...(this.recoveryConfig.enabled?{recoveryPolicy:structuredClone(this.recoveryConfig),recoverySummary:{attempts:this.pending.attemptNumber,correctiveAttempts:this.pending.totalCorrections,technicalFailures:this.pending.totalTechnicalFailures,retryElapsedMs:this.pending.retryStartedAt?Date.now()-this.pending.retryStartedAt:0,totalTurnElapsedMs:Date.now()-Date.parse(this.pending.startedAt),correctionSucceeded:this.pending.totalCorrections>0}}:{}), stateScope: this.config!.protocol?.stateScope ?? 'shared', configHash: this.configHash, runId: this.config!.runId,
+            schemaVersion: 2, eventId,
+            ...(this.pending.context.selection?{schedulerDecision:this.pending.context.selection.evidence,schedulerStateAfter:this.pending.context.selection.stateAfter}:{}),
+            ...(response.decision?{decision:response.decision,decisionValidation:{status:'passed'}}:{}),
+            ...(this.config!.communicationConfig?{communication:response.communication,message:message??null,messageRecipients:message?.recipientAgentIds??[]}:{}), ...(this.recoveryConfig.enabled?{recoveryPolicy:structuredClone(this.recoveryConfig),recoverySummary:{attempts:this.pending.attemptNumber,correctiveAttempts:this.pending.totalCorrections,technicalFailures:this.pending.totalTechnicalFailures,retryElapsedMs:this.pending.retryStartedAt?Date.now()-this.pending.retryStartedAt:0,totalTurnElapsedMs:Date.now()-Date.parse(this.pending.startedAt),correctionSucceeded:this.pending.totalCorrections>0}}:{}), stateScope: this.config!.protocol?.stateScope ?? 'shared', configHash: this.configHash, runId: this.config!.runId,
             turnIndex: this.currentTurnIndex, agentId, agentName: prompt.state.identity.name,
             ...(environment.socialConfig.enabled ? {social:response.social,taskDecision:response.task_decision} : {}),
             ...(opConfig.enabled ? {operationalContext:opContext,operationalAudit:operational.audit,operationalState:currentOperational(prepared.state),
                 turnKind:response.response ? (operational.audit.length ? 'speech_and_action':'speech') : (operational.audit.length ? 'action_only':'intentional_noop')} : {}),
-            environmentEvents: [...(worldResult?.events??[])],
-            ...(worldResult?{simulationMinute:this.world!.minute,worldBefore:this.world,worldAfter:worldResult.state,worldObservation,schedulerDecision,worldOperations:response.world_operations,worldValidation:{status:'passed'},messageRecipients:worldResult.recipients}:{}),
+            environmentEvents: [...(this.pending.context.selection?[{id:eventId+':scheduler',type:'scheduler_decision',source:'backend_scheduler',...this.pending.context.selection.evidence}]:[]),...(response.decision?[{id:eventId+':decision',type:'agent_decision',agentId,decision:response.decision,validation:'passed'}]:[]),...(worldResult?.events??[])],
+            ...(worldResult?{simulationMinute:this.world!.minute,worldBefore:this.world,worldAfter:worldResult.state,worldObservation,...(!this.pending.context.selection?{schedulerDecision}:{}),worldOperations:response.world_operations,worldValidation:{status:'passed'},messageRecipients:message?.recipientAgentIds??worldResult.recipients}:{}),
             response: response.response, timestamp: new Date().toISOString(),
             auditTrail: prepared.auditTrail, stateBefore: prompt.state, stateAfter: prepared.state,
             memoryMode: config.mode, retrieval: prompt.retrieval,

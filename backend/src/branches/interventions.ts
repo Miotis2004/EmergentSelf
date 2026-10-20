@@ -16,6 +16,7 @@ export async function verifiedBranch(logs:JsonlStorage,branchId:string){
 }
 export async function verifiedSnapshot(logs:JsonlStorage,snapshotId:string){
     const snapshot=await logs.loadArtifact('snapshots',id(snapshotId));
+    if(snapshot.schedulerState&&hash(snapshot.schedulerState)!==snapshot.schedulerHash)throw new Error('Snapshot scheduler hash mismatch');
     if(snapshot.worldState&&hash(snapshot.worldState)!==snapshot.worldHash)throw new Error('Snapshot world hash mismatch');
     if(hash(snapshot.states)!==snapshot.stateHash)throw new Error('Snapshot state hash mismatch');return snapshot;
 }

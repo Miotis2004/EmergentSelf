@@ -67,5 +67,10 @@ export function retrieveMemory(state: WorkingState, config: MemoryConfig) {
 
 export function boundedTranscript(history: any[], config: MemoryConfig): string {
     if (config.mode === 'none' || config.transcriptTurns === 0 || config.transcriptChars === 0) return '';
+    if(history.some(t=>Object.hasOwn(t,'message'))){
+        const lines=history.slice(-config.transcriptTurns).filter(t=>t.response).map(t=>JSON.stringify(t.message?{messageId:t.message.messageId,runId:t.message.runId,speaker:t.agentId,scope:t.message.scope,channelId:t.message.channelId,audience:[t.agentId,...t.message.recipientAgentIds],classification:'agent_report',content:t.response}:{speaker:t.agentId,content:t.response}));
+        while(lines.length&&lines.join('\n').length>config.transcriptChars)lines.shift();
+        return lines.join('\n');
+    }
     return history.slice(-config.transcriptTurns).map(turn => `${turn.agentName}${turn.social ? (turn.social.action === 'decline' ? ' [declined]' : turn.social.recipient_id ? ' → ' + turn.social.recipient_id : ' → all') : ''}: ${turn.response === '' ? '[no speech]' : turn.response}`).join('\n').slice(-config.transcriptChars);
 }
