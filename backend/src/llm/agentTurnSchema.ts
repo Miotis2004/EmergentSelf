@@ -1,4 +1,8 @@
-import {decisionSchema,communicationSchema} from '../interaction/policy';
+import {TurnSchemaError,uniqueViolations} from '../validation/issues';
+import type {TurnViolation} from '../validation/issues';
+import {structuralViolations} from '../interaction/execution';
+import type {ExecutionContext} from '../interaction/execution';
+import {decisionSchema,communicationSchema,channelSchema} from '../interaction/policy';
 import {worldOperationsSchema} from '../world/simulation';
 import { operationalOperationsSchema } from '../operations/state';
 import Ajv from 'ajv';
@@ -50,56 +54,61 @@ const {task_decision, ...socialOnlyProperties} = socialTurnSchema.properties;
 const socialOnlySchema = {...socialTurnSchema, properties:socialOnlyProperties};
 
 function withOperational(schema:any) { return {...schema,properties:{...schema.properties,operational_operations:operationalOperationsSchema},required:[...schema.required,'operational_operations']}; }
-export function responseSchema(social = false, task = false, operational = false, world = false, decision = false, channels = false) {
+export function responseSchema(social = false, task = false, operational = false, world = false, decision = false, channels = false, execution?:ExecutionContext) {
     if(world&&!operational)throw new Error('World output requires operational capability');
     if (task && !social) throw new Error('Task output requires social capability');
     const schema = social ? (task ? socialTurnSchema : socialOnlySchema) : agentTurnSchema;
     let base:any = operational ? withOperational(schema) : schema;
-    if(decision)base={...base,properties:{...base.properties,decision:decisionSchema},required:[...base.required,"decision"]};
-    if(channels)base={...base,properties:{...base.properties,communication:communicationSchema},required:[...base.required,"communication"]};
-    return world ? {...base,properties:{...base.properties,world_operations:worldOperationsSchema},required:[...base.required,'world_operations']} : base;
+    if(decision)base={...base,properties:{...base.properties,decision:execution?{...decisionSchema,properties:{...decisionSchema.properties,mode:{enum:execution.availableModes}}}:decisionSchema},required:[...base.required,"decision"]};
+    if(channels)base={...base,properties:{...base.properties,communication:execution?.communication?channelSchema(['private','team','local','global'].filter(scope=>(execution.communication as any)['allow'+scope[0].toUpperCase()+scope.slice(1)+'Messages']),execution.participantIds.filter(id=>id!==execution.agentId)):communicationSchema},required:[...base.required,"communication"]};
+    const worldSchema=execution?{...worldOperationsSchema,items:{anyOf:worldOperationsSchema.items.anyOf.filter(schema=>schema.properties.action.enum.some((action:string)=>execution.worldActions.includes(action)))}}:worldOperationsSchema;
+    return world ? {...base,properties:{...base.properties,world_operations:worldSchema},required:[...base.required,'world_operations']} : base;
 }
 /**
  * llama.cpp expands bounded repetitions while compiling a schema into grammar.
  * char{0,8000}-style strings and bounded operation arrays can exceed expansion
  * guards. Unbounded JSON strings/arrays avoid these large finite repetitions;
- * the backend still checks every limit.
+ * the backend still checks every limit. Tiny array bounds (0–2) remain
+ * in the decoder to enforce empty audiences and at most two operational changes.
  * All structure, required fields, enums, minima and numeric constraints are retained.
  */
-export const INFERENCE_SCHEMA_VERSION = 'llama-unbounded-v1';
-export function inferenceResponseSchema(social = false, task = false, operational = false, world = false, decision = false, channels = false) {
+export const INFERENCE_SCHEMA_VERSION = 'llama-small-bounds-v2';
+export function inferenceResponseSchema(social = false, task = false, operational = false, world = false, decision = false, channels = false, execution?:ExecutionContext) {
     function project(value:any):any {
         if(Array.isArray(value))return value.map(project);
         if(value && typeof value === 'object')return Object.fromEntries(Object.entries(value)
-            .filter(([key])=>key !== 'maxLength' && key !== 'maxItems')
+            .filter(([key,child])=>key !== 'maxLength' && (key !== 'maxItems' || typeof child==='number' && child<=2))
             .map(([key,child])=>[key,project(child)]));
         return value;
     }
-    return project(responseSchema(social,task,operational,world,decision,channels));
+    return project(responseSchema(social,task,operational,world,decision,channels,execution));
 }
 
-const ajv = new Ajv({ strict: false, strictNumbers: true });
+const ajv = new Ajv({ strict: false, strictNumbers: true, allErrors:true });
 const validators = new Map<string,ReturnType<typeof ajv.compile>>();
 
-export function validateAgentTurn(value: unknown, social = false, task = false, operational = false, world = false, decision = false, channels = false): asserts value is import('./LlmAdapter').AgentTurnResponse {
-    const key=JSON.stringify([social,task,operational,world,decision,channels]);
-    if(!validators.has(key))validators.set(key,ajv.compile(responseSchema(social,task,operational,world,decision,channels)));
+export function validateAgentTurn(value: unknown, social = false, task = false, operational = false, world = false, decision = false, channels = false, execution?:ExecutionContext): asserts value is import('./LlmAdapter').AgentTurnResponse {
+    const key=JSON.stringify([social,task,operational,world,decision,channels,execution?.availableModes,execution?.communication,execution?.participantIds,execution?.agentId,execution?.worldActions]);
+    if(!validators.has(key))validators.set(key,ajv.compile(responseSchema(social,task,operational,world,decision,channels,execution)));
     const validate=validators.get(key)!;
     if (!validate(value)) {
         // Explain reference-shape errors without exposing memory content in diagnostics.
+        const issues=structuralViolations(value,operational,channels);
+        const schemaIssues:TurnViolation[]=(validate.errors??[]).filter(e=>!issues.some(issue=>e.instancePath.startsWith(issue.path.split('/').slice(0,2).join('/')))).map(e=>({code:'INVALID_STRUCTURED_OUTPUT',path:e.instancePath||'/',message:'Schema constraint '+e.keyword+' failed'+(e.keyword==='required'?' (missing '+e.params.missingProperty+')':'')+'.'}));
+        const reject=(message:string):never=>{throw new TurnSchemaError(message,uniqueViolations([...issues,...schemaIssues]));};
         const operations = (value as any)?.memory_operations;
         if (Array.isArray(operations)) for (const [index, op] of operations.entries()) {
             if (op?.action === 'add' && op?.type === 'relationship' && (typeof op.relationship_agent_id !== 'string' || !op.relationship_agent_id.trim())) {
-                throw new Error(`Invalid agent-turn schema: memory_operations/${index} relationship addition requires a nonempty relationship_agent_id from the participant directory`);
+                reject(`Invalid agent-turn schema: memory_operations/${index} relationship addition requires a nonempty relationship_agent_id from the participant directory`);
             }
             if (['update','retire','contradict'].includes(op?.action) && (typeof op.target_id !== 'string' || !op.target_id.trim())) {
-                throw new Error(`Invalid agent-turn schema: memory_operations/${index} missing target_id; revision requires an exact existing active target ID`);
+                reject(`Invalid agent-turn schema: memory_operations/${index} missing target_id; revision requires an exact existing active target ID`);
             }
             if (op?.action === 'consolidate' && (!Array.isArray(op.target_ids) || op.target_ids.length < 2 || op.target_ids.some((id:unknown)=>typeof id !== 'string' || !id.trim()) || new Set(op.target_ids).size !== op.target_ids.length)) {
-                throw new Error(`Invalid agent-turn schema: memory_operations/${index} consolidation requires at least two distinct nonempty target_ids`);
+                reject(`Invalid agent-turn schema: memory_operations/${index} consolidation requires at least two distinct nonempty target_ids`);
             }
         }
         // Paths and validator keywords are safe; never include model-generated values.
-        throw new Error(`Invalid agent-turn schema: ${validate.errors?.map(e => `${e.instancePath || '/'} ${e.keyword}`).join(', ')}`);
+        reject(`Invalid agent-turn schema: ${validate.errors?.map(e => `${e.instancePath || '/'} ${e.keyword}`).join(', ')}`);
     }
 }

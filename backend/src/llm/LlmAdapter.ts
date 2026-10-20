@@ -1,3 +1,6 @@
+import type {TurnViolation} from '../validation/issues';
+import {uniqueViolations} from '../validation/issues';
+import {ExecutionContext,turnExecutionContract,executionViolations,EXECUTION_MARKER,EXECUTION_CONTRACT_VERSION} from '../interaction/execution';
 import type { OperationalOperation } from '../operations/state';
 import { memoryContentWarnings, MemoryContentWarning } from '../memory/contentDiagnostics';
 import fetch from 'node-fetch';
@@ -29,6 +32,7 @@ export interface MemoryOperation {
     reason: string;
 }
 export interface LlmDiagnostics {
+    requestTimeoutMs?:number; elapsedMs?:number; inputChars?:number; maxTokens?:number; failureStage?:string;
     httpStatus: number | null;
     requestedModel: string;
     model: string;
@@ -57,6 +61,8 @@ export interface LlmValidation {
     status: 'pending' | 'passed' | 'failed';
     stage: 'request' | 'http' | 'http_body' | 'envelope' | 'response_json' | 'schema' | 'transport_boundary' | 'complete';
     error?: string;
+    violations?:TurnViolation[];
+    executionContractVersion?:string; executionContractHash?:string;
     memoryContentWarnings?: MemoryContentWarning[];
 }
 export const TRANSPORT_MARKER = '[EMERGENTSELF_TRANSPORT_FORMAT_V1]';
@@ -69,11 +75,12 @@ ${JSON.stringify(schema)}
 [/EMERGENTSELF_TRANSPORT_FORMAT_V1]`;
 }
 export class LlmError extends Error {
-    constructor(message: string, public readonly diagnostics: LlmDiagnostics, public readonly kind:'output'|'timeout'|'connection'|'server'|'configuration'='output') { super(message); }
+    constructor(message: string, public readonly diagnostics: LlmDiagnostics, public readonly kind:'output'|'timeout'|'connection'|'server'|'configuration'='output',public readonly violations?:TurnViolation[]) { super(message); }
 }
 
+export const DEFAULT_REQUEST_TIMEOUT_MS=600000;
 export function resolveLlmConfig(config: Partial<LlmConfig> = {}): LlmConfig {
-    const requestTimeoutMs=config.requestTimeoutMs??Number(process.env.LLM_REQUEST_TIMEOUT_MS??600000);
+    const requestTimeoutMs=config.requestTimeoutMs??Number(process.env.LLM_REQUEST_TIMEOUT_MS??DEFAULT_REQUEST_TIMEOUT_MS);
     if(!Number.isSafeInteger(requestTimeoutMs)||requestTimeoutMs<10||requestTimeoutMs>900000)throw new Error('LLM request timeout must be 10–900000 milliseconds');
     const maxTokens = config.maxTokens ?? Number(process.env.LLM_MAX_TOKENS ?? 2048);
     const outputMode = config.outputMode ?? process.env.LLM_OUTPUT_MODE ?? 'json_schema';
@@ -106,6 +113,8 @@ export class LlmAdapter {
     public lastValidation: LlmValidation | undefined;
     constructor(config: Partial<LlmConfig> = {}) { this.config = resolveLlmConfig(config); }
     updateConfig(config: Partial<LlmConfig>) { this.config = resolveLlmConfig({ ...this.config, ...config }); }
+    // A saved experiment is a complete configuration, not a patch to the previous run.
+    setExperimentConfig(config:LlmConfig) { this.config=resolveLlmConfig(config); }
 
     async checkHealth(): Promise<boolean> {
         try {
@@ -125,29 +134,32 @@ export class LlmAdapter {
         return data.data.map((m: any) => ({ id: m.id }));
     }
 
-    async generateTurn(systemPrompt: string, messages: { role: string; content: string }[], inputCharLimit?: number, social = false, task = false, operational = false, world = false, signal?:AbortSignal, beforeRequest?:(request:any)=>Promise<void>, decision = false, channels = false): Promise<AgentTurnResponse> {
+    async generateTurn(systemPrompt: string, messages: { role: string; content: string }[], inputCharLimit?: number, social = false, task = false, operational = false, world = false, signal?:AbortSignal, beforeRequest?:(request:any)=>Promise<void>, decision = false, channels = false, execution?:ExecutionContext): Promise<AgentTurnResponse> {
         this.lastRequest = undefined;
         this.lastDiagnostics = undefined;
         this.lastRawContent = undefined;
         this.lastParsedResponse = undefined;
         this.lastValidation = undefined;
         if (!this.config.model) throw new Error('Select a loaded model before running an experiment');
+        const started=Date.now();
         const diagnostics: LlmDiagnostics = {
+            requestTimeoutMs:this.config.requestTimeoutMs??DEFAULT_REQUEST_TIMEOUT_MS,maxTokens:this.config.maxTokens,
             httpStatus: null, requestedModel: this.config.model, model: this.config.model,
             finishReason: null, contentPresent: false, contentLength: 0, excerpt: ''
         };
-        const schema = responseSchema(social, task, operational, world, decision, channels);
+        const schema = responseSchema(social, task, operational, world, decision, channels, execution);
         const schemaText = JSON.stringify(schema);
-        const inferenceSchema = inferenceResponseSchema(social, task, operational, world, decision, channels);
+        const executionText=execution?turnExecutionContract(execution):undefined;
+        const inferenceSchema = inferenceResponseSchema(social, task, operational, world, decision, channels, execution);
         const validationSchemaHash = createHash('sha256').update(schemaText).digest('hex');
         this.lastValidation = {contractVersion:'schema-json-v1',schemaHash:validationSchemaHash,validationSchemaHash,
-            ...(this.config.outputMode === 'json_schema' ? {inferenceSchemaVersion:INFERENCE_SCHEMA_VERSION,inferenceSchemaHash:createHash('sha256').update(JSON.stringify(inferenceSchema)).digest('hex')} : {}),status:'pending',stage:'request'};
+            ...(this.config.outputMode === 'json_schema' ? {inferenceSchemaVersion:INFERENCE_SCHEMA_VERSION,inferenceSchemaHash:createHash('sha256').update(JSON.stringify(inferenceSchema)).digest('hex')} : {}),...(executionText?{executionContractVersion:EXECUTION_CONTRACT_VERSION,executionContractHash:createHash('sha256').update(executionText).digest('hex')}:{}),status:'pending',stage:'request'};
         const payload = {
             model: this.config.model,
             // Keep the original agent prompt and conversational messages intact.
             // Prompt instructions retain all application limits; only the decoder
             // receives a projection without bounded upper string/array repetitions.
-            messages: [{role:'system',content:systemPrompt}, ...messages, {role:'system',content:outputContract(schema)}],
+            messages: [{role:'system',content:systemPrompt}, ...messages, ...(executionText?[{role:'system',content:executionText}]:[]), {role:'system',content:outputContract(schema)}],
             temperature: this.config.temperature,
             ...(this.config.topP === undefined ? {} : { top_p: this.config.topP }),
             ...(this.config.seed === undefined ? {} : { seed: this.config.seed }),
@@ -156,11 +168,13 @@ export class LlmAdapter {
                 ? { type: 'json_object' }
                 : { type: 'json_schema', json_schema: { name: 'agent_turn', schema: inferenceSchema } }
         };
+        diagnostics.inputChars=payload.messages.reduce((n,message)=>n+message.content.length,0);
         this.lastRequest = structuredClone(payload);
         if(beforeRequest)await beforeRequest(structuredClone(payload));
         const fail = (message: string,kind:LlmError['kind']='output'): never => {
             Object.assign(this.lastValidation!, {status:'failed',error:message});
-            throw new LlmError(message, diagnostics,kind);
+            diagnostics.failureStage=this.lastValidation!.stage;
+            throw new LlmError(message, diagnostics,kind,this.lastValidation!.violations);
         };
         try {
             if (inputCharLimit !== undefined && payload.messages.reduce((n, message) => n + message.content.length, 0) > inputCharLimit) return fail('LLM request exceeds the recorded input character limit','configuration');
@@ -169,12 +183,12 @@ export class LlmAdapter {
             try {
                 response = await fetch(`${this.config.baseUrl}/chat/completions`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload), timeout: this.config.requestTimeoutMs??300000, signal:signal as any
+                    body: JSON.stringify(payload), timeout: diagnostics.requestTimeoutMs, signal:signal as any
                 });
-            } catch(error:any) { const timeout=error?.type==='request-timeout'||error?.code==='ETIMEDOUT';return fail(timeout?'LLM inference timed out':'LLM connection failed; check the configured server connection',timeout?'timeout':'connection'); }
+            } catch(error:any) { const timeout=error?.type==='request-timeout'||error?.code==='ETIMEDOUT';return fail(timeout?`LLM inference timed out after ${diagnostics.requestTimeoutMs} ms; no proposal was committed. Inspect request size and server timing; this is a technical failure, not a decision violation.`:'LLM connection failed; check the configured server connection',timeout?'timeout':'connection'); }
             diagnostics.httpStatus = response.status;
-            const raw = await response.text();
             this.lastValidation.stage = 'http_body';
+            const raw = await response.text();
             let data: any;
             try { data = JSON.parse(raw); } catch {
                 diagnostics.contentLength = raw.length;
@@ -208,10 +222,14 @@ export class LlmAdapter {
             const warnings = memoryContentWarnings((parsed as any)?.memory_operations);
             if (warnings.length) this.lastValidation.memoryContentWarnings = warnings;
             this.lastValidation.stage = 'schema';
-            try { validateAgentTurn(parsed, social, task, operational, world, decision, channels); } catch (error: any) { return fail(error.message); }
+            try { validateAgentTurn(parsed, social, task, operational, world, decision, channels, execution); } catch (error: any) {
+                const violations=uniqueViolations([...(execution?executionViolations(parsed,execution):[]),...(error.violations??[])]);
+                this.lastValidation.violations=violations;
+                return fail(error.message+(violations.length?'\n'+violations.map(issue=>issue.code+' '+issue.path+': '+issue.message).join('\n'):''));
+            }
             this.lastValidation.stage = 'transport_boundary';
             const turn = parsed as AgentTurnResponse;
-            const echoesContract = (value: unknown) => typeof value === 'string' && (value.includes('[EMERGENTSELF_CORRECTION_V1]') || value.includes(TRANSPORT_MARKER) || value.includes(schemaText));
+            const echoesContract = (value: unknown) => typeof value === 'string' && (value.includes('[EMERGENTSELF_CORRECTION_V1]') || value.includes(EXECUTION_MARKER) || value.includes(TRANSPORT_MARKER) || value.includes(schemaText));
             if (echoesContract(turn.response) || turn.memory_operations.some(operation => echoesContract(operation.content) || echoesContract(operation.reason)) || turn.world_operations?.some(operation=>echoesContract(operation.reason)) || turn.operational_operations?.some(operation => echoesContract(operation.reason) || ('description' in operation && echoesContract(operation.description)))) {
                 return fail('LLM echoed reserved transport metadata into conversation, memory or operational operations; output was rejected without rewriting');
             }
@@ -220,8 +238,10 @@ export class LlmAdapter {
             return turn;
         } catch (error:any) {
             if (error instanceof LlmError) throw error;
-            return fail('LLM response could not be read; check server connection',error?.type==='body-timeout'||error?.type==='request-timeout'?'timeout':'connection');
+            const timeout=error?.type==='body-timeout'||error?.type==='request-timeout';
+            return fail(timeout?`LLM response body timed out after ${diagnostics.requestTimeoutMs} ms; no proposal was committed. Inspect server timing.`:'LLM response could not be read; check server connection',timeout?'timeout':'connection');
         } finally {
+            diagnostics.elapsedMs=Date.now()-started;
             this.lastDiagnostics = diagnostics;
             console.info('LLM response diagnostics', diagnostics);
         }
