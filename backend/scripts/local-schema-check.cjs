@@ -6,19 +6,20 @@ const {tmpdir}=require('node:os');
 const {LlmAdapter,resolveLlmConfig,outputContract}=require('../dist/llm/LlmAdapter');
 const {responseSchema,inferenceResponseSchema,INFERENCE_SCHEMA_VERSION}=require('../dist/llm/agentTurnSchema');
 const modes=[['normal',false,false,false],['social',true,false,false],['task-social',true,true,false],['operational',false,false,true],['social-operational',true,false,true],['task-social-operational',true,true,true],['world-operational',false,false,true,true],['world-social-operational',true,false,true,true],['world-task-social-operational',true,true,true,true]];
+for(const entry of [...modes])modes.push([entry[0]+'-decisions-channels',entry[1],entry[2],entry[3],entry[4]??false,true,true]);
 (async()=>{
  const root=await fs.mkdtemp(path.join(tmpdir(),'emergent-schema-check-'));
  console.log(`Schema/HTTP artifacts: ${root}`);
  const config=resolveLlmConfig({model:process.env.LLM_TEST_MODEL||'',outputMode:'json_schema'});
  const report={inferenceSchemaVersion:INFERENCE_SCHEMA_VERSION,results:[],compatibility:'unverified',purpose:'Grammar initialization only; completion validation is deliberately not tested with one generated token.'};
- for(const [name,social,task,operational,world=false] of modes)await fs.writeFile(path.join(root,`${name}.schema.json`),JSON.stringify(inferenceResponseSchema(social,task,operational,world),null,2));
+ for(const [name,social,task,operational,world=false,decision=false,channels=false] of modes)await fs.writeFile(path.join(root,`${name}.schema.json`),JSON.stringify(inferenceResponseSchema(social,task,operational,world,decision,channels),null,2));
  try{
   const models=await new LlmAdapter(config).getModels();
   if(!config.model&&models.length===1)config.model=models[0].id;
   if(!config.model||!models.some(model=>model.id===config.model))throw Error('Select an exact loaded model with LLM_TEST_MODEL');
   report.model=config.model;
-  for(const [name,social,task,operational,world=false] of modes){
-   const payload={model:config.model,messages:[{role:'system',content:outputContract(responseSchema(social,task,operational,world))},{role:'user',content:'Return one minimal valid object with empty memory operations. This is a serialization check.'}],max_tokens:1,temperature:config.temperature,response_format:{type:'json_schema',json_schema:{name:'agent_turn',schema:inferenceResponseSchema(social,task,operational,world)}}};
+  for(const [name,social,task,operational,world=false,decision=false,channels=false] of modes){
+   const payload={model:config.model,messages:[{role:'system',content:outputContract(responseSchema(social,task,operational,world,decision,channels))},{role:'user',content:'Return one minimal valid object with empty memory operations. This is a serialization check.'}],max_tokens:1,temperature:config.temperature,response_format:{type:'json_schema',json_schema:{name:'agent_turn',schema:inferenceResponseSchema(social,task,operational,world,decision,channels)}}};
    await fs.writeFile(path.join(root,`${name}.request.json`),JSON.stringify(payload,null,2));
    const response=await fetch(`${config.baseUrl}/chat/completions`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:AbortSignal.timeout(300000)});
    const body=await response.text();await fs.writeFile(path.join(root,`${name}.http.txt`),body);

@@ -77,7 +77,7 @@ test('HTTP endpoints: independent SSE subscribers, inline error data, retry, and
   const llmBase = `http://127.0.0.1:${model.address().port}/v1`;
   const discovered = await (await fetch(`${base}/api/llm/models?baseUrl=${encodeURIComponent(llmBase)}`)).json();
   assert.deepEqual(discovered, [{ id: 'local-model' }]);
-  await post('/api/experiment/start', { recoveryConfig:{enabled:false},runId: 'sse-run', initialTopic: '  Starting topic  ', agentIds: ['bob','sara'], maxTurns: 3, llmConfig: { baseUrl: llmBase, model: 'local-model' } });
+  await post('/api/experiment/start', { decisionConfig:{version:1,mode:'unrestricted',availableModes:['idle']},recoveryConfig:{enabled:false},runId: 'sse-run', initialTopic: '  Starting topic  ', agentIds: ['bob','sara'], maxTurns: 3, llmConfig: { baseUrl: llmBase, model: 'local-model' } });
   await until(() => b.events.some(e => e.type === 'status_changed' && e.data.status === 'paused'));
   assert.equal(b.events.filter(e => e.type === 'turn_completed').length, 1);
   const error = b.events.find(e => e.type === 'experiment_error').data;
@@ -113,7 +113,7 @@ test('HTTP endpoints: independent SSE subscribers, inline error data, retry, and
     assert.ok(response.ok,await response.clone().text());return response.json();
   };
   assert.ok((await callResearch('/defaults')).systemPrompt.includes('{attributes}'));
-  await callResearch('/templates',{templateId:'http-template',configuration:{runId:'draft',agentIds:['bob','sara'],maxTurns:1,llmConfig:{baseUrl:llmBase,model:'local-model',modelVersion:'unverified'}}});
+  await callResearch('/templates',{templateId:'http-template',configuration:{decisionConfig:{version:1,mode:'unrestricted',availableModes:['idle']},runId:'draft',agentIds:['bob','sara'],maxTurns:1,llmConfig:{baseUrl:llmBase,model:'local-model',modelVersion:'unverified'}}});
   const manifest=await callResearch('/batches',{batchId:'http-batch',templateId:'http-template',repeats:1,conditions:['enabled','history'],randomizationSeed:1});
   for(const trial of manifest.trials){await callResearch('/batches/http-batch/start',{runId:trial.runId});await until(()=>controller.getStatus()==='completed');}
   const comparison=await callResearch(`/compare?left=${manifest.trials[0].runId}&right=${manifest.trials[1].runId}`);
@@ -122,7 +122,7 @@ test('HTTP endpoints: independent SSE subscribers, inline error data, retry, and
   assert.equal(exported.schemaVersion,3);assert.equal(exported.turns.length,1);assert.ok(exported.integrityHash);
   const duplicate=await fetch(base+'/api/research/batches',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({batchId:'http-batch',templateId:'http-template',repeats:1,conditions:['enabled'],randomizationSeed:1})});
   assert.equal(duplicate.status,409);
-  await post('/api/experiment/start',{runId:'direct-protocol',agentIds:['bob','sara'],maxTurns:1,memoryConfig:{mode:'history'},llmConfig:{baseUrl:llmBase,model:'local-model',modelVersion:'unverified'},protocol:{condition:'history',systemPrompt:'Direct fixed prompt {attributes}',turnPrompt:'Direct turn {name}'}});
+  await post('/api/experiment/start',{decisionConfig:{version:1,mode:'unrestricted',availableModes:['idle']},runId:'direct-protocol',agentIds:['bob','sara'],maxTurns:1,memoryConfig:{mode:'history'},llmConfig:{baseUrl:llmBase,model:'local-model',modelVersion:'unverified'},protocol:{condition:'history',systemPrompt:'Direct fixed prompt {attributes}',turnPrompt:'Direct turn {name}'}});
   await until(()=>controller.getStatus()==='completed');
   const directExport=await callResearch('/runs/direct-protocol/export');
   assert.equal(directExport.config.protocol.condition,'history');

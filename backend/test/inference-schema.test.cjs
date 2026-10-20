@@ -66,7 +66,7 @@ test('live-check utility treats mocked HTTP acceptance separately from valid mod
  const options={env:{...process.env,LLM_BASE_URL:`http://127.0.0.1:${server.address().port}/v1`,LLM_TEST_MODEL:'fixture'},timeout:15000};
  const run=await promisify(execFile)(process.execPath,[path.join(__dirname,'../scripts/local-schema-check.cjs')],options);
  const root=run.stdout.match(/Schema\/HTTP artifacts: (.+)/)[1];artifacts.push(root);const report=JSON.parse(await fs.readFile(path.join(root,'report.json'),'utf8'));
- assert.equal(report.results.length,9);assert.equal(report.compatibility,'accepted-all-combinations');assert.ok(report.purpose.includes('not tested'));
+ assert.equal(report.results.length,18);assert.ok(requests.slice(9).every(r=>r.response_format.json_schema.schema.required.includes('decision')&&r.response_format.json_schema.schema.required.includes('communication')));assert.equal(report.compatibility,'accepted-all-combinations');assert.ok(report.purpose.includes('not tested'));
  for(const [i,[social,task,operational]] of modes.entries()){assert.equal(requests[i].response_format.type,'json_schema');assert.equal(requests[i].max_tokens,1);assert.deepEqual(requests[i].response_format.json_schema.schema,inferenceResponseSchema(social,task,operational));}
  reject=true;
  await assert.rejects(promisify(execFile)(process.execPath,[path.join(__dirname,'../scripts/local-schema-check.cjs')],options),asyncError=>{

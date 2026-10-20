@@ -102,18 +102,19 @@ export const worldOperationsSchema={type:'array',maxItems:8,items:{anyOf:[
 const validateOperations=new Ajv({strict:false}).compile(worldOperationsSchema);
 function canAccess(state:WorldState,inventory:Inventory,agent:string){return inventory.ownerType==='agent'?inventory.ownerId===agent:inventory.ownerId===state.positions[agent]&&state.positions[agent]!=='unspecified';}
 function visible(state:WorldState,inventory:Inventory,agent:string){return inventory.visibility==='public'||inventory.authorizedAgentIds.includes(agent)||inventory.ownerType==='agent'&&inventory.ownerId===agent||inventory.visibility==='local'&&canAccess(state,inventory,agent);}
-export function worldContext(state:WorldState,config:WorldConfig,agent:string){
+function withoutReasons(value:any):any {if(Array.isArray(value))return value.map(withoutReasons);if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).filter(([key])=>key!=='reason').map(([key,v])=>[key,withoutReasons(v)]));return value;}
+export function worldContext(state:WorldState,config:WorldConfig,agent:string,privateChannels=false){
  const location=state.positions[agent];
  return {simulationMinute:state.minute,simulationTime:formatSimulationTime(state.minute),locationId:location,
   colocatedAgents:config.observationPolicy==='local'&&location!=='unspecified'?Object.keys(state.positions).filter(id=>id!==agent&&state.positions[id]===location):[],
   transformationContext:transformations.context(state,config,agent),
   inventories:state.inventories.filter(i=>visible(state,i,agent)),items:config.items,
-  observations:state.observations.filter(o=>o.recipients.includes(agent)).slice(-50),
+  observations:state.observations.filter(o=>o.recipients.includes(agent)).slice(-50).map(o=>privateChannels?withoutReasons(o):o),
   upcomingEvents:schedule(config).filter(o=>!state.executed.includes(o.id)&&(o.event.affectedAgentIds.includes(agent)||o.event.locationId===location)).slice(0,20).map(o=>({id:o.event.id,atMinute:o.minute})),wakeReasons:state.wakeReasons[agent]??[]};
 }
 function configInstructions(context:ReturnType<typeof worldContext>){return context.transformationContext?transformations.instructions+'\n':'';}
 export function worldInstructions(context:ReturnType<typeof worldContext>){return `\n\nAuthoritative world observations (world facts, separate from beliefs or conversational reports):\n${JSON.stringify(context)}\n${configInstructions(context)}World interactions use world_operations, never claims in speech. Return [] for no interaction. inspect_inventory uses inventory_id. take_item moves from an accessible location inventory to your inventory; deposit_item reverses this; transfer_item moves between accessible inventories. Transfers require source_inventory_id, destination_inventory_id, item_id, positive integer quantity and reason. consume_item requires your inventory_id, a consumable item_id, quantity and reason. Private inventories require ownership or explicit authorization to inspect; physical transfers require colocation and access, even if publicly visible. Operational location changes precede inventory actions in the same transaction. wait requires only reason and waits for an addressed message, waking event, or researcher request. wait_until uses a future absolute until_minute; wait_for_event uses a known future event_id. In event_driven scheduling waiting suppresses inference until a deterministic wake; round_robin retains its original turns. Active social tasks require their original per-participant decision rounds even while waiting. Observations are evidence of committed effects; activity descriptions and claims alone do not prove work. Do not store formatting instructions as memory.`;}
-export function prepareWorld(before:WorldState,config:WorldConfig,agent:string,operations:unknown,newLocation:string,agents:string[],commitId:string,speech:string,recipient:string|null){
+export function prepareWorld(before:WorldState,config:WorldConfig,agent:string,operations:unknown,newLocation:string,agents:string[],commitId:string,speech:string,recipient:string|null,message?:any){
  if(!validateOperations(operations))throw new WorldError('Invalid world operation structure');
  const state=structuredClone(before),events:any[]=[];state.positions[agent]=newLocation;
  events.push(...transformations.interruptDepartures(state,config,agents,commitId));
@@ -152,9 +153,9 @@ export function prepareWorld(before:WorldState,config:WorldConfig,agent:string,o
   events.push({id,type:'world_operation',simulationMinute:state.minute,agentId:agent,requestedOperation:structuredClone(op),validation:'passed',status:'committed',changes});
  }
  delete state.wakeReasons[agent];state.lastAgentId=agent;
- const recipients=agents.filter(id=>id!==agent&&(config.communicationPolicy==='global'||state.positions[id]===state.positions[agent]&&state.positions[agent]!=='unspecified')&&(!recipient||id===recipient));
- if(speech&&recipient&&!recipients.includes(recipient))throw new WorldError('Communication recipient is not authorized by location policy');
- if(speech)for(const id of recipients){observe(state,`${commitId}:speech:${id}`,state.minute,[id],'agent_report',{agentId:agent,text:speech,verified:false});if(recipient===id)wake(state,id,`addressed:${commitId}`);}
+ const recipients=message!==undefined?(message?.recipientAgentIds??[]):agents.filter(id=>id!==agent&&(config.communicationPolicy==='global'||state.positions[id]===state.positions[agent]&&state.positions[agent]!=='unspecified')&&(!recipient||id===recipient));
+ if(message===undefined&&speech&&recipient&&!recipients.includes(recipient))throw new WorldError('Communication recipient is not authorized by location policy');
+ if(speech)for(const id of recipients){observe(state,`${commitId}:speech:${id}`,state.minute,[id],'agent_report',{agentId:agent,text:speech,verified:false,...(message?{messageId:message.messageId,channelId:message.channelId,scope:message.scope,recipientAgentIds:message.recipientAgentIds}:{})});if(recipient===id)wake(state,id,`addressed:${commitId}`);}
  const advanced=advanceWorld(state,config,state.minute+config.minutesPerTurn,agents,commitId);
  return {state:advanced.state,events:[...events,...advanced.events],recipients:speech?recipients:[]};
 }
@@ -167,7 +168,7 @@ export function nextWakeMinute(state:WorldState,config:WorldConfig){
  const future=[...transformations.deadlines(state),...Object.values(state.waits).flatMap(w=>w.untilMinute===undefined?[]:[w.untilMinute]),...schedule(config).filter(o=>!state.executed.includes(o.id)).map(o=>o.minute)];
  return future.length?Math.max(state.minute,Math.min(...future)):undefined;
 }
-export function visibleHistory(history:any[],agent:string,config?:WorldConfig){return config?.enabled&&config.communicationPolicy==='local'?history.filter(t=>t.agentId===agent||Array.isArray(t.messageRecipients)&&t.messageRecipients.includes(agent)):history;}
+export function visibleHistory(history:any[],agent:string,config?:WorldConfig){return history.filter(t=>Object.hasOwn(t,'message') ? t.agentId===agent||t.message?.recipientAgentIds?.includes(agent) : !(config?.enabled&&config.communicationPolicy==='local')||t.agentId===agent||Array.isArray(t.messageRecipients)&&t.messageRecipients.includes(agent));}
 export function worldHash(state:WorldState){return hash(state);}
 
 /** Validate restored state against the chosen immutable world definition. Never coerce or repair it. */

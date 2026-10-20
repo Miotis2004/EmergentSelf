@@ -38,7 +38,7 @@ async function fixture(t, reply, agentIds = ['bob', 'sara']) {
   };
   const controller = createController();
   t.after(async () => { for (const c of controllers) await c.stop(); await new Promise(r => server.close(r)); await rm(root, { recursive: true, force: true }); });
-  const config = { recoveryConfig:{enabled:false}, runId: 'test-run', agentIds: ['bob', 'sara'], maxTurns: 100, llmConfig: { baseUrl: `http://127.0.0.1:${server.address().port}/v1`, model: '' } };
+  const config = { decisionConfig:{version:1,mode:'unrestricted',availableModes:['plan','observe','act','idle','change_location','communicate','reflect']}, recoveryConfig:{enabled:false}, runId: 'test-run', agentIds: ['bob', 'sara'], maxTurns: 100, llmConfig: { baseUrl: `http://127.0.0.1:${server.address().port}/v1`, model: '' } };
   return { root, controller, createController, storage, logs, config, modelServer:server, stats: () => ({ requests, maximum }) };
 }
 

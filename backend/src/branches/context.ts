@@ -2,7 +2,7 @@ import { JsonlStorage } from '../storage/JsonlStorage';
 import { hash } from '../research/protocol';
 
 export function compactTurn(turn:any){
-    return {runId:turn.runId,sourceTurnIndex:turn.sourceTurnIndex??turn.turnIndex,eventId:turn.eventId,
+    return {...(Object.hasOwn(turn,'message')?{message:turn.message,communication:turn.communication}:{}),runId:turn.runId,sourceTurnIndex:turn.sourceTurnIndex??turn.turnIndex,eventId:turn.eventId,
         ...(turn.messageRecipients?{messageRecipients:turn.messageRecipients}:{}),agentId:turn.agentId,agentName:turn.agentName,response:turn.response,...(turn.social?{social:turn.social}:{})};
 }
 export async function inheritedContext(logs:JsonlStorage,config:any){

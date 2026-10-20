@@ -39,6 +39,8 @@ export interface LlmDiagnostics {
     usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
 }
 export interface AgentTurnResponse {
+    decision?: {mode:string;reason:string;goal:string|null};
+    communication?: {scope:string;recipientAgentIds:string[]}|null;
     response: string;
     memory_operations: MemoryOperation[];
     operational_operations?: OperationalOperation[];
@@ -123,7 +125,7 @@ export class LlmAdapter {
         return data.data.map((m: any) => ({ id: m.id }));
     }
 
-    async generateTurn(systemPrompt: string, messages: { role: string; content: string }[], inputCharLimit?: number, social = false, task = false, operational = false, world = false, signal?:AbortSignal, beforeRequest?:(request:any)=>Promise<void>): Promise<AgentTurnResponse> {
+    async generateTurn(systemPrompt: string, messages: { role: string; content: string }[], inputCharLimit?: number, social = false, task = false, operational = false, world = false, signal?:AbortSignal, beforeRequest?:(request:any)=>Promise<void>, decision = false, channels = false): Promise<AgentTurnResponse> {
         this.lastRequest = undefined;
         this.lastDiagnostics = undefined;
         this.lastRawContent = undefined;
@@ -134,9 +136,9 @@ export class LlmAdapter {
             httpStatus: null, requestedModel: this.config.model, model: this.config.model,
             finishReason: null, contentPresent: false, contentLength: 0, excerpt: ''
         };
-        const schema = responseSchema(social, task, operational, world);
+        const schema = responseSchema(social, task, operational, world, decision, channels);
         const schemaText = JSON.stringify(schema);
-        const inferenceSchema = inferenceResponseSchema(social, task, operational, world);
+        const inferenceSchema = inferenceResponseSchema(social, task, operational, world, decision, channels);
         const validationSchemaHash = createHash('sha256').update(schemaText).digest('hex');
         this.lastValidation = {contractVersion:'schema-json-v1',schemaHash:validationSchemaHash,validationSchemaHash,
             ...(this.config.outputMode === 'json_schema' ? {inferenceSchemaVersion:INFERENCE_SCHEMA_VERSION,inferenceSchemaHash:createHash('sha256').update(JSON.stringify(inferenceSchema)).digest('hex')} : {}),status:'pending',stage:'request'};
@@ -206,7 +208,7 @@ export class LlmAdapter {
             const warnings = memoryContentWarnings((parsed as any)?.memory_operations);
             if (warnings.length) this.lastValidation.memoryContentWarnings = warnings;
             this.lastValidation.stage = 'schema';
-            try { validateAgentTurn(parsed, social, task, operational, world); } catch (error: any) { return fail(error.message); }
+            try { validateAgentTurn(parsed, social, task, operational, world, decision, channels); } catch (error: any) { return fail(error.message); }
             this.lastValidation.stage = 'transport_boundary';
             const turn = parsed as AgentTurnResponse;
             const echoesContract = (value: unknown) => typeof value === 'string' && (value.includes('[EMERGENTSELF_CORRECTION_V1]') || value.includes(TRANSPORT_MARKER) || value.includes(schemaText));

@@ -1,3 +1,5 @@
+import {InteractionControlsComponent,defaultInteraction} from './interaction-controls.component';
+import {ChannelFiltersComponent,TurnChannelComponent,filterConversation} from './channel-view.component';
 import {TaskHistoryComponent,TaskHistoryControlsComponent,defaultTaskHistoryConfig} from './task-history.component';
 import {AgentArchiveComponent} from './agent-archive.component';
 import {RecoveryControlsComponent,defaultRecoveryConfig} from './recovery-controls.component';
@@ -22,7 +24,7 @@ import { Subscription } from 'rxjs';
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [TaskHistoryComponent,TaskHistoryControlsComponent,AgentArchiveComponent,RecoveryControlsComponent,RecoveryStatusComponent,RecoveryAuditComponent,WorldControlsComponent,WorldStateComponent,OperationalControlsComponent, CommonModule, FormsModule, MemoryInspectorComponent, ResearchPanelComponent, AnalysisPanelComponent, RouterOutlet, SocialControlsComponent, BranchPanelComponent, PublicationPanelComponent],
+  imports: [InteractionControlsComponent,ChannelFiltersComponent,TurnChannelComponent,TaskHistoryComponent,TaskHistoryControlsComponent,AgentArchiveComponent,RecoveryControlsComponent,RecoveryStatusComponent,RecoveryAuditComponent,WorldControlsComponent,WorldStateComponent,OperationalControlsComponent, CommonModule, FormsModule, MemoryInspectorComponent, ResearchPanelComponent, AnalysisPanelComponent, RouterOutlet, SocialControlsComponent, BranchPanelComponent, PublicationPanelComponent],
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.css']
 })
@@ -31,6 +33,12 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
 
   readonly reviewMode = window.location.pathname === '/review';
 
+  interaction:any=defaultInteraction();
+  legacyInteraction=false;
+  channelFilter={scope:'',channel:'',agent:''};
+  get visibleTurns(){return filterConversation(this.turns,this.channelFilter.scope,this.channelFilter.channel,this.channelFilter.agent);}
+  get interactionPayload(){return this.legacyInteraction ? Object.fromEntries(Object.entries(this.interaction).filter(([k])=>this.savedInteractionKeys.includes(k))) : structuredClone(this.interaction);}
+  savedInteractionKeys:string[]=[];
   availableAgents: AgentIdentity[] = [];
   selectedAgentIds = new Set<string>();
   savedAgentIds: string[] | null = null;
@@ -73,7 +81,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
 
   get researchConfiguration() {
       return {runId:this.runId,agentIds:this.savedAgentIds ? [...this.savedAgentIds] : this.nextParticipantIds,initialTopic:this.initialTopic,
-          ...(this.worldConfig.enabled?{worldConfig:structuredClone(this.worldConfig)}:{}),taskHistoryConfig:structuredClone(this.taskHistoryConfig),recoveryConfig:structuredClone(this.recoveryConfig),operationalConfig:structuredClone(this.operationalConfig),socialConfig:{...this.socialConfig},taskConfig:{...this.taskConfig},feedbackConfig:{...this.feedbackConfig},maxTurns:this.maxTurns,memoryConfig:{...this.memoryConfig},llmConfig:{baseUrl:this.llmBaseUrl,model:this.selectedModel,maxTokens:this.maxTokens,outputMode:this.outputMode}};
+          ...this.interactionPayload,...(this.worldConfig.enabled?{worldConfig:structuredClone(this.worldConfig)}:{}),taskHistoryConfig:structuredClone(this.taskHistoryConfig),recoveryConfig:structuredClone(this.recoveryConfig),operationalConfig:structuredClone(this.operationalConfig),socialConfig:{...this.socialConfig},taskConfig:{...this.taskConfig},feedbackConfig:{...this.feedbackConfig},maxTurns:this.maxTurns,memoryConfig:{...this.memoryConfig},llmConfig:{baseUrl:this.llmBaseUrl,model:this.selectedModel,maxTokens:this.maxTokens,outputMode:this.outputMode}};
   }
 
   get configurationLocked(): boolean { return this.requestPending || this.experimentStatus !== 'idle'; }
@@ -286,6 +294,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
   }
 
   startExperiment() {
+      if(!this.legacyInteraction){const error=InteractionControlsComponent.validate(this.interaction,this.savedAgentIds??this.nextParticipantIds,this.worldConfig.enabled,this.taskConfig.kind);if(error){this.diagnostic=error;return;}}
       if(!RecoveryControlsComponent.valid(this.recoveryConfig)){this.diagnostic='Correct Error Recovery settings before starting.';return;}
       if(this.worldConfig.enabled&&!this.worldConfigurationValid){this.diagnostic='Correct World Simulation JSON fields before starting.';return;}
       if (this.requestPending || (this.experimentStatus !== 'idle' && this.experimentStatus !== 'stopped')) return;
@@ -301,7 +310,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
           runId: this.runId,
           agentIds,
           initialTopic,
-          ...(this.worldConfig.enabled?{worldConfig:structuredClone(this.worldConfig)}:{}),taskHistoryConfig:structuredClone(this.taskHistoryConfig),recoveryConfig:structuredClone(this.recoveryConfig),operationalConfig:structuredClone(this.operationalConfig),socialConfig:{...this.socialConfig},taskConfig:{...this.taskConfig},feedbackConfig:{...this.feedbackConfig},
+          ...this.interactionPayload,...(this.worldConfig.enabled?{worldConfig:structuredClone(this.worldConfig)}:{}),taskHistoryConfig:structuredClone(this.taskHistoryConfig),recoveryConfig:structuredClone(this.recoveryConfig),operationalConfig:structuredClone(this.operationalConfig),socialConfig:{...this.socialConfig},taskConfig:{...this.taskConfig},feedbackConfig:{...this.feedbackConfig},
           memoryConfig: { ...this.memoryConfig },
           maxTurns: this.maxTurns,
           llmConfig: {
@@ -361,6 +370,11 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
       this.diagnostic = state.error?.message || '';
       if (state.config) {
           this.savedAgentIds = [...state.config.agentIds];
+          this.savedInteractionKeys=['decisionConfig','schedulingConfig','communicationConfig'].filter(k=>state.config[k]!==undefined);
+          this.legacyInteraction=this.savedInteractionKeys.length<3;
+          this.interaction={...defaultInteraction(),...Object.fromEntries(this.savedInteractionKeys.map(k=>[k,structuredClone(state.config[k])]))};
+          if(!state.config.decisionConfig)this.interaction.decisionConfig.mode='unrestricted';
+          if(!state.config.schedulingConfig)this.interaction.schedulingConfig.mode=state.config.worldConfig?.schedulingMode??'round_robin';
           this.selectedAgentIds = new Set(this.savedAgentIds);
           this.socialConfig = {enabled:false,...state.config.socialConfig};
           this.taskConfig = {kind:'none',endowment:10,multiplier:1.5,prize:20,...state.config.taskConfig};
@@ -381,6 +395,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
       } else {
           if (this.savedAgentIds) this.selectedAgentIds.clear();
           this.savedAgentIds = null;
+          this.legacyInteraction=false;this.savedInteractionKeys=[];this.interaction=defaultInteraction();this.channelFilter={scope:'',channel:'',agent:''};
           this.operationalStates={};
           this.worldState=undefined;
           this.currentTurnIndex = 0;

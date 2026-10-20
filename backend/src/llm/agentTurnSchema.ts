@@ -1,3 +1,4 @@
+import {decisionSchema,communicationSchema} from '../interaction/policy';
 import {worldOperationsSchema} from '../world/simulation';
 import { operationalOperationsSchema } from '../operations/state';
 import Ajv from 'ajv';
@@ -49,11 +50,13 @@ const {task_decision, ...socialOnlyProperties} = socialTurnSchema.properties;
 const socialOnlySchema = {...socialTurnSchema, properties:socialOnlyProperties};
 
 function withOperational(schema:any) { return {...schema,properties:{...schema.properties,operational_operations:operationalOperationsSchema},required:[...schema.required,'operational_operations']}; }
-export function responseSchema(social = false, task = false, operational = false, world = false) {
+export function responseSchema(social = false, task = false, operational = false, world = false, decision = false, channels = false) {
     if(world&&!operational)throw new Error('World output requires operational capability');
     if (task && !social) throw new Error('Task output requires social capability');
     const schema = social ? (task ? socialTurnSchema : socialOnlySchema) : agentTurnSchema;
-    const base = operational ? withOperational(schema) : schema;
+    let base:any = operational ? withOperational(schema) : schema;
+    if(decision)base={...base,properties:{...base.properties,decision:decisionSchema},required:[...base.required,"decision"]};
+    if(channels)base={...base,properties:{...base.properties,communication:communicationSchema},required:[...base.required,"communication"]};
     return world ? {...base,properties:{...base.properties,world_operations:worldOperationsSchema},required:[...base.required,'world_operations']} : base;
 }
 /**
@@ -64,7 +67,7 @@ export function responseSchema(social = false, task = false, operational = false
  * All structure, required fields, enums, minima and numeric constraints are retained.
  */
 export const INFERENCE_SCHEMA_VERSION = 'llama-unbounded-v1';
-export function inferenceResponseSchema(social = false, task = false, operational = false, world = false) {
+export function inferenceResponseSchema(social = false, task = false, operational = false, world = false, decision = false, channels = false) {
     function project(value:any):any {
         if(Array.isArray(value))return value.map(project);
         if(value && typeof value === 'object')return Object.fromEntries(Object.entries(value)
@@ -72,15 +75,15 @@ export function inferenceResponseSchema(social = false, task = false, operationa
             .map(([key,child])=>[key,project(child)]));
         return value;
     }
-    return project(responseSchema(social,task,operational,world));
+    return project(responseSchema(social,task,operational,world,decision,channels));
 }
 
 const ajv = new Ajv({ strict: false, strictNumbers: true });
 const validators = new Map<string,ReturnType<typeof ajv.compile>>();
 
-export function validateAgentTurn(value: unknown, social = false, task = false, operational = false, world = false): asserts value is import('./LlmAdapter').AgentTurnResponse {
-    const key=JSON.stringify([social,task,operational,world]);
-    if(!validators.has(key))validators.set(key,ajv.compile(responseSchema(social,task,operational,world)));
+export function validateAgentTurn(value: unknown, social = false, task = false, operational = false, world = false, decision = false, channels = false): asserts value is import('./LlmAdapter').AgentTurnResponse {
+    const key=JSON.stringify([social,task,operational,world,decision,channels]);
+    if(!validators.has(key))validators.set(key,ajv.compile(responseSchema(social,task,operational,world,decision,channels)));
     const validate=validators.get(key)!;
     if (!validate(value)) {
         // Explain reference-shape errors without exposing memory content in diagnostics.

@@ -116,10 +116,12 @@
 
             <div *ngIf="turns.length === 0" style="color: #888; font-style: italic;">No conversation yet.</div>
 
-            <div class="turn" *ngFor="let turn of turns">
+            <app-channel-filters [turns]="turns" (selection)="channelFilter=$event"></app-channel-filters>
+            <div class="turn" *ngFor="let turn of visibleTurns">
+                <app-turn-channel [turn]="turn.turnRecord"></app-turn-channel>
                 <div class="turn-header">
                     [Turn {{turn.turnRecord.turnIndex}}] {{turn.turnRecord.agentName}}
-                    <span *ngIf="turn.turnRecord.social">{{turn.turnRecord.social.action === 'decline' ? 'declined to speak' : '→ ' + (turn.turnRecord.social.recipient_id || 'all')}}</span>
+                    <span *ngIf="turn.turnRecord.social && !turn.turnRecord.message">{{turn.turnRecord.social.action === 'decline' ? 'declined to speak' : '→ ' + (turn.turnRecord.social.recipient_id || 'all')}}</span>
                     <span style="color: #888; font-weight: normal; font-size: 0.8em; float: right;">
                         {{turn.turnRecord.timestamp | date:'mediumTime'}}
                     </span>
@@ -175,6 +177,7 @@
             <small id="topic-help">Optional starting stimulus for the first turn only (up to 8,000 characters).</small>
         </div>
 
+        <app-interaction-controls [config]="interaction" [legacy]="legacyInteraction" [locked]="configurationLocked" [agentIds]="savedAgentIds || nextParticipantIds" [agents]="availableAgents" [worldEnabled]="worldConfig.enabled" [taskKind]="taskConfig.kind"></app-interaction-controls>
         <app-task-history-controls [config]="taskHistoryConfig" [locked]="configurationLocked"></app-task-history-controls>
         <fieldset [disabled]="configurationLocked" class="model-config">
             <legend>Local model</legend>
@@ -223,7 +226,7 @@
         </fieldset>
 
         <app-recovery-controls [config]="recoveryConfig" [locked]="configurationLocked"></app-recovery-controls>
-        <app-world-controls [config]="worldConfig" [locked]="configurationLocked" [agentIds]="savedAgentIds || nextParticipantIds" (validityChange)="worldConfigurationValid=$event"></app-world-controls>
+        <app-world-controls [modern]="!legacyInteraction" [config]="worldConfig" [locked]="configurationLocked" [agentIds]="savedAgentIds || nextParticipantIds" (validityChange)="worldConfigurationValid=$event"></app-world-controls>
         <app-operational-controls [config]="operationalConfig" [locked]="configurationLocked"></app-operational-controls>
         <app-publication-panel [running]="experimentStatus === 'running'"></app-publication-panel>
         <app-branch-panel [running]="experimentStatus === 'running'"></app-branch-panel>
