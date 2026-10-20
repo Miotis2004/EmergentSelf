@@ -47,7 +47,8 @@ export class BranchService {
         const snapshot={schemaVersion:6,snapshotId,taskHistory,taskHistoryHash:hash(taskHistory),...(worldState?{worldState,worldHash:hash(worldState)}:{}),sourceRunId:branchId,sourceTurnIndex:-1,states:result.states,stateHash:hash(result.states),context:result.context,contextHash:hash(result.context)};
         const {templateId,batchId,trialIndex,repeatIndex,randomizationSeed,snapshotId:oldSnapshot,initialStateHash,branchId:oldBranch,historySnapshotId,historyContextHash,...baseProtocol}=sourceConfig.protocol;
         const protocol=normalizeProtocol({...baseProtocol,stateScope:'trial',snapshotId,initialStateHash:snapshot.stateHash,branchId,historySnapshotId:snapshotId,historyContextHash:snapshot.contextHash},memoryConfig.mode);
-        const configuration={...structuredClone(sourceConfig),runId:branchId,maxTurns,llmConfig,memoryConfig,protocol,initialTopic:result.context.length?'':sourceConfig.initialTopic??''};
+        const {operationalInitializationVersion: _freshRunInitialization,...sourceConfiguration}=structuredClone(sourceConfig);
+        const configuration={...sourceConfiguration,runId:branchId,maxTurns,llmConfig,memoryConfig,protocol,initialTopic:result.context.length?'':sourceConfig.initialTopic??''};
         const manifest={schemaVersion:6,branchId,actor:input.actor,reason:input.reason,createdAt:new Date().toISOString(),
             source:{snapshotId:source.snapshotId,snapshotHash:hash(source),sourceRunId:parent?parent.branchId:source.sourceRunId,sourceTurnIndex:parent?-1:source.sourceTurnIndex,parentBranchId:parent?.branchId??sourceConfig.protocol.branchId??null,configHash:hash(sourceConfig)},
             preSnapshot:{...(source.worldState?{worldState:structuredClone(source.worldState),worldHash:hash(source.worldState)}:{}),states:original,stateHash:hash(original),context,contextHash:hash(context)},sourceConfiguration:sourceConfig,
