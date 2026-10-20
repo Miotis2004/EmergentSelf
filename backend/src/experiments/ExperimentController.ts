@@ -1,7 +1,7 @@
 import {HistoryConfig,resolveHistoryConfig,retrieveTaskHistory} from '../taskHistory/history';
 import {RecoveryConfig, resolveRecovery, classifyFailure, correctionMessage, RecoveryCancelled, ProposalError} from '../recovery/recovery';
 import {WorldConfig, WorldState, WorldError, assertWorldCompatible, schedule, resolveWorld, advanceWorld, nextAgent, nextWakeMinute, prepareWorld, worldContext, worldInstructions, visibleHistory} from '../world/simulation';
-import {OperationalConfig, OperationalError, resolveOperational, prepareOperational, operationalContext, operationalInstructions, currentOperational} from '../operations/state';
+import {OperationalConfig, OperationalError, freshOperationalState, resolveOperational, prepareOperational, operationalContext, operationalInstructions, currentOperational} from '../operations/state';
 import { memoryOperationGuide, participantDirectory, ParticipantIdentity } from '../memory/operationGuide';
 import { demeanorContext } from '../agents/startingDemeanor';
 import { inheritedContext } from '../branches/context';
@@ -21,6 +21,7 @@ export type RunStatus = 'idle' | 'running' | 'paused' | 'stopped' | 'completed';
 
 export interface ExperimentConfig {
     runId: string;
+    operationalInitializationVersion?: 1; // Backend-owned marker; legacy runs omit it.
     agentIds: string[]; // Immutable participant order for the sequential scheduler.
     memoryConfig?: Partial<MemoryConfig>;
     protocol?: Partial<Protocol>;
@@ -240,6 +241,25 @@ export class ExperimentController {
                 const llmConfig = resolveLlmConfig(config.llmConfig);
                 if (protocol && !llmConfig.modelVersion) throw new Error('Phase III runs require a model version/hash or an explicit unverified declaration');
                 const existing = await this.jsonlStorage.loadConfig(config.runId);
+                let freshBaseline:any;
+                const initializeOperational=!protocol?.snapshotId&&(existing?.operationalInitializationVersion===1||!existing&&operational.enabled);
+                if(initializeOperational){
+                    try {freshBaseline=await this.jsonlStorage.loadBaseline(config.runId);}
+                    catch(error:any){if(error.code!=='ENOENT')throw error;}
+                    if(freshBaseline){
+                        if(freshBaseline.operationalInitialization?.version!==1||hash(freshBaseline.states)!==freshBaseline.operationalInitialization.stateHash)throw new Error('Invalid fresh-run operational baseline');
+                    }else{
+                        const states:any=Object.create(null),prior:any=Object.create(null),after:any=Object.create(null);
+                        for(const agentId of config.agentIds){
+                            const persisted=await this.activeStorage.loadWorkingState(agentId);
+                            prior[agentId]=currentOperational(persisted);
+                            const locationId=worldConfig?.enabled?worldConfig.initialPositions[agentId]??'unspecified':'unspecified';
+                            states[agentId]=freshOperationalState(persisted,operational.locations.find(l=>l.id===locationId)!);
+                            after[agentId]=states[agentId].operational;
+                        }
+                        freshBaseline={states,operationalInitialization:{version:1,id:`${config.runId}:operational-initialization`,type:'operational_initialization',source:'backend_initialization',runId:config.runId,agentIds:[...config.agentIds],before:prior,after,stateHash:hash(states),outcomeVerified:false}};
+                    }
+                }
                 if(!existing)for(const agentId of config.agentIds)if((await this.jsonStorage.loadAgentIdentity(agentId))?.archived)throw new Error(`Archived agent ${agentId} cannot participate in a new experiment`);
                 const previousExecution=restored??(existing?await this.jsonlStorage.latestExecution(config.runId):undefined);
                 const recoveryConfig=resolveRecovery(config.recoveryConfig??existing?.recoveryConfig??previousExecution?.recoveryPolicy);
@@ -264,11 +284,12 @@ export class ExperimentController {
                         // This changes no persisted agent data or existing run configuration.
                         if(worldConfig?.enabled){states[id].operational=currentOperational(states[id]);states[id].operational.location=operational.locations.find(l=>l.id===(worldConfig.initialPositions[id]??'unspecified'))!;}
                     }
-                    const initialHash = hash(baseline?.states ?? states);
+                    const initialHash = hash(baseline?.states ?? freshBaseline?.states ?? states);
                     if (protocol.initialStateHash && protocol.initialStateHash !== initialHash) throw new Error('Shared starting-state hash mismatch');
                     protocol.initialStateHash = initialHash;
                 }
-                const resolved = { ...config, recoveryConfig, ...(worldConfig?{worldConfig}:{}), ...(config.operationalConfig === undefined ? {} : {operationalConfig:operational}), agentIds: [...config.agentIds], initialTopic, llmConfig, memoryConfig, ...((config.socialConfig || config.taskConfig || config.feedbackConfig) ? environment : {}), ...(protocol ? { protocol } : {}) };
+                const {operationalInitializationVersion: _requestedInitialization,...requestedConfig}=config;
+                const resolved = { ...requestedConfig, ...(initializeOperational?{operationalInitializationVersion:1 as const}:{}), recoveryConfig, ...(worldConfig?{worldConfig}:{}), ...(config.operationalConfig === undefined ? {} : {operationalConfig:operational}), agentIds: [...config.agentIds], initialTopic, llmConfig, memoryConfig, ...((config.socialConfig || config.taskConfig || config.feedbackConfig) ? environment : {}), ...(protocol ? { protocol } : {}) };
                 if (existing && !isDeepStrictEqual({ ...existing, recoveryConfig:resolveRecovery(existing.recoveryConfig??previousExecution?.recoveryPolicy), llmConfig:resolveLlmConfig(existing.llmConfig), initialTopic: normalizeInitialTopic(existing.initialTopic), memoryConfig: resolveMemoryConfig(existing.memoryConfig), ...resolveEnvironment(existing) }, { ...resolved, ...environment })) throw new Error('Run ID already has different metadata; use a new run ID to change participants, topic, model or settings');
                 const history = await this.jsonlStorage.getConversationHistory(config.runId);
                 const events = [...await this.jsonlStorage.getEventHistory(config.runId), ...await this.jsonlStorage.readResearch(config.runId,'feedback')];
@@ -281,8 +302,9 @@ export class ExperimentController {
                 if (history.length < config.maxTurns) {
                     const states: Record<string, Awaited<ReturnType<JsonStorage['loadWorkingState']>>> = Object.create(null);
                     const worldBaseline=worldConfig?.enabled?await this.jsonlStorage.worldAt(config.runId):undefined;
-                    for (const id of config.agentIds) {states[id] = await this.activeStorage.loadWorkingState(id);if(worldBaseline){states[id].operational=currentOperational(states[id]);states[id].operational!.location=operational.locations.find(l=>l.id===worldBaseline.positions[id])!;}}
-                    await this.jsonlStorage.ensureMemoryBaseline(config.runId, history.length - 1, states);
+                    for (const id of config.agentIds) {states[id] = freshBaseline?.states[id] ?? await this.activeStorage.loadWorkingState(id);if(worldBaseline){states[id].operational=currentOperational(states[id]);states[id].operational!.location=operational.locations.find(l=>l.id===worldBaseline.positions[id])!;}}
+                    await this.jsonlStorage.ensureMemoryBaseline(config.runId, history.length - 1, states, freshBaseline?.operationalInitialization);
+                    if(freshBaseline&&!events.some(e=>e.id===freshBaseline.operationalInitialization.id))await this.jsonlStorage.appendEvent(config.runId,freshBaseline.operationalInitialization);
                 }
                 this.config = resolved;
                 this.world = await this.jsonlStorage.worldAt(config.runId);
@@ -570,8 +592,22 @@ export class ExperimentController {
         this.world=state;this.emit('environment_event',record);this.publishStatus();return this.getState();
     });}
 
+    private async runWorkingState(agentId:string){
+        const state=await this.activeStorage.loadWorkingState(agentId);
+        if(this.config?.operationalInitializationVersion===1){
+            const history=await this.jsonlStorage.getConversationHistory(this.config.runId);
+            const latest=[...history].reverse().find(turn=>turn.agentId===agentId);
+            const baseline=await this.jsonlStorage.loadBaseline(this.config.runId);
+            if(baseline.operationalInitialization?.version!==1||hash(baseline.states)!==baseline.operationalInitialization.stateHash)throw new Error('Invalid run operational initialization evidence');
+            const operational=latest?.stateAfter?.operational??baseline.states[agentId]?.operational;
+            if(!operational)throw new Error('Missing run-local operational state');
+            state.operational=structuredClone(operational);
+        }
+        return state;
+    }
+
     private async buildPrompt(agentId: string) {
-        const state = await this.activeStorage.loadWorkingState(agentId);
+        const state = await this.runWorkingState(agentId);
         if(this.world){const location=this.config!.operationalConfig!.locations!.find(l=>l.id===this.world!.positions[agentId]);if(location){state.operational=currentOperational(state);state.operational.location=structuredClone(location);}}
         const config = resolveMemoryConfig(this.config!.memoryConfig);
         const identity = state.identity;
@@ -623,7 +659,7 @@ ${transcript || '(No conversation supplied)'}${memoryOperationGuide(config)}${pa
             prompt.messages[0].content=`It is your turn to choose speech, an action, or silent continuation, ${prompt.state.identity.name}.`;
         }
         const observedStates = [];
-        if(opConfig.enabled && opConfig.observationPolicy === 'co_located' && (!this.world || this.config!.worldConfig!.observationPolicy==='local')) for(const id of this.config!.agentIds) if(id !== agentId) {const other=await this.activeStorage.loadWorkingState(id);if(this.world){other.operational=currentOperational(other);other.operational.location=opConfig.locations.find(l=>l.id===this.world!.positions[id])!;}observedStates.push(other);}
+        if(opConfig.enabled && opConfig.observationPolicy === 'co_located' && (!this.world || this.config!.worldConfig!.observationPolicy==='local')) for(const id of this.config!.agentIds) if(id !== agentId) {const other=await this.runWorkingState(id);if(this.world){other.operational=currentOperational(other);other.operational.location=opConfig.locations.find(l=>l.id===this.world!.positions[id])!;}observedStates.push(other);}
         const opContext = opConfig.enabled ? operationalContext(prompt.state,opConfig,observedStates) : undefined;
         if(opContext) prompt.system += operationalInstructions(opContext);
         const schedulerDecision=this.world?{agentId,mode:this.config!.worldConfig!.schedulingMode,eligibility:resolveEnvironment(this.config!).taskConfig.kind!=='none'?'task_decision':this.config!.worldConfig!.schedulingMode==='round_robin'?'round_robin':'ready',wakeReasons:this.world.wakeReasons[agentId]??[]}:undefined;

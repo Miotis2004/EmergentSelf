@@ -17,6 +17,12 @@ export const DEFAULT_LOCATION:Location={id:'unspecified',name:'Unspecified locat
 export function currentOperational(state:Pick<WorkingState,'operational'>):OperationalState {
     return structuredClone(state.operational ?? {location:DEFAULT_LOCATION,action:{type:'idle',description:'Idle',status:'planned'},outcomeVerified:false});
 }
+/** Independent-run projection only; never mutates identity, memories or prior provenance. */
+export function freshOperationalState(state:WorkingState,location:Location=DEFAULT_LOCATION):WorkingState {
+    const projected=structuredClone(state);
+    projected.operational={location:structuredClone(location),action:{type:'idle',description:'No current activity.',status:'completed'},outcomeVerified:false};
+    return projected;
+}
 export function resolveOperational(input:any):OperationalConfig {
     if(input===undefined)return {version:1,enabled:false,locations:[{...DEFAULT_LOCATION}],observationPolicy:'self_only'};
     if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).some(key=>!['version','enabled','locations','observationPolicy'].includes(key)))throw new OperationalError('Invalid operational configuration');

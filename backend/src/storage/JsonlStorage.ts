@@ -177,12 +177,15 @@ export class JsonlStorage {
         }
     }
 
-    async ensureMemoryBaseline(runId: string, atTurn: number, states: Record<string, WorkingState>) {
+    async ensureMemoryBaseline(runId: string, atTurn: number, states: Record<string, WorkingState>, operationalInitialization?:any) {
         const dir = this.getExperimentDir(runId);
         await this.ensureDir(dir);
+        const target=path.join(dir,'memory-baseline.json'),temporary=target+'.'+randomUUID()+'.tmp';
         try {
-            await fs.writeFile(path.join(dir, 'memory-baseline.json'), JSON.stringify({ schemaVersion: 2, atTurn, states }), { encoding: 'utf8', flag: 'wx' });
-        } catch (error: any) { if (error.code !== 'EEXIST') throw error; }
+            await fs.writeFile(temporary,JSON.stringify({schemaVersion:2,atTurn,states,...(operationalInitialization?{operationalInitialization}:{})}),{flag:'wx'});
+            await fs.link(temporary,target); // Publish complete baseline once; never replace history.
+        } catch(error:any){if(error.code!=='EEXIST')throw error;}
+        finally{await fs.rm(temporary,{force:true});}
     }
 
     async memoryHistory(runId: string, agentId: string, turn?: number, compareTo?: number) {
