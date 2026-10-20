@@ -79,7 +79,7 @@ for(const [social,task,operational] of [[false,false,true],[true,false,true],[tr
  const value={response:'',memory_operations:[],operational_operations:[],world_operations:[take()],...(social?{social:{action:'decline',recipient_id:null}}:{})};
  assert.doesNotThrow(()=>validateAgentTurn(value,social,task,operational,true));
  for(const change of [{world_operations:[{...take(),quantity:-1}]},{world_operations:[{action:'schedule_event',reason:'invented'}]},{world_operations:Array.from({length:9},()=>take())}])assert.throws(()=>validateAgentTurn({...value,...change},social,task,operational,true),/schema/);
- const json=JSON.stringify(inferenceResponseSchema(social,task,operational,true));assert.ok(!json.includes('maxLength'));assert.ok(!json.includes('maxItems'));assert.ok(json.includes('world_operations'));assert.ok(JSON.stringify(responseSchema(social,task,operational,true)).includes('maxItems'));
+ const json=JSON.stringify(inferenceResponseSchema(social,task,operational,true));assert.ok(!json.includes('maxLength'));assert.ok(json.includes('"maxItems":2'));assert.ok(json.includes('world_operations'));assert.ok(JSON.stringify(responseSchema(social,task,operational,true)).includes('maxItems'));
 });
 
 test('failed inference preserves world time; Resume/restart retain commits without duplicate transfers or scheduled effects',async t=>{

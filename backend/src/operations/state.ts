@@ -1,3 +1,4 @@
+import {MAX_LOCATION_TRANSITIONS,MAX_ACTIVITY_TRANSITIONS} from '../interaction/execution';
 import Ajv from 'ajv';
 import {randomUUID} from 'crypto';
 import type {WorkingState, SourceEvent} from '../memory/types';
@@ -42,7 +43,7 @@ export function resolveOperational(input:any):OperationalConfig {
     return {...config,locations};
 }
 const common={reason:{type:'string',minLength:1,maxLength:2000}};
-export const operationalOperationsSchema={type:'array',maxItems:8,items:{anyOf:[
+export const operationalOperationsSchema={type:'array',maxItems:MAX_LOCATION_TRANSITIONS+MAX_ACTIVITY_TRANSITIONS,description:'At most one set_location and one set_action per turn; [] preserves current activity. Do not submit an itinerary.',items:{anyOf:[
     {type:'object',additionalProperties:false,properties:{action:{enum:['set_location']},location_id:{type:'string',minLength:1,maxLength:120},...common},required:['action','location_id','reason']},
     {type:'object',additionalProperties:false,properties:{action:{enum:['set_action']},activity_type:{enum:['idle','moving','working','interacting','observing']},description:{type:'string',minLength:1,maxLength:1000},status:{enum:['planned','in_progress','completed','failed']},...common},required:['action','activity_type','description','status','reason']}
 ]}};

@@ -99,6 +99,10 @@ export const worldOperationsSchema={type:'array',maxItems:8,items:{anyOf:[
  object({action:{enum:['wait_until']},until_minute:integer,reason}),
  object({action:{enum:['wait_for_event']},event_id:identifier,reason})
 ]}};
+export function configuredWorldActions(config?:Partial<WorldConfig>):string[]{
+ if(!config?.enabled)return [];
+ return worldOperationsSchema.items.anyOf.flatMap(schema=>schema.properties.action.enum).filter(action=>!!config.transformations||!transformations.isOperation(action));
+}
 const validateOperations=new Ajv({strict:false}).compile(worldOperationsSchema);
 function canAccess(state:WorldState,inventory:Inventory,agent:string){return inventory.ownerType==='agent'?inventory.ownerId===agent:inventory.ownerId===state.positions[agent]&&state.positions[agent]!=='unspecified';}
 function visible(state:WorldState,inventory:Inventory,agent:string){return inventory.visibility==='public'||inventory.authorizedAgentIds.includes(agent)||inventory.ownerType==='agent'&&inventory.ownerId===agent||inventory.visibility==='local'&&canAccess(state,inventory,agent);}

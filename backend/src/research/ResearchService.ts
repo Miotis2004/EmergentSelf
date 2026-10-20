@@ -1,7 +1,8 @@
+import {executionContext} from '../interaction/execution';
 import {resolveHistoryConfig,retrieveTaskHistory} from '../taskHistory/history';
 import {resolveRecovery} from '../recovery/recovery';
 import {interactionInstructions,resolveInteraction} from '../interaction/policy';
-import {assertWorldCompatible, resolveWorld, worldHash, worldContext, worldInstructions, visibleHistory} from '../world/simulation';
+import {assertWorldCompatible, configuredWorldActions, resolveWorld, worldHash, worldContext, worldInstructions, visibleHistory} from '../world/simulation';
 import {resolveOperational, currentOperational, operationalContext, operationalInstructions} from '../operations/state';
 import { ParticipantIdentity } from '../memory/operationGuide';
 import { compactTurn, inheritedContext } from '../branches/context';
@@ -207,7 +208,7 @@ export class ResearchService {
                 adapter.lastParsedResponse=undefined; adapter.lastRequest=undefined; adapter.lastRawContent=undefined; adapter.lastDiagnostics=undefined; adapter.lastValidation=undefined;
                 try {
                     if(rendered.system.length+messages.reduce((n,m)=>n+m.content.length,0)>protocol.inputCharLimit) throw new Error('Probe exceeds the recorded input character limit');
-                    const response=await adapter.generateTurn(rendered.system,messages,protocol.inputCharLimit,false,false,opConfig.enabled,!!worldState,undefined,undefined,config.decisionConfig?.mode==='agent_selected',!!config.communicationConfig);
+                    const response=await adapter.generateTurn(rendered.system,messages,protocol.inputCharLimit,false,false,opConfig.enabled,!!worldState,undefined,undefined,config.decisionConfig?.mode==='agent_selected',!!config.communicationConfig,config.decisionConfig?.mode==='agent_selected'||config.communicationConfig?executionContext(config,agentId,opConfig,currentOperational(state).location.id,configuredWorldActions(config.worldConfig)):undefined);
                     Object.assign(record,{status:'success',request:adapter.lastRequest,rawResponse:adapter.lastRawContent,response,llmValidation:adapter.lastValidation,diagnostics:adapter.lastDiagnostics});
                     messages.push({role:'assistant',content:response.response});
                 } catch(error) {

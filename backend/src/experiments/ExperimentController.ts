@@ -1,8 +1,10 @@
+import {executionContext,executionViolations} from '../interaction/execution';
+import type {TurnViolation} from '../validation/issues';
 import {DecisionConfig,SchedulingConfig,CommunicationConfig,resolveInteraction,validateIntent,routeMessage,interactionInstructions} from '../interaction/policy';
 import {selectAgent,initialScheduler} from '../interaction/scheduler';
 import {HistoryConfig,resolveHistoryConfig,retrieveTaskHistory} from '../taskHistory/history';
 import {RecoveryConfig, resolveRecovery, classifyFailure, correctionMessage, RecoveryCancelled, ProposalError} from '../recovery/recovery';
-import {WorldConfig, WorldState, WorldError, assertWorldCompatible, schedule, resolveWorld, advanceWorld, nextAgent, nextWakeMinute, prepareWorld, worldContext, worldInstructions, visibleHistory} from '../world/simulation';
+import {WorldConfig, WorldState, WorldError, configuredWorldActions, assertWorldCompatible, schedule, resolveWorld, advanceWorld, nextAgent, nextWakeMinute, prepareWorld, worldContext, worldInstructions, visibleHistory} from '../world/simulation';
 import {OperationalConfig, OperationalError, freshOperationalState, resolveOperational, prepareOperational, operationalContext, operationalInstructions, currentOperational} from '../operations/state';
 import { memoryOperationGuide, participantDirectory, ParticipantIdentity } from '../memory/operationGuide';
 import { demeanorContext } from '../agents/startingDemeanor';
@@ -317,7 +319,7 @@ export class ExperimentController {
                 this.config = resolved;
                 this.world = await this.jsonlStorage.worldAt(config.runId);
                 this.configHash = hash(existing ?? resolved);
-                this.llmAdapter.updateConfig(llmConfig);
+                this.llmAdapter.setExperimentConfig(llmConfig);
                 this.currentTurnIndex = history.length;
                 this.shouldPause = false;
                 this.shouldStop = false;
@@ -556,9 +558,9 @@ export class ExperimentController {
             const repeatedViolation=failure.retry==='correct'&&pending?.lastBehaviorCode===failure.code;
             if(pending&&failure.retry==='correct')pending.lastBehaviorCode=failure.code;
             if(pending){pending.lastFailure=failure;pending.retryAt=delay?Date.now()+delay:undefined;pending.nextPhase=action==='wait_for_reconnection'?'waiting':action==='technical_retry'?'retrying':'correcting';}
-            this.recovery={phase:action==='suspend'?'suspended':pending.nextPhase,agentId,turnIndex:this.currentTurnIndex,simulationMinute:this.world?.minute,attemptNumber:pending?.attemptNumber,correctiveRetry:pending?.correctiveRetries,correctiveLimit:config.correctiveRetries,technicalFailures:pending?.technicalFailures,category:failure.category,code:failure.code,reason:failure.explanation,...(delay?{nextRetryAt:new Date(Date.now()+delay).toISOString()}:{}),...(action==='suspend'?{budgetExhausted:failure.retry==='correct'}:{})};
+            this.recovery={phase:action==='suspend'?'suspended':pending.nextPhase,agentId,turnIndex:this.currentTurnIndex,simulationMinute:this.world?.minute,attemptNumber:pending?.attemptNumber,correctiveRetry:pending?.correctiveRetries,correctiveLimit:config.correctiveRetries,technicalFailures:pending?.technicalFailures,category:failure.category,code:failure.code,reason:failure.explanation,...(failure.violations?.length?{violations:failure.violations}:{}),...(delay?{nextRetryAt:new Date(Date.now()+delay).toISOString()}:{}),...(action==='suspend'?{budgetExhausted:failure.retry==='correct'}:{})};
             if(action==='suspend'){this.shouldPause=true;this.status='paused';this.lastError={id:randomUUID(),type:'experiment_error',message:failure.explanation,...this.recovery};}
-            const attempt={id:pending?`${pending.logicalTurnId}:attempt:${pending.attemptNumber}`:randomUUID(),type:'recovery_attempt',runId:this.config!.runId,agentId,logicalTurnIndex:this.currentTurnIndex,turnIndex:this.currentTurnIndex,simulationMinute:this.world?.minute??null,attemptNumber:pending?.attemptNumber,category:failure.category,code:failure.code,explanation:failure.explanation,stateCommitted:false,recoveryAction:action,repeatedViolation,correctionMessage:correction,timestamp:new Date().toISOString(),retryElapsedMs:pending?.retryStartedAt?Date.now()-pending.retryStartedAt:0,
+            const attempt={id:pending?`${pending.logicalTurnId}:attempt:${pending.attemptNumber}`:randomUUID(),type:'recovery_attempt',runId:this.config!.runId,agentId,logicalTurnIndex:this.currentTurnIndex,turnIndex:this.currentTurnIndex,simulationMinute:this.world?.minute??null,attemptNumber:pending?.attemptNumber,category:failure.category,code:failure.code,explanation:failure.explanation,...(failure.violations?.length?{violations:failure.violations}:{}),stateCommitted:false,recoveryAction:action,repeatedViolation,correctionMessage:correction,timestamp:new Date().toISOString(),retryElapsedMs:pending?.retryStartedAt?Date.now()-pending.retryStartedAt:0,
                 proposal:{parsed:this.llmAdapter.lastParsedResponse??null,raw:this.llmAdapter.lastRawContent??null},diagnostics:this.llmAdapter.lastDiagnostics,
                 proposedOperations:{memory:this.llmAdapter.lastParsedResponse&&((this.llmAdapter.lastParsedResponse as any).memory_operations),operational:(this.llmAdapter.lastParsedResponse as any)?.operational_operations,world:(this.llmAdapter.lastParsedResponse as any)?.world_operations},
                 ...(config.auditRejectedAttempts?{attempt:{...this.currentAttempt,request:this.llmAdapter.lastRequest,rawResponse:this.llmAdapter.lastRawContent,parsedResponse:this.llmAdapter.lastParsedResponse,llmValidation:this.llmAdapter.lastValidation,diagnostics:this.llmAdapter.lastDiagnostics}}:{}),checkpoint:this.checkpoint()};
@@ -703,21 +705,42 @@ ${transcript || '(No conversation supplied)'}${memoryOperationGuide(config)}${pa
         }
         const {prompt:original,opConfig,opContext,worldObservation,schedulerDecision,environment}=this.pending.context;
         const prompt=structuredClone(original);
-        prompt.messages.push(...this.pending.corrections);
+        // Retain every historical correction in audit/checkpoints; inference gets the latest complete diagnostic.
+        prompt.messages.push(...this.pending.corrections.slice(-1));
         this.pending.attemptNumber++;this.pending.inFlight=true;
         delete this.pending.retryAt;
         this.recovery={...this.recovery,phase:this.pending.lastFailure?.retry==='technical'?'retrying':this.pending.corrections.length?'correcting':'generating',agentId,turnIndex:this.currentTurnIndex,attemptNumber:this.pending.attemptNumber,correctiveRetry:this.pending.correctiveRetries,correctiveLimit:this.recoveryConfig.correctiveRetries,simulationMinute:this.world?.minute};
         await this.saveExecution();
         if(this.recoveryConfig.enabled&&(this.shouldPause||this.shouldStop))throw new RecoveryCancelled();
         this.emit('turn_started',{agentId,turnIndex:this.currentTurnIndex});this.publishStatus();
+        const execution=this.config!.decisionConfig?.mode==='agent_selected'||this.config!.communicationConfig
+            ?executionContext(this.config!,agentId,opConfig,currentOperational(original.state).location.id,configuredWorldActions(this.config!.worldConfig)):undefined;
         this.currentAttempt = { startedAt: new Date().toISOString(), prompt: { system: prompt.system, messages: prompt.messages }, retrieval: prompt.retrieval, ...(opContext ? {operationalContext:opContext} : {}),...(worldObservation?{worldObservation,schedulerDecision}:{}) };
-        this.llmAdapter.updateConfig(this.config!.llmConfig);
+        this.llmAdapter.setExperimentConfig(this.config!.llmConfig);
         this.inferenceAbort=this.recoveryConfig.enabled?new AbortController():undefined;
-        const response = await this.llmAdapter.generateTurn(prompt.system, prompt.messages, this.config!.protocol?.inputCharLimit, environment.socialConfig.enabled, environment.taskConfig.kind !== 'none', opConfig.enabled, !!this.world,this.inferenceAbort?.signal,this.recoveryConfig.enabled?async request=>{this.pending.preparedRequest=request;await this.saveExecution();}:undefined,this.config!.decisionConfig?.mode==='agent_selected',!!this.config!.communicationConfig);
+        const response = await this.llmAdapter.generateTurn(prompt.system, prompt.messages, this.config!.protocol?.inputCharLimit, environment.socialConfig.enabled, environment.taskConfig.kind !== 'none', opConfig.enabled, !!this.world,this.inferenceAbort?.signal,this.recoveryConfig.enabled?async request=>{this.pending.preparedRequest=request;await this.saveExecution();}:undefined,this.config!.decisionConfig?.mode==='agent_selected',!!this.config!.communicationConfig,execution);
         if(this.recoveryConfig.enabled&&(this.shouldPause||this.shouldStop))throw new RecoveryCancelled();
         this.pending.technicalFailures=0;
         this.currentAttempt.parsedResponse = response;
-        validateDecision(response, this.config!, agentId);
+        // Independent checks are accumulated before any candidate can commit. Never pick a
+        // location from an ambiguous itinerary just to validate its dependent world effects.
+        const violations:TurnViolation[]=execution?executionViolations(response,execution):[];
+        if(!execution)validateDecision(response,this.config!,agentId);
+        else try{validateDecision(response,this.config!,agentId);}catch(error){violations.push({code:'INVALID_AGENT_ACTION',path:'/social',message:(error as Error).message});}
+        const moves=(response.operational_operations??[]).filter(op=>op.action==='set_location');
+        const unambiguous=moves.length<=1&&(!moves.length||opConfig.locations.some((l:{id:string})=>l.id===moves[0].location_id));
+        if(unambiguous){
+            const location=moves.length?moves[0].location_id:currentOperational(prompt.state).location.id;
+            if(execution&&this.world)for(const [index,op] of (response.world_operations??[]).entries())if(op.action==='inspect_inventory'){
+                const inventory=this.world.inventories.find(i=>i.id===op.inventory_id);
+                if(inventory&&(inventory.ownerType==='location'?inventory.ownerId!==location:inventory.ownerId!==agentId&&(location==='unspecified'||this.world.positions[inventory.ownerId]!==location)))violations.push({code:'INVENTORY_NOT_ACCESSIBLE',path:`/world_operations/${index}`,message:'Remote inventory inspection is not permitted. Inspect authorized storage at your authoritative post-move location; a planned destination does not move you.'});
+            }
+            // Routing is a pure authorization check: no observations/messages are published here.
+            try{routeMessage(response,this.config!,agentId,this.currentTurnIndex,{...this.world?.positions,[agentId]:location},this.world?.minute??0);}
+            catch(error){if(!violations.some(issue=>issue.code==='INVALID_COMMUNICATION'))violations.push({code:'INVALID_COMMUNICATION',path:'/communication',message:(error as Error).message});}
+        }
+        if(violations.length){this.currentAttempt.turnValidation={status:'rejected',violations};this.currentAttempt.decisionValidation={status:'rejected',violations};throw new ProposalError(violations.map(issue=>issue.message).join('\n'),violations[0].code,violations);}
+        this.currentAttempt.turnValidation={status:'passed'};
         try{validateIntent(response,this.config!);this.currentAttempt.decisionValidation={status:'passed'};}catch(error){this.currentAttempt.decisionValidation={status:'rejected',error:(error as Error).message};throw error;}
         const eventId = this.pending.logicalTurnId;
         const config = resolveMemoryConfig(this.config!.memoryConfig);
