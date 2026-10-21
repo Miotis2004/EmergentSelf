@@ -23,6 +23,8 @@ export interface LlmConfig {
 export interface MemoryOperation {
     action: 'add' | 'update' | 'retire' | 'consolidate' | 'contradict';
     type: 'memory' | 'episodic' | 'belief' | 'stat' | 'self_description' | 'relationship';
+    subjects?: import('../memory/types').MemorySubject[];
+    topics?: string[];
     target_ids?: string[];
     confidence?: number;
     importance?: number;
@@ -43,6 +45,7 @@ export interface LlmDiagnostics {
     usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
 }
 export interface AgentTurnResponse {
+    retrieval_operations?: any[];
     decision?: {mode:string;reason:string;goal:string|null};
     communication?: {scope:string;recipientAgentIds:string[]}|null;
     response: string;

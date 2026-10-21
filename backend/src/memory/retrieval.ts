@@ -1,3 +1,4 @@
+import {recentConversation} from './selective';
 import { MemoryConfig, MemoryEntry, MemoryKind, WorkingState } from './types';
 
 const categories: {type:MemoryKind; label:string}[] = [
@@ -12,14 +13,16 @@ function grouped(lines: {type:MemoryKind; text:string}[]): string {
 }
 
 /** JSON lines keep reference metadata separate from quoted, agent-authored content. */
-function renderRecord(entry: MemoryEntry, content: string): string {
+function renderRecord(entry: MemoryEntry, content: string, searchable=false): string {
     return JSON.stringify({metadata:{id:entry.id,type:entry.type,confidence:entry.confidence,status:entry.status,
+        ...(entry.subjects?{subjects:entry.subjects}:{}),...(entry.topics?{topics:entry.topics}:{}),...(searchable&&entry.importance!==undefined?{importance:entry.importance}:{}),
         ...(entry.relationship_agent_id ? {relationship_agent_id:entry.relationship_agent_id} : {})},
         content,excerpt:content.length < entry.content.length});
 }
 
-export function retrieveMemory(state: WorkingState, config: MemoryConfig) {
-    const active = state.entries.filter(entry => entry.status === 'active');
+export function retrieveMemory(state: WorkingState, config: MemoryConfig, excludeIds:string[] = []) {
+    if(config.retrievalStrategy==='agent_query')config={...config,retrievalEntries:config.defaultMemoryEntries??4,retrievalChars:config.defaultMemoryChars??2500,summaryChars:0};
+    const active = state.entries.filter(entry => entry.status === 'active' && !excludeIds.includes(entry.id));
     const ranked = [...active].sort((a, b) => {
         if (config.retrievalRule === 'importance') {
             const score = ((b.importance ?? 0.5) - (a.importance ?? 0.5)) || b.confidence - a.confidence;
@@ -33,7 +36,7 @@ export function retrieveMemory(state: WorkingState, config: MemoryConfig) {
     let used = 0;
     for (const entry of config.mode !== 'enabled' ? [] : ranked) {
         const text = entry.content.slice(0, config.entryChars);
-        const line = renderRecord(entry, text);
+        const line = renderRecord(entry, text,config.retrievalStrategy==='agent_query');
         const proposed = [...lines, {type:entry.type,text:line}];
         if (selectedIds.length < config.retrievalEntries && grouped(proposed).length <= config.retrievalChars) {
             lines.push({type:entry.type,text:line}); selectedIds.push(entry.id); used = grouped(lines).length;
@@ -48,7 +51,7 @@ export function retrieveMemory(state: WorkingState, config: MemoryConfig) {
         let low = 1, high = Math.min(160, entry.content.length), chosen = '';
         while (low <= high) {
             const length = Math.floor((low + high) / 2);
-            const text = renderRecord(entry, entry.content.slice(0,length));
+            const text = renderRecord(entry, entry.content.slice(0,length),config.retrievalStrategy==='agent_query');
             if (grouped([...excerpts,{type:entry.type,text}]).length <= config.summaryChars) {
                 chosen = text; low = length + 1;
             } else high = length - 1;
@@ -66,6 +69,7 @@ export function retrieveMemory(state: WorkingState, config: MemoryConfig) {
 }
 
 export function boundedTranscript(history: any[], config: MemoryConfig): string {
+    if(config.retrievalStrategy==='agent_query')return recentConversation(history,config);
     if (config.mode === 'none' || config.transcriptTurns === 0 || config.transcriptChars === 0) return '';
     if(history.some(t=>Object.hasOwn(t,'message'))){
         const lines=history.slice(-config.transcriptTurns).filter(t=>t.response).map(t=>JSON.stringify(t.message?{messageId:t.message.messageId,runId:t.message.runId,speaker:t.agentId,scope:t.message.scope,channelId:t.message.channelId,audience:[t.agentId,...t.message.recipientAgentIds],classification:'agent_report',content:t.response}:{speaker:t.agentId,content:t.response}));

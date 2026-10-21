@@ -21,13 +21,14 @@ export const MODE_RULES={
     reflect:{physical:false,location:false,memory:true,inspection:true,activity:'interacting_or_idle',requiresLocation:false}
 } as const;
 export interface ExecutionContext {
+    memoryQueries?:{conversation:boolean;memory?:boolean};
     policyMode:string;availableModes:string[];agentId:string;participantIds:string[];
     operationalEnabled:boolean;locations:string[];currentLocationId:string;
     worldEnabled:boolean;worldActions:string[];
     communication?:CommunicationConfig;ownTeam?:Team;
 }
 export function executionContext(config:any,agentId:string,operational:OperationalConfig,location:string,worldActions:string[]):ExecutionContext {
-    return {policyMode:config.decisionConfig?.mode??'unrestricted',availableModes:config.decisionConfig?.availableModes??[],agentId,participantIds:[...config.agentIds],operationalEnabled:operational.enabled,locations:operational.enabled?operational.locations.map(l=>l.id):[],currentLocationId:location,worldEnabled:!!config.worldConfig?.enabled,worldActions,
+    return {...(config.memoryConfig?.retrievalStrategy==='agent_query'?{memoryQueries:{memory:(config.memoryConfig.mode??'enabled')==='enabled',conversation:config.memoryConfig.allowConversationHistoryQuery!==false}}:{}),policyMode:config.decisionConfig?.mode??'unrestricted',availableModes:config.decisionConfig?.availableModes??[],agentId,participantIds:[...config.agentIds],operationalEnabled:operational.enabled,locations:operational.enabled?operational.locations.map(l=>l.id):[],currentLocationId:location,worldEnabled:!!config.worldConfig?.enabled,worldActions,
         ...(config.communicationConfig?{communication:config.communicationConfig}:{}),
         ...(config.schedulingConfig?.teams.find((t:Team)=>t.agentIds.includes(agentId))?{ownTeam:structuredClone(config.schedulingConfig.teams.find((t:Team)=>t.agentIds.includes(agentId)))}:{})};
 }

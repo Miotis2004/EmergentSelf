@@ -12,7 +12,7 @@ export class MemoryManager {
 
     // Pure preparation: inference/validation never partially changes working files.
     prepareOperations(before: WorkingState, operations: MemoryOperation[], context: MemoryContext) {
-        validateAgentTurn({ response: '', memory_operations: operations });
+        validateAgentTurn({ response: '', memory_operations: operations },false,false,false,false,false,false,{policyMode:'unrestricted',availableModes:[],agentId:'',participantIds:[],operationalEnabled:false,locations:[],currentLocationId:'unspecified',worldEnabled:false,worldActions:[],memoryQueries:{conversation:false}});
         if (operations.length > context.config.maxOperations) throw new MemoryValidationError('Memory operation limit exceeded; reduce proposed changes or start a run with a larger limit');
         let state = structuredClone(before);
         const auditTrail: any[] = [];
@@ -28,6 +28,7 @@ export class MemoryManager {
             }
             const candidate = structuredClone(state);
             try {
+                if(op.topics?.some(topic=>!topic.trim()))throw new Error('Topic labels must contain non-whitespace text');
                 if (op.type === 'stat') {
                     if (op.action !== 'update') throw new Error('Invalid stat action: stats require update');
                     if (!op.target_id) throw new Error('Missing target_id for stat update');
@@ -86,6 +87,8 @@ export class MemoryManager {
                         candidate.entries.push(entry);
                         record.new_id = entry.id;
                     }
+                    if(op.subjects!==undefined)entry.subjects=structuredClone(op.subjects);
+                    if(op.topics!==undefined)entry.topics=[...new Set(op.topics.map(topic=>topic.trim().toLowerCase()))];
                     record.after = structuredClone([...originals.filter(e => e.id !== entry.id), entry]);
                     if (candidate.entries.filter(e => e.status === 'active').length > context.config.maxActiveEntries && candidate.entries.filter(e => e.status === 'active').length > state.entries.filter(e => e.status === 'active').length) throw new Error('Active memory limit reached; consolidate or retire entries before adding more');
                 }

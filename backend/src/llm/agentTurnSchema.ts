@@ -1,3 +1,4 @@
+import {queryOperationsSchema,subjectSchema,topicsSchema} from '../memory/querySchema';
 import {TurnSchemaError,uniqueViolations} from '../validation/issues';
 import type {TurnViolation} from '../validation/issues';
 import {structuralViolations} from '../interaction/execution';
@@ -62,6 +63,7 @@ export function responseSchema(social = false, task = false, operational = false
     if(decision)base={...base,properties:{...base.properties,decision:execution?{...decisionSchema,properties:{...decisionSchema.properties,mode:{enum:execution.availableModes}}}:decisionSchema},required:[...base.required,"decision"]};
     if(channels)base={...base,properties:{...base.properties,communication:execution?.communication?channelSchema(['private','team','local','global'].filter(scope=>(execution.communication as any)['allow'+scope[0].toUpperCase()+scope.slice(1)+'Messages']),execution.participantIds.filter(id=>id!==execution.agentId)):communicationSchema},required:[...base.required,"communication"]};
     const worldSchema=execution?{...worldOperationsSchema,items:{anyOf:worldOperationsSchema.items.anyOf.filter(schema=>schema.properties.action.enum.some((action:string)=>execution.worldActions.includes(action)))}}:worldOperationsSchema;
+    if(execution?.memoryQueries)base={...base,properties:{...base.properties,memory_operations:{...agentTurnSchema.properties.memory_operations,items:{anyOf:memoryOperationSchema.anyOf.map(variant=>({...variant,properties:{...variant.properties,subjects:subjectSchema,topics:topicsSchema}}))}},retrieval_operations:queryOperationsSchema(execution.memoryQueries.conversation,execution.memoryQueries.memory!==false)}};
     return world ? {...base,properties:{...base.properties,world_operations:worldSchema},required:[...base.required,'world_operations']} : base;
 }
 /**
@@ -88,7 +90,7 @@ const ajv = new Ajv({ strict: false, strictNumbers: true, allErrors:true });
 const validators = new Map<string,ReturnType<typeof ajv.compile>>();
 
 export function validateAgentTurn(value: unknown, social = false, task = false, operational = false, world = false, decision = false, channels = false, execution?:ExecutionContext): asserts value is import('./LlmAdapter').AgentTurnResponse {
-    const key=JSON.stringify([social,task,operational,world,decision,channels,execution?.availableModes,execution?.communication,execution?.participantIds,execution?.agentId,execution?.worldActions]);
+    const key=JSON.stringify([social,task,operational,world,decision,channels,execution?.availableModes,execution?.communication,execution?.participantIds,execution?.agentId,execution?.worldActions,execution?.memoryQueries]);
     if(!validators.has(key))validators.set(key,ajv.compile(responseSchema(social,task,operational,world,decision,channels,execution)));
     const validate=validators.get(key)!;
     if (!validate(value)) {
