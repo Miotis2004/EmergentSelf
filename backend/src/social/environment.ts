@@ -53,6 +53,7 @@ export function settleRound(config:any,records:any[]){
     const {taskConfig:task,feedbackConfig:feedback}=resolveEnvironment(config);
     if(task.kind==='none'||records.length!==config.agentIds.length)return [];
     const last=records[records.length-1],roundIndex=Math.floor(last.turnIndex/config.agentIds.length);
+    if(records.some(r=>r.completionSource==='system_fallback'))return [{schemaVersion:5,id:`${last.eventId}-task-incomplete`,type:'task_round_incomplete',runId:config.runId,turnIndex:last.turnIndex,roundIndex,timestamp:last.timestamp,reason:'system_incomplete_turn',decisionEventIds:records.map(r=>r.eventId),incompleteEventIds:records.filter(r=>r.completionSource==='system_fallback').map(r=>r.eventId),ruleVersion:'task-v1',awards:[]}];
     const active=records.filter(r=>r.social?.action!=='decline');
     const pool=active.reduce((n,r)=>n+r.taskDecision.amount,0),highest=active.length?Math.max(...active.map(r=>r.taskDecision.amount)):null;
     const winners=active.filter(r=>r.taskDecision.amount===highest).map(r=>r.agentId);

@@ -126,7 +126,8 @@
                         {{turn.turnRecord.timestamp | date:'mediumTime'}}
                     </span>
                 </div>
-                <div class="turn-content">{{turn.turnRecord.response || (turn.turnRecord.turnKind ? 'Speech: None (intentional)' : '')}}</div>
+                <app-turn-forfeiture [turn]="turn.turnRecord"></app-turn-forfeiture>
+                <div class="turn-content" *ngIf="turn.turnRecord.completionSource!=='system_fallback'">{{turn.turnRecord.response || (turn.turnRecord.turnKind ? 'Speech: None (intentional)' : '')}}</div>
                 <p *ngIf="turn.turnRecord.simulationMinute !== undefined">{{simulationTime(turn.turnRecord.simulationMinute)}}</p>
                 <details *ngIf="turn.turnRecord.worldOperations?.length"><summary>World interactions</summary><pre>{{turn.turnRecord.worldOperations | json}}</pre></details>
                 <div *ngFor="let event of turn.turnRecord.environmentEvents"><span *ngIf="event.type==='world_operation'">Committed {{event.requestedOperation.action}} · {{event.changes | json}}</span><span *ngIf="event.type?.startsWith('transformation_') || event.type==='resource_reserved' || event.type==='resource_released'">Verified {{event.type}} · {{event.taskId}} · {{simulationTime(event.simulationMinute)}}</span><span *ngIf="event.type==='world_scheduled_event'">{{simulationTime(event.simulationMinute)}} · {{event.eventId}} · {{event.status}} {{event.effects | json}}</span></div>

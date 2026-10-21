@@ -1,3 +1,4 @@
+import {TurnForfeitureComponent} from './turn-forfeiture.component';
 import {InteractionControlsComponent,defaultInteraction} from './interaction-controls.component';
 import {ChannelFiltersComponent,TurnChannelComponent,filterConversation} from './channel-view.component';
 import {TaskHistoryComponent,TaskHistoryControlsComponent,defaultTaskHistoryConfig} from './task-history.component';
@@ -24,7 +25,7 @@ import { Subscription } from 'rxjs';
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [InteractionControlsComponent,ChannelFiltersComponent,TurnChannelComponent,TaskHistoryComponent,TaskHistoryControlsComponent,AgentArchiveComponent,RecoveryControlsComponent,RecoveryStatusComponent,RecoveryAuditComponent,WorldControlsComponent,WorldStateComponent,OperationalControlsComponent, CommonModule, FormsModule, MemoryInspectorComponent, ResearchPanelComponent, AnalysisPanelComponent, RouterOutlet, SocialControlsComponent, BranchPanelComponent, PublicationPanelComponent],
+  imports: [TurnForfeitureComponent,InteractionControlsComponent,ChannelFiltersComponent,TurnChannelComponent,TaskHistoryComponent,TaskHistoryControlsComponent,AgentArchiveComponent,RecoveryControlsComponent,RecoveryStatusComponent,RecoveryAuditComponent,WorldControlsComponent,WorldStateComponent,OperationalControlsComponent, CommonModule, FormsModule, MemoryInspectorComponent, ResearchPanelComponent, AnalysisPanelComponent, RouterOutlet, SocialControlsComponent, BranchPanelComponent, PublicationPanelComponent],
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.css']
 })

@@ -172,7 +172,7 @@ export function nextWakeMinute(state:WorldState,config:WorldConfig){
  const future=[...transformations.deadlines(state),...Object.values(state.waits).flatMap(w=>w.untilMinute===undefined?[]:[w.untilMinute]),...schedule(config).filter(o=>!state.executed.includes(o.id)).map(o=>o.minute)];
  return future.length?Math.max(state.minute,Math.min(...future)):undefined;
 }
-export function visibleHistory(history:any[],agent:string,config?:WorldConfig){return history.filter(t=>Object.hasOwn(t,'message') ? t.agentId===agent||t.message?.recipientAgentIds?.includes(agent) : !(config?.enabled&&config.communicationPolicy==='local')||t.agentId===agent||Array.isArray(t.messageRecipients)&&t.messageRecipients.includes(agent));}
+export function visibleHistory(history:any[],agent:string,config?:WorldConfig){return history.filter(t=>t.completionSource!=='system_fallback').filter(t=>Object.hasOwn(t,'message') ? t.agentId===agent||t.message?.recipientAgentIds?.includes(agent) : !(config?.enabled&&config.communicationPolicy==='local')||t.agentId===agent||Array.isArray(t.messageRecipients)&&t.messageRecipients.includes(agent));}
 export function worldHash(state:WorldState){return hash(state);}
 
 /** Validate restored state against the chosen immutable world definition. Never coerce or repair it. */

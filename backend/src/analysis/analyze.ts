@@ -1,3 +1,4 @@
+import {recoveryMetrics} from '../recovery/forfeiture';
 import { analyzeBranches } from '../branches/analysis';
 import { analyzeSocial } from '../social/analysis';
 import { resolveEnvironment } from '../social/environment';
@@ -23,7 +24,7 @@ function means(observations:any[]) {
 }
 function design(config:any,baseline:any) {
     const {mode,...memory}=config.memoryConfig||{};
-    return hash({environment:resolveEnvironment(config),llm:config.llmConfig,topic:config.initialTopic??'',participants:config.agentIds,maxTurns:config.maxTurns,memory,
+    return hash({...(config.recoveryConfig?.onCorrectiveExhaustion==='record_idle_incomplete_and_advance'?{correctiveExhaustionPolicy:config.recoveryConfig.onCorrectiveExhaustion}:{}),environment:resolveEnvironment(config),llm:config.llmConfig,topic:config.initialTopic??'',participants:config.agentIds,maxTurns:config.maxTurns,memory,
         system:config.protocol?.systemPrompt,turn:config.protocol?.turnPrompt,inputLimit:config.protocol?.inputCharLimit,
         historySnapshot:config.protocol?.historyContextHash??config.protocol?.historySnapshotId??null,attributes:config.protocol?.attributeMode,roles:config.protocol?.roles,
         initialState:config.protocol?.initialStateHash??(baseline?.states?hash(baseline.states):`unknown:${config.runId}`),
@@ -43,10 +44,10 @@ export function analyzeBundles(bundles:any[],options:any={}) {
         if(bundle.configHash&&bundle.configHash!==hash(bundle.config))throw new Error('Configuration hash mismatch');
         const condition=bundle.config.protocol?.condition??bundle.config.memoryConfig?.mode??'legacy-unspecified';
         const designHash=design(bundle.config,bundle.baseline);
-        sources.push({runId:bundle.runId,configHash:hash(bundle.config),exportHash:hash(bundle),condition,designHash,legacy:!bundle.config.protocol});
+        sources.push({runId:bundle.runId,configHash:hash(bundle.config),exportHash:hash(bundle),condition,designHash,legacy:!bundle.config.protocol,...(bundle.config.recoveryConfig?.onCorrectiveExhaustion==='record_idle_incomplete_and_advance'||bundle.turns.some((t:any)=>t.completionSource==='system_fallback')?{recovery:recoveryMetrics(bundle.turns,bundle.events??[])}:{})});
         const context=new Map<number,string[]>();let recent:string[]=[];
         const turns=[...bundle.turns].sort((a,b)=>a.turnIndex-b.turnIndex);
-        for(const turn of turns){context.set(turn.turnIndex,[...recent]);if(typeof turn.response==='string'){recent.push(turn.response);recent=recent.slice(-5);}}
+        for(const turn of turns){context.set(turn.turnIndex,[...recent]);if(turn.completionSource!=='system_fallback'&&typeof turn.response==='string'){recent.push(turn.response);recent=recent.slice(-5);}}
         const sessions=new Map<string,string[]>();
         const sessionStarts=new Map<string,string>();
         for(const probe of bundle.probes??[]){
@@ -54,7 +55,7 @@ export function analyzeBundles(bundles:any[],options:any={}) {
             const start=sessionStarts.get(probe.probeSessionId);
             if(start===undefined||timestamp<start)sessionStarts.set(probe.probeSessionId,timestamp);
         }
-        const records=[...turns.map((r,index)=>({...r,recordId:r.eventId??`turn-${index}`,stream:'dialogue',status:'success'})),
+        const records=[...turns.map((r,index)=>({...r,recordId:r.eventId??`turn-${index}`,stream:'dialogue',status:r.completionSource==='system_fallback'?'incomplete':'success'})),
             ...(bundle.events||[]).filter((e:any)=>e.type==='experiment_error').map((e:any,index:number)=>({...e,recordId:e.id??`error-${index}`,stream:'dialogue',status:'error'})),
             ...(bundle.probes||[]).map((p:any,index:number)=>({...p,recordId:p.id??`probe-${index}`,stream:'probe'}))]
             .sort((a,b)=>{
@@ -76,7 +77,7 @@ export function analyzeBundles(bundles:any[],options:any={}) {
             const key=observationKey(bundle.runId,record.stream,record.recordId);
             if(seenKeys.has(key))throw new Error('Duplicate source record');seenKeys.add(key);
             observations.push({source,key,condition,designHash,probeKey,
-                status:successful?'success':'failed',error:successful?null:record.error??record.message??'Invalid response',...metrics,
+                status:successful?'success':record.status==='incomplete'?'incomplete':'failed',...(record.completionSource?{turnOutcome:record.turnOutcome,completionSource:record.completionSource}:{}),error:successful?null:record.completionSource==='system_fallback'?'System-generated incomplete turn; no agent decision':record.error??record.message??'Invalid response',...metrics,
                 benchmark:record.benchmark??null,
                 exposure:record.retrieval?{selectedIds:record.retrieval.selectedIds,summaryIds:record.retrieval.summaryIds}:null,
                 requestHash:record.request?hash(record.request):null});
