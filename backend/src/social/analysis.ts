@@ -27,7 +27,7 @@ export function analyzeSocial(bundles:any[],windowSize:number){
                 amountChange:change('amount'),addressedChange:change('addressed'),declinedChange:change('declined')};
         });
         const {mode,...memory}=bundle.config.memoryConfig??{};
-        const designHash=hash({model:bundle.config.llmConfig,participants:bundle.config.agentIds,topic:bundle.config.initialTopic??'',maxTurns:bundle.config.maxTurns,
+        const designHash=hash({...(bundle.config.recoveryConfig?.onCorrectiveExhaustion==='record_idle_incomplete_and_advance'?{correctiveExhaustionPolicy:bundle.config.recoveryConfig.onCorrectiveExhaustion}:{}),model:bundle.config.llmConfig,participants:bundle.config.agentIds,topic:bundle.config.initialTopic??'',maxTurns:bundle.config.maxTurns,
             memory:{...memory,mode},social:env.socialConfig,task:env.taskConfig,
             feedbackRules:{positiveScore:env.feedbackConfig.positiveScore,negativeScore:env.feedbackConfig.negativeScore,maxVisible:env.feedbackConfig.maxVisible},
             inheritedHistory:bundle.config.protocol?.historyContextHash??bundle.config.protocol?.historySnapshotId??null,prompt:bundle.config.protocol?.systemPrompt,turnPrompt:bundle.config.protocol?.turnPrompt,attributes:bundle.config.protocol?.attributeMode,roles:bundle.config.protocol?.roles,inputLimit:bundle.config.protocol?.inputCharLimit,

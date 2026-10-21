@@ -4,13 +4,14 @@ import {OperationalError} from '../operations/state';
 import {WorldError} from '../world/simulation';
 import {MemoryValidationError} from '../agents/MemoryManager';
 import {ProtocolError} from '../research/protocol';
-export interface RecoveryConfig {enabled:boolean;correctiveRetries:number;technicalRetries:number;initialBackoffMs:number;maxBackoffMs:number;persistentConnectivityRecovery:boolean;persistentRetryIntervalMs:number;auditRejectedAttempts:boolean;}
-export const DEFAULT_RECOVERY:RecoveryConfig={enabled:true,correctiveRetries:3,technicalRetries:5,initialBackoffMs:2000,maxBackoffMs:60000,persistentConnectivityRecovery:true,persistentRetryIntervalMs:60000,auditRejectedAttempts:true};
+export interface RecoveryConfig {onCorrectiveExhaustion:'suspend'|'record_idle_incomplete_and_advance';enabled:boolean;correctiveRetries:number;technicalRetries:number;initialBackoffMs:number;maxBackoffMs:number;persistentConnectivityRecovery:boolean;persistentRetryIntervalMs:number;auditRejectedAttempts:boolean;}
+export const DEFAULT_RECOVERY:RecoveryConfig={onCorrectiveExhaustion:'suspend',enabled:true,correctiveRetries:3,technicalRetries:5,initialBackoffMs:2000,maxBackoffMs:60000,persistentConnectivityRecovery:true,persistentRetryIntervalMs:60000,auditRejectedAttempts:true};
 export function resolveRecovery(input:any,legacy=false):RecoveryConfig {
  if(input!==undefined&&(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).some(k=>!Object.hasOwn(DEFAULT_RECOVERY,k))))throw new Error('Invalid recovery configuration');
  const config={...DEFAULT_RECOVERY,...(legacy?{enabled:false}:{}),...input};
  for(const key of ['enabled','persistentConnectivityRecovery','auditRejectedAttempts'] as const)if(typeof config[key]!=='boolean')throw new Error(`Recovery ${key} must be a boolean`);
  for(const [key,min,max] of [['correctiveRetries',0,20],['technicalRetries',0,20],['initialBackoffMs',1,60000],['maxBackoffMs',1,300000],['persistentRetryIntervalMs',1000,3600000]] as const)if(!Number.isSafeInteger(config[key])||config[key]<min||config[key]>max)throw new Error(`Recovery ${key} must be an integer from ${min} to ${max}`);
+ if(!['suspend','record_idle_incomplete_and_advance'].includes(config.onCorrectiveExhaustion))throw new Error('Invalid corrective exhaustion policy');
  if(config.maxBackoffMs<config.initialBackoffMs)throw new Error('Maximum backoff must be at least initial backoff');
  return config;
 }

@@ -210,7 +210,7 @@ export class JsonlStorage {
         return {
             runId, agentId, turnIndex: selected, baselineTurn: baseline.atTurn, lastTurn: last, state,
             timeline: history.filter(record => record.agentId === agentId && record.schemaVersion === 2).map(record => ({
-                turnIndex: record.turnIndex, eventId: record.eventId, timestamp: record.timestamp,
+                turnIndex: record.turnIndex, eventId: record.eventId, timestamp: record.timestamp,...(record.completionSource?{completionSource:record.completionSource,turnOutcome:record.turnOutcome}:{}),
                 operations: record.auditTrail, retrieval: record.retrieval, ...(record.operationalAudit ? {operationalAudit:record.operationalAudit,operationalState:record.operationalState} : {})
             })),
             ...(compareTo === undefined ? {} : { compareTo, diff: diffStates(stateAt(compareTo), state) })
@@ -221,11 +221,16 @@ export class JsonlStorage {
     // are idempotently repaired before any subsequent inference, even after restart.
     async projectTurn(runId: string, record: any, storage: JsonStorage) {
         if (record.stateScope === 'trial') storage = this.trialStorage(runId);
-        if ((record.memoryMode !== 'none' && record.memoryMode !== 'history') || record.operationalState) await storage.saveWorkingState(record.agentId, record.stateAfter);
+        if (record.completionSource!=='system_fallback' && ((record.memoryMode !== 'none' && record.memoryMode !== 'history') || record.operationalState)) await storage.saveWorkingState(record.agentId, record.stateAfter);
         const existingEvents = await this.getEventHistory(runId);
         const recorded = new Set(existingEvents.map(event=>event.id));
         for (const event of record.environmentEvents ?? []) if (!recorded.has(event.id)) await this.appendEvent(runId, event);
         await this.reconcileTaskHistory(runId);
+        if(record.completionSource==='system_fallback'){
+            const existing=existingEvents.find(event=>event.id===record.eventId);
+            if(existing&&hash(existing)!==hash(record.forfeitureEvent))throw new Error('Forfeiture projection differs from canonical record');
+            if(!existing)await this.appendEvent(runId,record.forfeitureEvent);return;
+        }
         await this.appendEvent(runId, {
             schemaVersion: 2, id: record.eventId, type: 'memory_update',
             turnIndex: record.turnIndex, agentId: record.agentId, timestamp: record.timestamp,
@@ -241,7 +246,7 @@ export class JsonlStorage {
         for (const run of runs.filter(entry => entry.isDirectory())) {
             const history = await this.getConversationHistory(run.name);
             const events = await this.getEventHistory(run.name);
-            const projected = new Set(events.filter(e => e.type === 'memory_update').map(e => e.id));
+            const projected = new Set(events.filter(e => e.type === 'memory_update'||e.type==='turn_forfeited').map(e => e.id));
             for (const record of history) {
                 if (record.schemaVersion === 2 && !projected.has(record.eventId)) await this.projectTurn(run.name, record, storage);
             }

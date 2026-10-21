@@ -4,6 +4,8 @@ Current agent-decision contract, aggregated validation, small decoder bounds and
 
 Automatic recovery defaults to enabled. `ExperimentConfig.recoveryConfig` is resolved and saved with new immutable run configurations. Existing configurations that omit this field use an explicitly audited effective recovery policy; their files, memories, snapshots and historical logs are not migrated or rewritten. Explicitly disabled recovery retains manual behavior. Previously recorded recovery policy is retained across restart even when an older immutable configuration has no recovery field. To change a saved run's settings, create a new run or explicitly configured research template.
 
+Opt-in automatic incomplete turns after corrective exhaustion are documented in [Turn forfeiture](TURN_FORFEITURE.md). The default remains suspension.
+
 ## State machine
 
 The existing lifecycle (`running`, `paused`, `stopped`, `completed`) is retained for compatibility. A separate persisted recovery phase explains what the single execution loop is doing:
@@ -40,6 +42,7 @@ stateDiagram-v2
 |---|---:|---|
 | `enabled` | `true` | Boolean |
 | `correctiveRetries` | 3 | Integer 0–20; retries after the initial attempt |
+| `onCorrectiveExhaustion` | `suspend` | `suspend` or `record_idle_incomplete_and_advance` |
 | `technicalRetries` | 5 | Integer 0–20; short retries after the initial attempt |
 | `initialBackoffMs` | 2000 | Integer 1–60,000 ms |
 | `maxBackoffMs` | 60000 | Integer 1–300,000 ms, at least initial backoff |
@@ -73,7 +76,7 @@ Researcher world mutation is blocked while a frozen pending turn exists; finish 
 
 ## Manual intervention and remaining limits
 
-Researcher intervention remains necessary for an exhausted corrective budget, disabled persistent recovery after technical budget exhaustion, invalid application/model configuration, an ambiguous or corrupted commit log, exhausted safe projection repair, or unavailable audit storage. Resume from suspension explicitly grants a new short retry/correction budget while retaining the logical-turn ID, attempt history and correction context. Reset preserves its existing persistent-agent semantics and marks the old run non-resumable automatically; it does not erase research history.
+Researcher intervention remains necessary for an exhausted corrective budget under the default suspension policy, disabled persistent recovery after technical budget exhaustion, invalid application/model configuration, an ambiguous or corrupted commit log, exhausted safe projection repair, or unavailable audit storage. Resume from suspension explicitly grants a new short retry/correction budget while retaining the logical-turn ID, attempt history and correction context. Reset preserves its existing persistent-agent semantics and marks the old run non-resumable automatically; it does not erase research history.
 
 There is one active HTTP inference per controller. Aborting an HTTP request cancels the client immediately; termination of server-side computation follows the model server's disconnect/cancellation semantics. Exact raw requests and outputs are evidence, not a claim that model sampling is deterministic. Complete pending contexts and retry evidence increase disk use in long experiments. If the backend cannot write evidence at all, it suspends and reports the failure; it cannot persist information to an unavailable storage device.
 

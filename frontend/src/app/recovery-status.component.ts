@@ -11,11 +11,11 @@ import {CommonModule} from '@angular/common';
 </aside>`,styles:[`:host{flex-shrink:0;max-height:18dvh;overflow:auto}aside{padding:8px;background:#edf3fa;border-left:3px solid #426e98;font-size:.85rem}.suspended{background:#fff3e2;border-color:#985c15}`]})
 export class RecoveryStatusComponent {
  @Input() state:any;@Input() agentLabel='';
- labels:Record<string,string>={idle_wait:'Waiting for world events',repairing:'Repairing turn storage',generating:'Generating turn',correcting:'Correcting rejected proposal',retrying:'Retrying inference',waiting:'Waiting for LLM reconnection',suspended:'Safely suspended — researcher intervention required',paused:'Paused by researcher',stopped:'Stopped by researcher'};
+ labels:Record<string,string>={idle_wait:'Waiting for world events',repairing:'Repairing turn storage',forfeiting:'Committing system-incomplete turn',generating:'Generating turn',correcting:'Correcting rejected proposal',retrying:'Retrying inference',waiting:'Waiting for LLM reconnection',suspended:'Safely suspended — researcher intervention required',paused:'Paused by researcher',stopped:'Stopped by researcher'};
  day(minute:number){return Math.floor(minute/1440)+1;}clock(minute:number){return String(Math.floor(minute%1440/60)).padStart(2,'0')+':'+String(minute%60).padStart(2,'0');}
 }
 @Component({selector:'app-recovery-audit',standalone:true,imports:[CommonModule],template:`
-<details (toggle)="open=$any($event.target).open"><summary>Attempt {{event.attemptNumber}} · {{event.code}} · {{event.recoveryAction}}</summary>
+<details [attr.id]="event.id" (toggle)="open=$any($event.target).open"><summary>Attempt {{event.attemptNumber}} · {{event.code}} · {{event.recoveryAction}}</summary>
 <p>Turn {{event.logicalTurnIndex}} · {{event.agentId}} · committed: {{event.stateCommitted === null ? 'unknown' : event.stateCommitted}} · repeated violation: {{event.repeatedViolation}}</p>
 <div *ngIf="open"><p>{{event.explanation}}</p><ul *ngIf="event.violations?.length"><li *ngFor="let issue of event.violations">{{issue.code}} · {{issue.path}}: {{issue.message}}</li></ul><pre>{{event.proposedOperations | json}}</pre><details *ngIf="event.proposal"><summary>Original rejected proposal</summary><pre>{{event.proposal | json}}</pre></details><pre *ngIf="event.correctionMessage">{{event.correctionMessage}}</pre><details><summary>Original inference evidence</summary><pre>{{event.attempt | json}}</pre></details></div>
 </details>`,styles:[`pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.8rem}`]})

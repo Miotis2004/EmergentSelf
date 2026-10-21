@@ -1,3 +1,4 @@
+import {shouldForfeit,forfeitedRecord} from '../recovery/forfeiture';
 import {executionContext,executionViolations} from '../interaction/execution';
 import type {TurnViolation} from '../validation/issues';
 import {DecisionConfig,SchedulingConfig,CommunicationConfig,resolveInteraction,validateIntent,routeMessage,interactionInstructions} from '../interaction/policy';
@@ -438,11 +439,9 @@ export class ExperimentController {
                 }
                 if(!agentId)break;
                 this.activeAgentId = agentId;
-                await this.executeTurn(agentId,selection);
-                if (this.currentTurnIndex >= this.config.maxTurns && !this.shouldStop) {
-                    await this.recordHistoryControl('limit_reached');
-                    if(!this.shouldStop){await this.saveExecution({lifecycle:'completed'});await this.jsonlStorage.releaseWriter(this.writerId);this.status='completed';}
-                }
+                if(this.pending?.forfeiturePending)await this.commitForfeiture();
+                else await this.executeTurn(agentId,selection);
+                await this.finishAtLimit();
             } catch (error: any) {
                 if(this.recoveryConfig.enabled){await this.handleRecoverableFailure(error,agentId);continue;}
                 this.activeAgentId = null;
@@ -543,6 +542,11 @@ export class ExperimentController {
                 if(this.pending&&this.currentAttempt){await this.jsonlStorage.appendEvent(this.config!.runId,{id:`${this.pending.logicalTurnId}:attempt:${this.pending.attemptNumber}:cancelled`,type:'recovery_attempt',runId:this.config!.runId,agentId,turnIndex:this.pending.turnIndex,logicalTurnIndex:this.pending.turnIndex,attemptNumber:this.pending.attemptNumber,category:'inference_connection',code:'RESEARCHER_CANCELLED',stateCommitted:false,recoveryAction:this.shouldStop?'researcher_stop':'researcher_pause',attempt:{...this.currentAttempt,request:this.llmAdapter.lastRequest,rawResponse:this.llmAdapter.lastRawContent},checkpoint:this.checkpoint()});}
                 else await this.saveExecution();return;
             }
+            if(this.pending?.forfeiturePending){
+                this.status='paused';this.shouldPause=true;
+                this.recovery={phase:'suspended',category:'storage_failure',code:'FORFEITURE_COMMIT_FAILED',reason:'The system-incomplete turn could not be prepared or verified. Inspect storage/world clock before Resume; no additional inference will be issued.'};
+                this.lastError={type:'experiment_error',message:this.recovery.reason,...this.recovery};await this.saveExecution();this.publishStatus();return;
+            }
             const failure=classifyFailure(error),config=this.recoveryConfig,pending=this.pending;
             if(pending){pending.inFlight=false;pending.retryStartedAt??=Date.now();}
             let action='suspend',delay=0,correction:string|undefined;
@@ -550,6 +554,8 @@ export class ExperimentController {
                 pending.correctiveRetries++;pending.totalCorrections++;
                 correction=correctionMessage(failure,this.llmAdapter.lastParsedResponse??this.llmAdapter.lastRawContent??null,pending.correctiveRetries,config.correctiveRetries);
                 if(this.llmAdapter.lastRawContent!==undefined)pending.corrections.push({role:'system',content:correction});else correction=undefined;action='corrective_retry';
+            }else if(shouldForfeit(failure,config,pending)){
+                action='forfeit_turn';pending.forfeiturePending=true;
             }else if(pending&&failure.retry==='technical'){
                 pending.technicalFailures++;pending.totalTechnicalFailures++;
                 if(pending.technicalFailures<=config.technicalRetries){action='technical_retry';delay=Math.min(config.maxBackoffMs,config.initialBackoffMs*2**(pending.technicalFailures-1));}
@@ -557,7 +563,7 @@ export class ExperimentController {
             }
             const repeatedViolation=failure.retry==='correct'&&pending?.lastBehaviorCode===failure.code;
             if(pending&&failure.retry==='correct')pending.lastBehaviorCode=failure.code;
-            if(pending){pending.lastFailure=failure;pending.retryAt=delay?Date.now()+delay:undefined;pending.nextPhase=action==='wait_for_reconnection'?'waiting':action==='technical_retry'?'retrying':'correcting';}
+            if(pending){pending.lastFailure=failure;pending.retryAt=delay?Date.now()+delay:undefined;pending.nextPhase=action==='forfeit_turn'?'forfeiting':action==='wait_for_reconnection'?'waiting':action==='technical_retry'?'retrying':'correcting';}
             this.recovery={phase:action==='suspend'?'suspended':pending.nextPhase,agentId,turnIndex:this.currentTurnIndex,simulationMinute:this.world?.minute,attemptNumber:pending?.attemptNumber,correctiveRetry:pending?.correctiveRetries,correctiveLimit:config.correctiveRetries,technicalFailures:pending?.technicalFailures,category:failure.category,code:failure.code,reason:failure.explanation,...(failure.violations?.length?{violations:failure.violations}:{}),...(delay?{nextRetryAt:new Date(Date.now()+delay).toISOString()}:{}),...(action==='suspend'?{budgetExhausted:failure.retry==='correct'}:{})};
             if(action==='suspend'){this.shouldPause=true;this.status='paused';this.lastError={id:randomUUID(),type:'experiment_error',message:failure.explanation,...this.recovery};}
             const attempt={id:pending?`${pending.logicalTurnId}:attempt:${pending.attemptNumber}`:randomUUID(),type:'recovery_attempt',runId:this.config!.runId,agentId,logicalTurnIndex:this.currentTurnIndex,turnIndex:this.currentTurnIndex,simulationMinute:this.world?.minute??null,attemptNumber:pending?.attemptNumber,category:failure.category,code:failure.code,explanation:failure.explanation,...(failure.violations?.length?{violations:failure.violations}:{}),stateCommitted:false,recoveryAction:action,repeatedViolation,correctionMessage:correction,timestamp:new Date().toISOString(),retryElapsedMs:pending?.retryStartedAt?Date.now()-pending.retryStartedAt:0,
@@ -788,6 +794,24 @@ ${transcript || '(No conversation supplied)'}${memoryOperationGuide(config)}${pa
             const previous = await this.jsonlStorage.getConversationHistory(this.config!.runId);
             record.environmentEvents.push(...settleRound(this.config!, [...previous.slice(-(this.config!.agentIds.length - 1)), record]));
         }
+        await this.commitRecord(record);
+    }
+    private async finishAtLimit(){
+        if(this.config&&this.currentTurnIndex>=this.config.maxTurns&&!this.shouldStop){
+            await this.recordHistoryControl('limit_reached');
+            if(!this.shouldStop){await this.saveExecution({lifecycle:'completed'});await this.jsonlStorage.releaseWriter(this.writerId);this.status='completed';}
+        }
+    }
+    private async commitForfeiture(){
+        const config={...this.config!,recoveryConfig:this.recoveryConfig};
+        const record=forfeitedRecord(config,this.configHash,this.pending,this.world,await this.jsonlStorage.getEventHistory(config.runId));
+        if(resolveEnvironment(config).taskConfig.kind!=='none'&&(this.currentTurnIndex+1)%config.agentIds.length===0){
+            const previous=await this.jsonlStorage.getConversationHistory(config.runId);
+            record.environmentEvents.push(...settleRound(config,[...previous.slice(-(config.agentIds.length-1)),record]));
+        }
+        await this.commitRecord(record);
+    }
+    private async commitRecord(record:any){
         // Commit before touching editable state. Recovery reapplies this exact state,
         // never the model's operations, so retries cannot duplicate adds or inference.
         if(this.recoveryConfig.enabled&&(this.shouldPause||this.shouldStop))throw new RecoveryCancelled();
@@ -796,12 +820,13 @@ ${transcript || '(No conversation supplied)'}${memoryOperationGuide(config)}${pa
         if(this.recoveryConfig.enabled&&(this.shouldPause||this.shouldStop))throw new RecoveryCancelled();
         await this.jsonlStorage.appendConversationTurn(this.config!.runId, record);
         this.currentTurnIndex++;
-        if(worldResult)this.world=worldResult.state;
+        if(record.worldAfter)this.world=record.worldAfter;
         try { await this.jsonlStorage.projectTurn(this.config!.runId, record, this.jsonStorage); }
         catch { throw new TurnProjectionError('Turn is committed, but its working-state/audit update failed. Resume will repair it before the next inference'); }
         const { stateBefore, stateAfter, prompt: renderedPrompt, parsedResponse, rawResponse, ...turnRecord } = record;
         for (const event of record.environmentEvents) this.emit('environment_event', event);
-        this.emit('turn_completed', { turnRecord, auditTrail: prepared.auditTrail });
+        if(record.forfeitureEvent)this.emit('environment_event',record.forfeitureEvent);
+        this.emit('turn_completed', { turnRecord, auditTrail: record.auditTrail });
         this.pending=null;this.recovery={phase:'idle'};this.lastError=null;await this.saveExecution();
     }
 }
