@@ -1,3 +1,4 @@
+import {authorizedConversations} from '../memory/selective';
 import {executionContext} from '../interaction/execution';
 import {resolveHistoryConfig,retrieveTaskHistory} from '../taskHistory/history';
 import {resolveRecovery} from '../recovery/recovery';
@@ -188,13 +189,14 @@ export class ResearchService {
             const worldObservation=worldState?worldContext(worldState,config.worldConfig,agentId,!!config.communicationConfig):undefined;
             const opContext=opConfig.enabled?operationalContext(state,opConfig,config.communicationConfig?[]:otherStates):undefined;
             const historyConfig=resolveHistoryConfig(config.taskHistoryConfig);
+            if(config.memoryConfig.retrievalStrategy==='agent_query')historyConfig.maxChars=Math.min(historyConfig.maxChars,config.memoryConfig.taskHistoryChars??1000);
             const taskHistory=retrieveTaskHistory(historyConfig.enabled?await this.logs.snapshotTaskHistory({sourceRunId:runId,sourceTurnIndex:turnIndex},agentId):[],agentId,runId,worldObservation,historyConfig);
             const probeSessionId=randomUUID();
             const messages: {role:string;content:string}[]=[];
             const results:any[]=[];
             for (const [probeTurn,prompt] of definition.prompts.entries()) {
                 // Dedicated probe conversation: no main transcript and no state writes.
-                const rendered=renderProtocol(state,resolveMemoryConfig(config.memoryConfig),protocol,visibleHistory(options.historyOverride??[],agentId,config.worldConfig),prompt,participants);
+                const rendered=renderProtocol(state,resolveMemoryConfig(config.memoryConfig),protocol,config.memoryConfig.retrievalStrategy==='agent_query'?authorizedConversations(options.historyOverride??[],agentId,config):visibleHistory(options.historyOverride??[],agentId,config.worldConfig),prompt,participants);
                 rendered.system+=taskHistory.text+interactionInstructions(config,agentId);
                 (rendered.retrieval as any).taskHistory=taskHistory.metadata;
                 if(opContext)rendered.system+=operationalInstructions(opContext)+'\nThis research probe is read-only: operational proposals are recorded but never applied.';

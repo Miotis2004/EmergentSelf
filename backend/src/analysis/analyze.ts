@@ -1,3 +1,4 @@
+import {retrievalMetrics} from '../memory/metrics';
 import {recoveryMetrics} from '../recovery/forfeiture';
 import { analyzeBranches } from '../branches/analysis';
 import { analyzeSocial } from '../social/analysis';
@@ -44,7 +45,7 @@ export function analyzeBundles(bundles:any[],options:any={}) {
         if(bundle.configHash&&bundle.configHash!==hash(bundle.config))throw new Error('Configuration hash mismatch');
         const condition=bundle.config.protocol?.condition??bundle.config.memoryConfig?.mode??'legacy-unspecified';
         const designHash=design(bundle.config,bundle.baseline);
-        sources.push({runId:bundle.runId,configHash:hash(bundle.config),exportHash:hash(bundle),condition,designHash,legacy:!bundle.config.protocol,...(bundle.config.recoveryConfig?.onCorrectiveExhaustion==='record_idle_incomplete_and_advance'||bundle.turns.some((t:any)=>t.completionSource==='system_fallback')?{recovery:recoveryMetrics(bundle.turns,bundle.events??[])}:{})});
+        sources.push({runId:bundle.runId,configHash:hash(bundle.config),exportHash:hash(bundle),condition,designHash,legacy:!bundle.config.protocol,...(bundle.config.memoryConfig?.retrievalStrategy==='agent_query'?{retrieval:retrievalMetrics(bundle.turns,bundle.events??[])}:{}),...(bundle.config.recoveryConfig?.onCorrectiveExhaustion==='record_idle_incomplete_and_advance'||bundle.turns.some((t:any)=>t.completionSource==='system_fallback')?{recovery:recoveryMetrics(bundle.turns,bundle.events??[])}:{})});
         const context=new Map<number,string[]>();let recent:string[]=[];
         const turns=[...bundle.turns].sort((a,b)=>a.turnIndex-b.turnIndex);
         for(const turn of turns){context.set(turn.turnIndex,[...recent]);if(turn.completionSource!=='system_fallback'&&typeof turn.response==='string'){recent.push(turn.response);recent=recent.slice(-5);}}

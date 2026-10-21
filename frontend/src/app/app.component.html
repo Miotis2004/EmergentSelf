@@ -127,6 +127,10 @@
                     </span>
                 </div>
                 <app-turn-forfeiture [turn]="turn.turnRecord"></app-turn-forfeiture>
+                <details *ngIf="turn.turnRecord.queryResults?.length" aria-label="Retrieval results"><summary>Retrieved historical data (not newly created memory)</summary>
+                    <div *ngFor="let result of turn.turnRecord.queryResults"><strong>{{result.type}} query · {{result.status}} · {{result.count}} results</strong><pre>{{result | json}}</pre></div>
+                </details>
+                <small *ngIf="turn.turnRecord.retrieval?.suppliedQueryEventIds?.length">Supplied prior retrieval: {{turn.turnRecord.retrieval.suppliedQueryEventIds.join(', ')}}</small>
                 <div class="turn-content" *ngIf="turn.turnRecord.completionSource!=='system_fallback'">{{turn.turnRecord.response || (turn.turnRecord.turnKind ? 'Speech: None (intentional)' : '')}}</div>
                 <p *ngIf="turn.turnRecord.simulationMinute !== undefined">{{simulationTime(turn.turnRecord.simulationMinute)}}</p>
                 <details *ngIf="turn.turnRecord.worldOperations?.length"><summary>World interactions</summary><pre>{{turn.turnRecord.worldOperations | json}}</pre></details>
@@ -222,10 +226,11 @@
                     <input [id]="'memory-' + limit.key" type="number" step="1" [min]="limit.min" [max]="limit.max"
                         [ngModel]="memoryLimit(limit.key)" (ngModelChange)="setMemoryLimit(limit.key, $event)">
                 </div>
-                <small>Limits are recorded and fixed per run. Overflow uses a deterministic extractive digest; original entries remain available in history.</small>
+                <small>Limits are fixed per run. Original retrieval uses a deterministic extractive digest. Selective retrieval uses its separate budgets below and disables the digest; storage and operation limits still apply. Original entries remain available in history.</small>
             </details>
         </fieldset>
 
+        <app-selective-memory-controls [config]="memoryConfig" [locked]="configurationLocked"></app-selective-memory-controls>
         <app-recovery-controls [config]="recoveryConfig" [locked]="configurationLocked"></app-recovery-controls>
         <app-world-controls [modern]="!legacyInteraction" [config]="worldConfig" [locked]="configurationLocked" [agentIds]="savedAgentIds || nextParticipantIds" (validityChange)="worldConfigurationValid=$event"></app-world-controls>
         <app-operational-controls [config]="operationalConfig" [locked]="configurationLocked"></app-operational-controls>

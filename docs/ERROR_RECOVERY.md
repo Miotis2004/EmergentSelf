@@ -98,3 +98,5 @@ There is one active HTTP inference per controller. Aborting an HTTP request canc
 - The live llama.cpp schema check was attempted; model discovery at `http://127.0.0.1:8080/v1/models` returned connection refused. Actual local-model/Ornith recovery and live grammar acceptance remain **unverified** in this environment. No constrained-generation schema rules or output modes were changed by this feature.
 
 Automatic recovery applies to main experiment turns; standalone read-only research probes retain their existing explicit execution and error records. This avoids silently repeating a separately requested research measurement.
+
+Selective memory/conversation query turns use the same validation and commit boundary; see [Selective retrieval](SELECTIVE_RETRIEVAL.md). Retrieval does not add a retry or inference loop.

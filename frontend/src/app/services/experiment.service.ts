@@ -9,7 +9,7 @@ export interface ExperimentConfig {
     operationalConfig?: any;
     worldConfig?: any;
     recoveryConfig?: any;
-    memoryConfig?: Record<string, string | number>;
+    memoryConfig?: Record<string, string | number | boolean>;
     socialConfig?: any;
     taskConfig?: any;
     feedbackConfig?: any;

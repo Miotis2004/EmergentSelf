@@ -3,7 +3,10 @@ import { AgentState } from '../storage/JsonStorage';
 
 export type MemoryKind = 'episodic' | 'belief' | 'self_description' | 'relationship';
 export interface SourceEvent { runId: string; turnIndex: number; eventId: string; }
+export interface MemorySubject { type: 'agent'|'location'|'object'|'resource'|'task'|'project'|'entity'; id:string; }
 export interface MemoryEntry {
+    subjects?: MemorySubject[];
+    topics?: string[];
     id: string;
     type: MemoryKind;
     content: string;
@@ -20,6 +23,9 @@ export interface MemoryEntry {
 }
 export interface WorkingState { schemaVersion: 2; identity: AgentState; operational?: OperationalState; entries: MemoryEntry[]; }
 export interface MemoryConfig {
+    retrievalStrategy?: 'bulk' | 'agent_query';
+    defaultMemoryEntries?:number; defaultMemoryChars?:number; maxQueryResults?:number; maxQueryChars?:number;
+    conversationRecentMessages?:number; conversationRecentChars?:number; allowConversationHistoryQuery?:boolean; taskHistoryChars?:number;
     mode: 'enabled' | 'none' | 'history';
     maxActiveEntries: number;
     maxOperations: number;
@@ -39,14 +45,17 @@ export const DEFAULT_MEMORY_CONFIG: MemoryConfig = {
 };
 export function resolveMemoryConfig(input: Partial<MemoryConfig> = {}): MemoryConfig {
     if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Invalid memory configuration');
-    if (Object.keys(input).some(key => !Object.hasOwn(DEFAULT_MEMORY_CONFIG, key))) throw new Error('Unknown memory configuration field');
-    const config = { ...DEFAULT_MEMORY_CONFIG, ...input };
+    if (Object.keys(input).some(key => !Object.hasOwn(DEFAULT_MEMORY_CONFIG, key) && !Object.hasOwn(SELECTIVE_DEFAULTS,key) && key!=='retrievalStrategy')) throw new Error('Unknown memory configuration field');
+    const config:MemoryConfig = { ...DEFAULT_MEMORY_CONFIG, ...(input.retrievalStrategy==='agent_query'?SELECTIVE_DEFAULTS:{}), ...input };
+    if(input.retrievalStrategy!==undefined&&!['bulk','agent_query'].includes(input.retrievalStrategy))throw new Error('Invalid retrieval strategy');
+    if(config.allowConversationHistoryQuery!==undefined&&typeof config.allowConversationHistoryQuery!=='boolean')throw new Error('Conversation history access must be boolean');
     if (!['enabled', 'none', 'history'].includes(config.mode) || !['importance', 'recent'].includes(config.retrievalRule)) throw new Error('Invalid memory mode or retrieval rule');
     const limits: Record<string, [number, number]> = {
         maxActiveEntries: [1, 1000], maxOperations: [1, 50], maxEntryChars: [1, 8000],
         retrievalEntries: [0, 100], retrievalChars: [0, 32000], entryChars: [1, 8000],
         summaryChars: [0, 8000], transcriptTurns: [0, 100], transcriptChars: [0, 32000]
     };
+    for(const [key,[min,max]] of Object.entries(SELECTIVE_LIMITS))if(config[key as keyof MemoryConfig]!==undefined)limits[key]=[min,max];
     for (const [key, [min, max]] of Object.entries(limits)) {
         const value = config[key as keyof MemoryConfig];
         if (!Number.isSafeInteger(value) || Number(value) < min || Number(value) > max) throw new Error(`Memory ${key} must be an integer between ${min} and ${max}`);
@@ -63,3 +72,6 @@ export function importLegacy(identity: AgentState, memories: any[], beliefs: any
     }));
     return { schemaVersion: 2, identity, entries: [...entries(memories, 'episodic'), ...entries(beliefs, 'belief')] };
 }
+
+export const SELECTIVE_DEFAULTS={defaultMemoryEntries:4,defaultMemoryChars:2500,maxQueryResults:10,maxQueryChars:8000,conversationRecentMessages:12,conversationRecentChars:8000,allowConversationHistoryQuery:true,taskHistoryChars:1000};
+export const SELECTIVE_LIMITS:Record<string,[number,number]>={defaultMemoryEntries:[0,100],defaultMemoryChars:[0,32000],maxQueryResults:[1,100],maxQueryChars:[256,32000],conversationRecentMessages:[1,100],conversationRecentChars:[256,32000],taskHistoryChars:[0,8000]};
