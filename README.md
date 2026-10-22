@@ -2,6 +2,8 @@
 
 **A local, multi-agent experimental platform for studying artificial identity, memory, and behavioral development.**
 
+Read the [comprehensive User Guide](docs/USER_GUIDE.md) for installation, agent and experiment setup, world recipes, monitoring, research reports, auditing, and exports.
+
 ## Overview
 
 Emergent Self is a research-oriented application in which two or more artificial agents converse using a **single shared local language model**. Each agent has its own persistent state, including numeric attributes, memories, beliefs, and a self-description. The application invokes the model **sequentially**, loading the appropriate agent's context for each turn so that a single local inference server can support multiple independent agent identities.
