@@ -1,5 +1,6 @@
+import * as competition from '../competition/competition';
 import type {WorldConfig,WorldState} from './simulation';
-import {WorldError} from './simulation';
+import {WorldError} from './errors';
 import Ajv from 'ajv';
 import {hash} from '../research/protocol';
 
@@ -15,14 +16,14 @@ export interface Recipe {
  interruption:'continue'|'fail_if_participant_leaves';failurePolicy:'return_unconsumed';
 }
 export interface TransformationConfig {
- version:1;recipeObjects?:{itemId:string;revealsRecipeId:string;discoveryAction:'inspect'}[];recipes:Recipe[];workspaces:{id:string;inventoryId:string;locationId:string;authorizedAgentIds:string[]}[];
+ version:1;recipeObjects?:{itemId:string;revealsRecipeId:string;discoveryAction:'inspect'}[];recipes:Recipe[];workspaces:{id:string;inventoryId:string;locationId:string;authorizedAgentIds:string[];capacity?:number}[];
  initialEnvironment:Record<string,string>;locationCapabilities:Record<string,string[]>;
  knowledgePolicy:'all'|'discover'|'verified';initialKnowledge:Record<string,string[]>;
 }
 interface Lot {id:string;quantity:number;origin:string;producerTaskId?:string;parents?:string[];}
 interface Contribution {id:string;agentId:string;inventoryId:string;itemId:string;quantity:number;role:'input'|'tool'|'catalyst'|'target';consumed:boolean;released:boolean;consumedLots?:Lot[];}
 export interface TransformationTask {
- id:string;recipeId:string;workspaceId:string;creatorId:string;participants:string[];
+ competitionTeamId?:string;competitionCommitmentId?:string;id:string;recipeId:string;workspaceId:string;creatorId:string;participants:string[];
  status:'proposed'|'ready'|'in_progress'|'completed'|'failed'|'cancelled';
  contributions:Contribution[];createdMinute:number;startedMinute?:number;completionMinute?:number;finishedMinute?:number;failureReason?:string;
 }
@@ -43,7 +44,7 @@ export const recipeSchema=object({id,name:text,description:text,requiredLocation
  itemRequirements:map(properties),itemChanges:map(properties),durationMinutes:integer,minParticipants:{...integer,minimum:1,maximum:100},
  consumption:{enum:['completion','start']},interruption:{enum:['continue','fail_if_participant_leaves']},failurePolicy:{const:'return_unconsumed'}
 },['id','name','description','inputs','requiredTools','catalysts','outputs','requiredEnvironment','environmentChanges','itemRequirements','itemChanges','durationMinutes','minParticipants','consumption','interruption','failurePolicy']);
-export const configSchema=object({version:{const:1},recipeObjects:{type:'array',maxItems:2000,items:object({itemId:id,revealsRecipeId:id,discoveryAction:{const:'inspect'}})},recipes:list(recipeSchema),workspaces:list(object({id,inventoryId:id,locationId:id,authorizedAgentIds:ids})),initialEnvironment:environment,locationCapabilities:map(ids),knowledgePolicy:{enum:['all','discover','verified']},initialKnowledge:map(ids)},['version','recipes','workspaces','initialEnvironment','locationCapabilities','knowledgePolicy','initialKnowledge']);
+export const configSchema=object({version:{const:1},recipeObjects:{type:'array',maxItems:2000,items:object({itemId:id,revealsRecipeId:id,discoveryAction:{const:'inspect'}})},recipes:list(recipeSchema),workspaces:list(object({id,inventoryId:id,locationId:id,authorizedAgentIds:ids,capacity:{type:'integer',minimum:1,maximum:100}},['id','inventoryId','locationId','authorizedAgentIds'])),initialEnvironment:environment,locationCapabilities:map(ids),knowledgePolicy:{enum:['all','discover','verified']},initialKnowledge:map(ids)},['version','recipes','workspaces','initialEnvironment','locationCapabilities','knowledgePolicy','initialKnowledge']);
 const reason=text;
 export const operationSchemas=[
  object({action:{enum:['inspect_recipe_object']},inventory_id:id,item_id:id,reason}),
@@ -152,13 +153,14 @@ export function applyOperation(state:WorldState,config:WorldConfig,agent:string,
   }
   if(s.tasks.length>=10000)fail('INVALID_TASK_STATE','Maximum 10,000 transformation tasks per run');
   if(s.tasks.some(t=>t.id===op.task_id))fail('INVALID_TASK_STATE','Task ID already exists; inspect existing task');
-  const t:TransformationTask={id:op.task_id,recipeId:r.id,workspaceId:op.workspace_id,creatorId:agent,participants:[agent],status:'proposed',contributions:[],createdMinute:state.minute};authorize(state,config,t,agent);s.tasks.push(t);
-  const e=emit(state,id,'transformation_proposed',state.minute,t,agent,{after:t});observe(state,e,[agent]);return [e];
+  const t:TransformationTask={id:op.task_id,recipeId:r.id,workspaceId:op.workspace_id,creatorId:agent,participants:[agent],status:'proposed',contributions:[],createdMinute:state.minute};authorize(state,config,t,agent);events.push(...competition.ownTask(state,config,agent,t));s.tasks.push(t);
+  const e=emit(state,id,'transformation_proposed',state.minute,t,agent,{after:t});observe(state,e,[agent]);return [...events,e];
  }
  const t=task(state,op.task_id),r=recipe(config,t.recipeId),w=authorize(state,config,t,agent);
  if(op.action==='inspect_task'){const e=emit(state,id,'transformation_inspected',state.minute,t,agent,{task:t});observe(state,e,[agent]);return [e];}
  mutable(t);const before=structuredClone(t);
  if(op.action==='join_transformation'){
+  competition.validateParticipant(state,config,t,agent);
   if(t.status==='in_progress')fail('INVALID_TASK_STATE','Cannot join a running task');if(!t.participants.includes(agent))t.participants.push(agent);
  }else{
   if(!t.participants.includes(agent))fail('UNAUTHORIZED_RESOURCE_ACCESS','Join task explicitly before contributing or starting');
@@ -173,6 +175,8 @@ export function applyOperation(state:WorldState,config:WorldConfig,agent:string,
    events.push(emit(state,id+':reservation','resource_reserved',state.minute,t,agent,{inventoryId:inv.id,itemId:op.item_id,quantity:op.quantity,ownerId:inv.ownerId}));
   }else if(op.action==='start_transformation'){
    if(t.status==='in_progress')fail('INVALID_TASK_STATE','Task already running');prerequisites(state,config,t,r);
+   if(w.capacity!==undefined&&s.tasks.filter(x=>x.id!==t.id&&x.workspaceId===w.id&&x.status==='in_progress').length>=w.capacity)fail('WORKSPACE_CAPACITY_EXCEEDED','Workspace has no available assembly capacity');
+   events.push(...competition.startAssembly(state,config,t));
    if(state.minute+r.durationMinutes>1000000000)fail('INVALID_TASK_STATE','Completion time exceeds clock range');
    t.status='in_progress';t.startedMinute=state.minute;t.completionMinute=state.minute+r.durationMinutes;
    events.push(...consumeInputs(state,t,state.minute,id,r,'start'));
@@ -232,7 +236,7 @@ export function completeDue(state:WorldState,config:WorldConfig,toMinute:number,
   }
   t.finishedMinute=minute;events.push(...release(state,t,minute,id));
   const recipients=agents.filter(a=>t.participants.includes(a)||config.observationPolicy==='local'&&state.positions[a]===w.locationId);
-  const e=emit(state,id,'transformation_'+t.status,minute,t,undefined,{before,after:t,...(failure?{failureReason:failure}:{outputs:r.outputs,itemChanges:r.itemChanges,environmentChanges:r.environmentChanges})});events.push(e);
+  const e=emit(state,id,'transformation_'+t.status,minute,t,undefined,{before,after:t,...(config.competition?.enabled?{competitionCommitment:competition.completionCommitment(state,t)}:{}),...(failure?{failureReason:failure}:{outputs:r.outputs,itemChanges:r.itemChanges,environmentChanges:r.environmentChanges})});events.push(e);
   // Observing a physical outcome does not disclose a private recipe or its input requirements.
   if(config.transformations?.recipeObjects&&config.transformations.knowledgePolicy==='verified'){
    const informed=recipients.filter(a=>t.participants.includes(a)||extension(state).knowledge[a].includes(r.id));
@@ -286,7 +290,7 @@ export const instructions=`Transformation transport guide (not conversational co
 const persistedArray=(items:any)=>({type:'array',items});
 const lotSchema=object({id:text,quantity:{...integer,minimum:1},origin:text,producerTaskId:id,parents:persistedArray(text)},['id','quantity','origin']);
 const contributionSchema=object({id:text,agentId:id,inventoryId:id,itemId:id,quantity:{...integer,minimum:1},role:{enum:['input','tool','catalyst','target']},consumed:{type:'boolean'},released:{type:'boolean'},consumedLots:persistedArray(lotSchema)},['id','agentId','inventoryId','itemId','quantity','role','consumed','released']);
-export const taskStateSchema=object({version:{const:1},tasks:list(object({id,recipeId:id,workspaceId:id,creatorId:id,participants:ids,status:{enum:['proposed','ready','in_progress','completed','failed','cancelled']},contributions:persistedArray(contributionSchema),createdMinute:integer,startedMinute:integer,completionMinute:integer,finishedMinute:integer,failureReason:text},['id','recipeId','workspaceId','creatorId','participants','status','contributions','createdMinute']),10000),knowledge:map(ids),itemProperties:map(properties),ledger:{type:'array',items:{type:'object'}},lots:map(map(persistedArray(lotSchema)))});
+export const taskStateSchema=object({version:{const:1},tasks:list(object({competitionTeamId:id,competitionCommitmentId:text,id,recipeId:id,workspaceId:id,creatorId:id,participants:ids,status:{enum:['proposed','ready','in_progress','completed','failed','cancelled']},contributions:persistedArray(contributionSchema),createdMinute:integer,startedMinute:integer,completionMinute:integer,finishedMinute:integer,failureReason:text},['id','recipeId','workspaceId','creatorId','participants','status','contributions','createdMinute']),10000),knowledge:map(ids),itemProperties:map(properties),ledger:{type:'array',items:{type:'object'}},lots:map(map(persistedArray(lotSchema)))});
 const checkState=new Ajv({strict:false}).compile(taskStateSchema);
 export function assertCompatible(state:WorldState,config:WorldConfig,agents:string[]){
  if(!config.transformations){if(state.transformations)fail('INVALID_TASK_STATE','Unexpected transformation state');return;}

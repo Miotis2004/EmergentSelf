@@ -21,6 +21,7 @@ This guide describes the implemented Angular dashboard and Node.js backend, incl
 15. [Example experiments](#15-example-experiments)
 16. [Troubleshooting and FAQ](#16-troubleshooting-and-faq)
 17. [Verification and implementation references](#17-verification-and-implementation-references)
+18. [Team competitions](#18-team-competitions-commitments-verified-victory-and-termination)
 
 ## 1. Introduction
 
@@ -1592,3 +1593,510 @@ Documentation verification completed successfully: four parsed JSON blocks (thre
 Primary implementation references: [dashboard](../frontend/src/app/app.component.html), [world controls](../frontend/src/app/world-controls.component.ts), [API routes](../backend/src/api/), [experiment controller](../backend/src/experiments/ExperimentController.ts), [world engine](../backend/src/world/simulation.ts), [recipe schema/engine](../backend/src/world/transformations.ts), [analysis definitions](../backend/src/analysis/definitions.ts), [run export service](../backend/src/research/ResearchService.ts), and [publication service](../backend/src/publication/StudyService.ts).
 
 Specialist documentation: [installation](../INSTALLATION.md), [Phase IV measures](../PHASE_IV.md), [social/feedback](../PHASE_V.md), [branches](../PHASE_VI.md), [synthesis/publication](../PHASE_VII.md), [world](WORLD_SIMULATION.md), [transformations](TRANSFORMATIONS.md), [task history](TASK_HISTORY.md), [selective retrieval](SELECTIVE_RETRIEVAL.md), [recovery](ERROR_RECOVERY.md), and [forfeiture](TURN_FORFEITURE.md).
+
+## 18. Team competitions: commitments, verified victory and termination
+
+### When to enable competition
+
+Use optional competition rules when teams should explicitly select recipes and compete for a backend-verified transformation outcome. Ordinary conversation, discovery and transformation experiments need no competition block. Omit `worldConfig.competition`, choose `null` in the competition editor, or provide a complete block with `enabled: false` to retain noncompetitive behavior. No old configuration or log is migrated or overwritten.
+
+Stage 2 implements reusable competition management. It does not generate the final Discovery Challenge's 22 rooms, 100 recipes, components or four teams of three. Stage 1 supplies exploration and physical discovery; Stage 3 still needs the large experimental configuration and dataset.
+
+### Team membership and the competition JSON editor
+
+Select agents, then configure teams in **Decisions, scheduling and communication**. Competition references these same saved `schedulingConfig.teams`; it introduces no separate membership editor. Each eligible participant belongs to one participating team. Existing scheduling modes and seeds continue to determine inference order. Team membership and all competition rules freeze with the run configuration.
+
+In **Optional team competition**, paste a complete competition object and click **Validate competition JSON**. Validation checks JSON, the versioned schema and references against the selected agents, existing teams, operational registry, recipe catalog and workspaces. A configuration error is labeled separately from a runtime turn rejection. Invalid text is retained and prevents Start until corrected or explicitly disabled with `null`. Validation does not save or mutate a running experiment. Starting saves the validated block through existing immutable run persistence; saved runs reload it and lock edits.
+
+This is the complete competition sub-object used by the small example below:
+
+```json
+{
+  "version": 1,
+  "enabled": true,
+  "startMinute": 600,
+  "deadlineMinute": 900,
+  "teamIds": ["team-a", "team-b"],
+  "eligibleAgentIds": [],
+  "objective": {
+    "type": "first_verified_transformation",
+    "eligibleRecipeIds": [],
+    "eligibleWorkspaceIds": ["bench"],
+    "maxActiveCommitmentsPerTeam": 1,
+    "allowSwitchBeforeAssembly": true,
+    "allowSwitchAfterAssemblyStarts": false,
+    "allowMixedTeamParticipation": false
+  },
+  "victory": {
+    "terminateOnFirstCompletion": true,
+    "tiePolicy": "shared_victory"
+  }
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `version` | Exactly 1; unknown fields are rejected |
+| `enabled` | Enable optional competition enforcement |
+| `startMinute` | Absolute simulation minute, at or after the world's initial minute; minute 600 is day-one 10:00 |
+| `deadlineMinute` | `null` for no deadline, or an absolute minute strictly after start |
+| `teamIds` | Nonempty unique IDs from saved scheduling teams |
+| `eligibleAgentIds` | Empty means all members of participating teams; otherwise an explicit selected-member subset, with at least one eligible member per team |
+| `objective.type` | Currently `first_verified_transformation` |
+| `eligibleRecipeIds` | Empty means all configured transformation recipes; otherwise an explicit unique recipe allowlist |
+| `eligibleWorkspaceIds` | Explicit nonempty list of real workspaces; each team needs an authorized eligible workspace |
+| `maxActiveCommitmentsPerTeam` | Integer 1-10; use 1 for Discovery Challenge rules |
+| `allowSwitchBeforeAssembly` | Permit explicit replacement/cancellation before a commitment's first assembly start |
+| `allowSwitchAfterAssemblyStarts` | Permit replacement/cancellation after that historical start, after cancelling any active task |
+| `allowMixedTeamParticipation` | Default example is false; when true, eligible members of other competing teams may join, while ownership remains with the creator's team |
+| `terminateOnFirstCompletion` | True ends the experiment at verified victory; false closes the competition result but permits the ordinary run to continue |
+| `tiePolicy` | Currently only `shared_victory`; unsupported exclusive-winner policies are rejected |
+
+All fields in the version-1 block are required, including when `enabled` is false. `null` in the editor removes the optional block entirely. Reporting is always enabled for competitions rather than allowing silent evidence suppression. Eligible recipes are selected by ID, not category in this version. Workspaces resolve their location and authorization through the existing transformation configuration.
+
+Research-protocol runs also enforce their saved input character budget. The larger competition contract may exceed the default 24,000-character budget. Configure an adequate explicit `protocol.inputCharLimit` for such a study, based on the measured request size, and record it before starting. The backend does not silently increase a study's saved budget.
+
+### Explicit team recipe commitments
+
+Finding a recipe, announcing a plan, writing a belief or claiming victory does not create a commitment. An eligible member who legitimately knows a recipe may choose this world operation:
+
+```json
+{
+  "action": "commit_team_recipe",
+  "recipe_id": "hidden-recipe",
+  "reason": "Choose this known recipe for our team."
+}
+```
+
+The backend derives team identity from frozen membership. Agents cannot choose another team by adding a `team_id`. Commitments are administrative world operations under the existing `act` permissions, not new scheduler or personality rules. Known-recipe validation remains independent of commitment and task validation.
+
+A commitment records its stable ID, team, recipe, committing agent, simulation minute, status, previous commitment reference and associated task IDs. Teammates see their own team's authoritative commitment in world context, even before they personally learn the recipe. That visibility does not grant executable recipe knowledge; use physical inspection or authorized teaching to acquire it. Other teams' private commitments and discoveries are not placed in agent competition context.
+
+An identical repeated commitment is a predictable no-op on the active commitment list and emits an attributed duplicate event. A conflicting recipe cannot silently displace another member's commitment. To replace it, supply the exact previous recipe:
+
+```json
+{
+  "action": "commit_team_recipe",
+  "recipe_id": "second-recipe",
+  "replace_recipe_id": "hidden-recipe",
+  "reason": "Explicitly replace our previous choice."
+}
+```
+
+`cancel_team_recipe` uses `recipe_id` and `reason`. Replaced and cancelled commitments remain in history. Active tasks must first be cancelled through the existing task operation. With the example's limit of one, a second unreferenced commitment is rejected. Configuring a larger limit permits multiple distinct active commitments, not duplicate copies of the same recipe.
+
+Preparation-phase commitments are permitted. Competition task proposals and assembly are prohibited before `startMinute`. The exact definition of assembly beginning is an accepted transition of an owned task to `in_progress`. Its first start permanently marks the commitment as having begun assembly, even if the task later fails or is cancelled. With `allowSwitchAfterAssemblyStarts: false`, another teammate, a second task or cancellation cannot bypass that lock. Retrying the same committed recipe remains possible after the old task becomes terminal. No recipe is chosen or switched automatically.
+
+### Team-owned tasks and workspace capacity
+
+The existing `propose_transformation` operation must match an active commitment, eligible recipe and eligible workspace after competition start. The backend assigns `competitionTeamId` and `competitionCommitmentId` at proposal time; task names and conversational claims carry no ownership authority. At most one active task may belong to a given commitment. Existing creator, participant, resource contribution and consent rules still apply.
+
+With mixed-team participation disabled, joining another team's task is rejected immediately. When enabled, ownership stays with the creator's committed team; another team's participant does not acquire co-ownership or a joint win merely by joining. Actual task participants are recorded in victory evidence. Workspace authorization still applies independently to every participant, and optional `eligibleAgentIds` never expands physical permissions.
+
+Add optional `capacity: 1` to a workspace for a single shared assembly bench. Capacity counts `in_progress` tasks, not proposals or ready tasks. It is checked atomically when assembly starts. Completion, failure or cancellation releases capacity through task status; no second occupancy or reservation system exists. Omitted capacity preserves legacy unlimited simultaneous assembly. Multiple teams may propose and reserve different available resources while waiting, but they cannot reuse a component already reserved by another task. No automatic queue, movement, gathering, contribution or artificial communication is introduced.
+
+The original transformation engine remains authoritative for exact inputs, reusable tools, catalysts, consumption timing, interruptions, outputs and failure. Recipe knowledge and a commitment do not create resources or waive permissions.
+
+### Winner verification, ties and exact time
+
+Only a real `transformation_completed` event from a successful authoritative task can establish victory. The evaluator checks owning team, commitment at completion, eligible recipe/workspace, actual task participants, start time and completion time. It records ineligible evaluations rather than accepting narrative claims. A proposal, agent-reported activity or failed/cancelled task cannot win.
+
+Clock advancement stops at relevant simulation boundaries: scheduled events, competition start/deadline and task completion times. All actual successful completions at the earliest eligible minute are evaluated as one batch. Under `shared_victory`, all distinct eligible owning teams completing at that same minute are joint winners. Processing order, task array order, wall-clock latency and inference duration do not break ties. A capacity-one bench normally prevents simultaneous independent assemblies at that bench; ties can still be tested with capacity two or other eligible workspaces.
+
+The result includes run ID, competition configuration hash, winning teams, actual participating agent IDs, recipe/task IDs, completion event IDs, simulated completion minute, rule, tie status, verification and termination reason. It also snapshots other teams' progress. These references let a researcher verify the underlying completed outputs, contributions and consumption events.
+
+With `terminateOnFirstCompletion: true`, no further model inference begins after the winning transaction commits. The world clock stops at the winning minute even if a turn would normally advance farther. The transaction is completed atomically; its outputs, memory changes and audit records remain committed. Pending later task completions and later scheduled events are not executed. The controller transitions to `completed` without waiting for another turn or scheduling cycle.
+
+With automatic victory termination disabled, the first result remains final and immutable while the ordinary experiment may continue. No new competition commitments or assemblies begin after the competition result closes. Already running tasks may continue under the normal world rules. Their later outcomes cannot change the first winner or the frozen result snapshot.
+
+### Deadline, manual stop, errors and restart
+
+The deadline boundary is inclusive for completion: a task successfully completing at the deadline can win. Completions are evaluated before a no-winner deadline result at that minute. A task due later cannot win. Without an eligible completion, the world stops exactly at the deadline and records `reason: "deadline"`, even if all agents are waiting and no ordinary scheduled event remains. The competition start is also a deterministic waking event for eligible waiting participants.
+
+Manual Stop records a distinct `manual_stop` no-winner outcome if no result was already finalized. Reaching the ordinary turn limit records `turn_limit` without inventing victory. A technical inference or validation failure uses the existing paused/error/recovery lifecycle and leaves the competition unfinalized; researchers can Resume according to the saved recovery policy. A system-imposed forfeiture advances time through the same competition boundaries and may therefore reach a real scheduled task completion or deadline. It does not itself complete a recipe.
+
+Competition state is saved within canonical world-after records and world checkpoints. Restart, duplicate event evaluation and repair of a committed turn cannot duplicate victory. A terminal competition does not restart inference when Start or Resume is applied to its saved run. Active snapshots and branches retain commitments, ownership, knowledge and reservations. New branch events use the branch run ID while preserving source evidence; the source snapshot and logs remain unchanged. Branching from an already terminal competition preserves its terminal result rather than reopening it. Different competition rules require a separately configured experiment, not editing old research data.
+
+### Monitoring, final progress and exports
+
+The monitoring view displays **Team competition**, phase, start/deadline, participating teams, selected recipes, task states and verified completion evidence. After termination, the result and other teams' progress remain available with the saved run. This is privileged researcher data. Agents receive their own team context and known eligible recipes, not the full competition status or another team's hidden knowledge.
+
+Full research export adds an optional `competition` section containing the saved rules, authoritative runtime state and a read-only report. Existing raw `turns`, `events`, hashes and other export fields remain intact. The report derives discoveries, successful intra-team teaching, commitment changes, rooms visited, acquired/contributed components, proposed/started/completed/failed/cancelled tasks, reservation conflict evidence and elapsed time to first eligible completion from authoritative state and logs. Acquisitions identify actual transfers into team-member inventories; resources merely claimed in speech do not count. Validation failure references preserve rejected proposals and their reasons. Missing measured completion time is `null`, not zero. Full winning events and frozen progress are retained alongside current end-of-run state when victory termination was disabled.
+
+Competition audit event types include:
+
+- `competition_initialized`, `competition_started`.
+- `competition_recipe_committed`, `competition_commitment_changed`, `competition_commitment_rejected`.
+- `competition_task_proposed`, `competition_assembly_started`.
+- `competition_completion_eligible`, `competition_completion_ineligible`.
+- `competition_tie_detected`, `competition_victory_finalized`.
+- `competition_deadline_reached`, `competition_terminated`.
+
+Turn-produced events are part of canonical turn evidence and its event projection. Scheduler/researcher clock events remain children of existing `world_checkpoint` records. The competition state's event list also retains deterministic IDs. Rejected commitment events have `stateCommitted: false`; they are evidence of rejection, not committed team changes. Storage retries repair existing projections rather than replaying agent operations.
+
+### Troubleshooting competition runs
+
+| Diagnostic | Meaning and action |
+|---|---|
+| `/competition/...` configuration error | Correct the referenced field, membership or world dependency; revalidate before starting a new run |
+| `COMPETITION_RECIPE_UNAVAILABLE` | Recipe is unknown, ineligible or absent; guessing a hidden ID does not grant knowledge |
+| `COMPETITION_AGENT_NOT_ELIGIBLE` | Sender is outside the participating teams or selected eligible subset |
+| `COMPETITION_COMMITMENT_LIMIT` | Team already has its configured number of active choices; replace an exact previous recipe explicitly |
+| `COMPETITION_COMMITMENT_LOCKED` | Saved switching policy forbids the change after the recorded assembly stage |
+| `COMPETITION_ACTIVE_TASK` | Cancel the existing active task before changing its commitment, or wait for its terminal state |
+| `COMPETITION_COMMITMENT_REQUIRED` | Proposal/start does not match a valid active team commitment |
+| `COMPETITION_NOT_STARTED` | Competition task proposal/assembly is premature; preparation commitments and other permitted exploration remain possible |
+| `COMPETITION_MIXED_TEAM_PROHIBITED` | Join violates task ownership or team participation policy |
+| `COMPETITION_WORKSPACE_NOT_ELIGIBLE` | Use an eligible workspace with independent physical authorization |
+| `WORKSPACE_CAPACITY_EXCEEDED` | Another task occupies the bench; the backend does not invent a waiting action |
+| `COMPETITION_FINISHED` | Competition is closed; Resume cannot reopen a terminal result |
+| Recorded input character limit | Preserve the study budget; choose an adequate budget in a new configuration rather than silently truncating the contract |
+
+### Complete small two-team example
+
+[examples/competition-stage2.json](../examples/competition-stage2.json) is the exact complete configuration below. Create/select the four IDs, select the actual loaded model, and use a new run ID. Through the dashboard, paste the locations document, world editor sub-values, and competition sub-object into their corresponding sections; configure the same teams through the existing team controls. The complete object can also be sent to `POST /api/experiment/start`. No specific agent strategy or winning team is prescribed by this configuration.
+
+```json
+{
+  "runId": "competition-stage2",
+  "agentIds": [
+    "bob",
+    "sara",
+    "tim",
+    "julie"
+  ],
+  "maxTurns": 100,
+  "initialTopic": "Choose your own activities under the configured environment and optional team competition rules.",
+  "llmConfig": {
+    "baseUrl": "http://127.0.0.1:8080/v1",
+    "model": "select-loaded-model",
+    "maxTokens": 2048,
+    "outputMode": "json_schema"
+  },
+  "operationalConfig": {
+    "version": 1,
+    "enabled": true,
+    "observationPolicy": "self_only",
+    "locations": [
+      {
+        "id": "start",
+        "name": "Starting Room",
+        "description": "A gathering room."
+      },
+      {
+        "id": "search",
+        "name": "Search Room",
+        "description": "A room with storage."
+      },
+      {
+        "id": "workshop",
+        "name": "Assembly Workshop",
+        "description": "A room with a shared workbench."
+      }
+    ]
+  },
+  "decisionConfig": {
+    "version": 1,
+    "mode": "agent_selected",
+    "availableModes": [
+      "plan",
+      "observe",
+      "act",
+      "idle",
+      "change_location",
+      "communicate",
+      "reflect"
+    ]
+  },
+  "communicationConfig": {
+    "version": 1,
+    "defaultScope": "local",
+    "allowPrivateMessages": true,
+    "allowTeamMessages": false,
+    "allowLocalMessages": true,
+    "allowGlobalMessages": false
+  },
+  "worldConfig": {
+    "enabled": true,
+    "initialMinute": 540,
+    "minutesPerTurn": 5,
+    "initialPositions": {
+      "bob": "start",
+      "sara": "start",
+      "tim": "start",
+      "julie": "start"
+    },
+    "exploration": {
+      "version": 1,
+      "connections": [
+        {
+          "from": "start",
+          "to": "search",
+          "bidirectional": true,
+          "requiredEnvironment": {
+            "access": "open"
+          }
+        },
+        {
+          "from": "search",
+          "to": "workshop",
+          "bidirectional": true
+        }
+      ]
+    },
+    "items": [
+      {
+        "id": "sheet",
+        "name": "Unlabeled instruction sheet",
+        "unit": "unit",
+        "stackable": false,
+        "consumable": false
+      },
+      {
+        "id": "part",
+        "name": "Component",
+        "unit": "unit",
+        "stackable": true,
+        "consumable": false
+      },
+      {
+        "id": "widget",
+        "name": "Widget",
+        "unit": "unit",
+        "stackable": true,
+        "consumable": false
+      },
+      {
+        "id": "sheet-two",
+        "name": "Second instruction sheet",
+        "unit": "unit",
+        "stackable": false,
+        "consumable": false
+      }
+    ],
+    "inventories": [
+      {
+        "id": "search-stock",
+        "ownerType": "location",
+        "ownerId": "search",
+        "visibility": "local",
+        "authorizedAgentIds": [],
+        "quantities": {
+          "sheet": 1,
+          "part": 6,
+          "sheet-two": 1
+        }
+      },
+      {
+        "id": "bench-stock",
+        "ownerType": "location",
+        "ownerId": "workshop",
+        "visibility": "local",
+        "authorizedAgentIds": [
+          "bob",
+          "sara"
+        ],
+        "quantities": {}
+      },
+      {
+        "id": "bob-bag",
+        "ownerType": "agent",
+        "ownerId": "bob",
+        "visibility": "private",
+        "authorizedAgentIds": [],
+        "quantities": {}
+      },
+      {
+        "id": "sara-bag",
+        "ownerType": "agent",
+        "ownerId": "sara",
+        "visibility": "private",
+        "authorizedAgentIds": [],
+        "quantities": {}
+      },
+      {
+        "id": "tim-bag",
+        "ownerType": "agent",
+        "ownerId": "tim",
+        "visibility": "private",
+        "authorizedAgentIds": [],
+        "quantities": {}
+      },
+      {
+        "id": "julie-bag",
+        "ownerType": "agent",
+        "ownerId": "julie",
+        "visibility": "private",
+        "authorizedAgentIds": [],
+        "quantities": {}
+      }
+    ],
+    "events": [
+      {
+        "id": "unlock",
+        "atMinute": 600,
+        "occurrences": 1,
+        "affectedAgentIds": [
+          "bob",
+          "sara"
+        ],
+        "observation": "The exit is now unlocked.",
+        "wake": true,
+        "environmentKey": "access",
+        "value": "open"
+      }
+    ],
+    "transformations": {
+      "version": 1,
+      "recipes": [
+        {
+          "id": "hidden-recipe",
+          "name": "Hidden widget recipe",
+          "description": "Assemble a widget.",
+          "requiredLocation": "workshop",
+          "inputs": [
+            {
+              "itemId": "part",
+              "quantity": 1
+            }
+          ],
+          "requiredTools": [],
+          "catalysts": [],
+          "outputs": [
+            {
+              "itemId": "widget",
+              "quantity": 1
+            }
+          ],
+          "requiredEnvironment": {},
+          "environmentChanges": {},
+          "itemRequirements": {},
+          "itemChanges": {},
+          "durationMinutes": 7,
+          "minParticipants": 2,
+          "consumption": "completion",
+          "interruption": "continue",
+          "failurePolicy": "return_unconsumed"
+        },
+        {
+          "id": "second-recipe",
+          "name": "Second widget recipe",
+          "description": "Assemble a widget.",
+          "requiredLocation": "workshop",
+          "inputs": [
+            {
+              "itemId": "part",
+              "quantity": 1
+            }
+          ],
+          "requiredTools": [],
+          "catalysts": [],
+          "outputs": [
+            {
+              "itemId": "widget",
+              "quantity": 1
+            }
+          ],
+          "requiredEnvironment": {},
+          "environmentChanges": {},
+          "itemRequirements": {},
+          "itemChanges": {},
+          "durationMinutes": 7,
+          "minParticipants": 2,
+          "consumption": "completion",
+          "interruption": "continue",
+          "failurePolicy": "return_unconsumed"
+        }
+      ],
+      "workspaces": [
+        {
+          "id": "bench",
+          "inventoryId": "bench-stock",
+          "locationId": "workshop",
+          "authorizedAgentIds": [
+            "bob",
+            "sara",
+            "tim",
+            "julie"
+          ],
+          "capacity": 1
+        }
+      ],
+      "initialEnvironment": {
+        "access": "locked"
+      },
+      "locationCapabilities": {},
+      "knowledgePolicy": "verified",
+      "initialKnowledge": {},
+      "recipeObjects": [
+        {
+          "itemId": "sheet",
+          "revealsRecipeId": "hidden-recipe",
+          "discoveryAction": "inspect"
+        },
+        {
+          "itemId": "sheet-two",
+          "revealsRecipeId": "second-recipe",
+          "discoveryAction": "inspect"
+        }
+      ]
+    },
+    "competition": {
+      "version": 1,
+      "enabled": true,
+      "startMinute": 600,
+      "deadlineMinute": 900,
+      "teamIds": [
+        "team-a",
+        "team-b"
+      ],
+      "eligibleAgentIds": [],
+      "objective": {
+        "type": "first_verified_transformation",
+        "eligibleRecipeIds": [],
+        "eligibleWorkspaceIds": [
+          "bench"
+        ],
+        "maxActiveCommitmentsPerTeam": 1,
+        "allowSwitchBeforeAssembly": true,
+        "allowSwitchAfterAssemblyStarts": false,
+        "allowMixedTeamParticipation": false
+      },
+      "victory": {
+        "terminateOnFirstCompletion": true,
+        "tiePolicy": "shared_victory"
+      }
+    }
+  },
+  "schedulingConfig": {
+    "version": 1,
+    "mode": "round_robin",
+    "seed": 0,
+    "algorithm": "mulberry32-fisher-yates-v1",
+    "teamSelection": "round_robin",
+    "memberSelection": "round_robin",
+    "teams": [
+      {
+        "id": "team-a",
+        "name": "Team A",
+        "agentIds": [
+          "bob",
+          "sara"
+        ]
+      },
+      {
+        "id": "team-b",
+        "name": "Team B",
+        "agentIds": [
+          "tim",
+          "julie"
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Future Discovery Challenge configuration (conceptual only)
+
+Stage 3 can configure 12 selected agents in four existing teams of three, 22 registered rooms, 20 searchable inventories, 100 explicitly defined hidden recipes and physical instruction objects. A shared workshop can use `capacity: 1`; scheduled environmental state can lock starting-room exits from minute 540 until minute 600. Competition can start at minute 600, permit one active commitment per team, prohibit mixed-team assemblies and switching after assembly starts, and use shared victory with automatic termination. These dimensions describe a future dataset, not a generated or executed experiment in Stage 2. Recipe balancing, placement, component sufficiency and actual model behavior still require research design and validation.

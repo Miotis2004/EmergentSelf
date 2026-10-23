@@ -1,3 +1,4 @@
+import * as competition from '../competition/competition';
 import {conversationRecord,authorizedConversations,prepareQueries,retrievalInstructions} from '../memory/selective';
 import {shouldForfeit,forfeitedRecord} from '../recovery/forfeiture';
 import {executionContext,executionViolations} from '../interaction/execution';
@@ -219,7 +220,7 @@ export class ExperimentController {
                 !Array.isArray(config.agentIds) || config.agentIds.length < 2 || new Set(config.agentIds).size !== config.agentIds.length ||
                 !config.agentIds.every(id => typeof id === 'string' && /^[A-Za-z0-9_-]+$/.test(id))) throw new Error('Invalid run ID, agent IDs or turn limit');
             const operational = resolveOperational(config.operationalConfig);
-            const worldConfig=resolveWorld(config.worldConfig,config.agentIds,operational);
+            const worldConfig=resolveWorld(config.worldConfig,config.agentIds,operational,config.schedulingConfig?.teams??[]);
             const environment = resolveEnvironment(config);
             const initialTopic = normalizeInitialTopic(config.initialTopic);
             const memoryConfig = resolveMemoryConfig(config.memoryConfig);
@@ -240,7 +241,7 @@ export class ExperimentController {
                     const snapshot = await this.jsonlStorage.loadArtifact('snapshots', protocol.snapshotId!);
                     if (hash(snapshot.states) !== snapshot.stateHash || protocol.initialStateHash !== snapshot.stateHash) throw new Error('Frozen starting snapshot hash mismatch');
                     if (!isDeepStrictEqual(Object.keys(snapshot.states).sort(), [...config.agentIds].sort())) throw new Error('Snapshot participant IDs differ from the run');
-                    if(snapshot.worldState&&worldConfig?.enabled)assertWorldCompatible(snapshot.worldState,worldConfig,config.agentIds,operational.locations.map(l=>l.id));
+                    if(snapshot.worldState&&worldConfig?.enabled)assertWorldCompatible(snapshot.worldState,worldConfig,config.agentIds,operational.locations.map(l=>l.id),config.schedulingConfig?.teams??[]);
                     startingStates = snapshot.states;
                 }
                 if (protocol?.attributeMode === 'role' && config.agentIds.some(id => !Object.hasOwn(protocol.roles, id))) throw new Error('Each participant requires an explicit role description');
@@ -339,7 +340,7 @@ export class ExperimentController {
                     await this.jsonlStorage.appendEvent(config.runId,{id:`${this.pending.logicalTurnId}:attempt:${this.pending.attemptNumber}:interrupted`,type:'recovery_attempt',runId:config.runId,agentId:this.pending.agentId,turnIndex:this.currentTurnIndex,logicalTurnIndex:this.currentTurnIndex,attemptNumber:this.pending.attemptNumber,category:'inference_connection',code:'ATTEMPT_INTERRUPTED',stateCommitted:false,simulationMinute:this.world?.minute??null,recoveryAction:'restart_retry',attempt:{request:this.pending.preparedRequest},checkpoint:this.checkpoint()});
                 }
                 if (this.currentTurnIndex < config.maxTurns) {await this.recordControl(existing ? 'restart' : 'start');if(existing&&(!restored||restored.lifecycle==='running'))await this.recordHistoryControl('resumed');}
-                this.status = this.currentTurnIndex >= config.maxTurns ? 'completed' : restored&&restored.lifecycle!=='running'?(restored.lifecycle==='stopped'?'stopped':'paused'):'running';
+                this.status = this.currentTurnIndex >= config.maxTurns || competition.terminal(this.world,this.config?.worldConfig) ? 'completed' : restored&&restored.lifecycle!=='running'?(restored.lifecycle==='stopped'?'stopped':'paused'):'running';
                 this.shouldPause=this.status==='paused';this.shouldStop=this.status==='stopped';
                 await this.saveExecution();
                 this.emit('snapshot', await this.getSnapshot());
@@ -376,7 +377,7 @@ export class ExperimentController {
         this.lastError = null;
         await this.recordControl('resume');
         await this.recordHistoryControl('resumed');
-        this.status = this.currentTurnIndex >= this.config.maxTurns ? 'completed' : 'running';
+        this.status = this.currentTurnIndex >= this.config.maxTurns || competition.terminal(this.world,this.config.worldConfig) ? 'completed' : 'running';
         this.recovery={...this.recovery,phase:'idle'};await this.saveExecution();
         this.emit('snapshot', await this.getSnapshot());
         this.publishStatus();
@@ -384,12 +385,13 @@ export class ExperimentController {
         else await this.jsonlStorage.releaseWriter(this.writerId);
     }); }
     stop() { return this.command(async () => {
+        if(this.status==='completed'&&this.world?.competition?.result){await this.activePromise;return;}
         this.shouldStop = true;
         this.status = 'stopped';this.interruptRecovery();this.recovery={...this.recovery,phase:'stopped'};await this.saveExecution();
         await this.recordControl('stop');
         this.publishStatus();
         await this.activePromise;
-        try{if (this.jsonlStorage.ownsWriter(this.writerId)) await this.jsonlStorage.recoverPendingTurns(this.jsonStorage);await this.recordHistoryControl('stopped');}
+        try{if (this.jsonlStorage.ownsWriter(this.writerId)) await this.jsonlStorage.recoverPendingTurns(this.jsonStorage);if(this.world?.competition){if(!this.world.competition.result){await this.jsonlStorage.acquireWriter(this.writerId);await this.closeCompetition('manual_stop');}if(competition.terminal(this.world,this.config?.worldConfig)&&this.world.competition.result.reason==='verified_victory')this.status='completed';await this.saveExecution();this.publishStatus();}await this.recordHistoryControl('stopped');}
         catch{this.recovery={phase:'stopped',category:'storage_failure',code:'STOPPED_WITH_PENDING_REPAIR',reason:'Stopped by researcher; committed projections still require storage repair before another run.'};await this.saveExecution().catch(()=>{});this.publishStatus();}
         finally{await this.jsonlStorage.releaseWriter(this.writerId);}
     }); }
@@ -428,7 +430,10 @@ export class ExperimentController {
         while (this.status === 'running' && this.currentTurnIndex < this.config.maxTurns && !this.shouldPause && !this.shouldStop) {
             let agentId:string|undefined=this.pending?.agentId;
             try {
+            if(this.world?.competition&&!this.world.competition.initialized)await this.commitWorldAdvance(this.world.minute,'scheduler');
+            if(competition.terminal(this.world,this.config.worldConfig)){await this.finishAtLimit();break;}
             const selection=this.pending?.context?.selection??await this.selection();
+            if(competition.terminal(this.world,this.config.worldConfig)){await this.finishAtLimit();break;}
             agentId = this.pending?.agentId??(selection ? selection.agentId : this.world ? nextAgent(this.world,{...this.config.worldConfig,schedulingMode:this.config.schedulingConfig?.mode==='event_driven'?'event_driven':this.config.worldConfig!.schedulingMode} as WorldConfig,this.config.agentIds,this.currentTurnIndex,resolveEnvironment(this.config).taskConfig.kind!=='none') : this.config.agentIds[this.currentTurnIndex % this.config.agentIds.length]);
                 if(this.pending?.retryAt>Date.now()){this.recovery={...this.recovery,phase:this.pending.nextPhase};this.publishStatus();await this.waitForRetry(this.pending.retryAt-Date.now());}
                 if(this.recoveryConfig.enabled&&(this.shouldPause||this.shouldStop))break;
@@ -444,6 +449,7 @@ export class ExperimentController {
                 else await this.executeTurn(agentId,selection);
                 await this.finishAtLimit();
             } catch (error: any) {
+                try{await this.recordCompetitionRejection(error,agentId);}catch(auditError){error=auditError;}
                 if(this.recoveryConfig.enabled){await this.handleRecoverableFailure(error,agentId);continue;}
                 this.activeAgentId = null;
                 this.shouldPause = true;
@@ -493,7 +499,7 @@ export class ExperimentController {
         await this.jsonlStorage.recoverPendingTurns(this.jsonStorage);
         this.currentTurnIndex=history.length;this.world=await this.jsonlStorage.worldAt(this.config.runId);
         this.pending=null;this.recovery={phase:'idle',reason:'Committed turn recovered without repeating inference'};this.lastError=null;
-        if(this.currentTurnIndex>=this.config.maxTurns&&!this.shouldStop&&!this.shouldPause)this.status='completed';
+        if((this.currentTurnIndex>=this.config.maxTurns||competition.terminal(this.world,this.config.worldConfig))&&!this.shouldStop&&!this.shouldPause)this.status='completed';
         await this.saveExecution();this.emit('snapshot',await this.getSnapshot());return true;
     }
     private async handleRecoverableFailure(error:any,agentId?:string){
@@ -597,13 +603,16 @@ export class ExperimentController {
         if(!this.world||!this.config)throw new WorldError('World simulation is disabled');
         const commitId=`${this.config.runId}:world:${this.world.revision+1}`;
         const result=advanceWorld(this.world,this.config.worldConfig as WorldConfig,minute,this.config.agentIds,commitId);
-        const record={id:commitId,type:'world_checkpoint',beforeTurn:this.currentTurnIndex,actor,simulationMinute:minute,worldAfter:result.state,events:result.events,timestamp:new Date().toISOString()};
+        const record={id:commitId,type:'world_checkpoint',beforeTurn:this.currentTurnIndex,actor,simulationMinute:result.state.minute,worldAfter:result.state,events:result.events,timestamp:new Date().toISOString()};
         await this.appendWorldCheckpoint(record);
         this.world=result.state;
+        if(competition.terminal(this.world,this.config.worldConfig)){this.status='completed';await this.saveExecution({lifecycle:'completed'});}
         for(const event of result.events)this.emit('environment_event',event);
         this.publishStatus();
+        if(competition.terminal(this.world,this.config.worldConfig))await this.jsonlStorage.releaseWriter(this.writerId);
     }
     advanceTime(minute:number,actor:string,reason:string){return this.researchAction(async()=>{
+        if(competition.terminal(this.world,this.config?.worldConfig))throw new WorldError('Competition is finalized');
         if(this.pending)throw new WorldError('Resolve or reset the pending logical turn before changing world state');
         if(typeof actor!=='string'||!actor.trim()||actor.length>200||typeof reason!=='string'||!reason.trim()||reason.length>4000)throw new WorldError('Researcher and advancement reason are required');
         if(this.config)this.world=await this.jsonlStorage.worldAt(this.config.runId);
@@ -611,6 +620,7 @@ export class ExperimentController {
         return this.getState();
     });}
     wakeAgent(agentId:string,actor:string,reason:string){return this.researchAction(async()=>{
+        if(competition.terminal(this.world,this.config?.worldConfig))throw new WorldError('Competition is finalized');
         if(this.pending)throw new WorldError('Resolve or reset the pending logical turn before changing world state');
         if(!this.world||!this.config?.agentIds.includes(agentId)||typeof actor!=='string'||!actor.trim()||actor.length>200||typeof reason!=='string'||!reason.trim()||reason.length>4000)throw new WorldError('Select a world participant and record researcher/reason');
         this.world=(await this.jsonlStorage.worldAt(this.config.runId))!;
@@ -744,7 +754,7 @@ ${transcript || '(No conversation supplied)'}${memoryOperationGuide(config)}${pa
         await this.saveExecution();
         if(this.recoveryConfig.enabled&&(this.shouldPause||this.shouldStop))throw new RecoveryCancelled();
         this.emit('turn_started',{agentId,turnIndex:this.currentTurnIndex});this.publishStatus();
-        const execution=this.config!.decisionConfig?.mode==='agent_selected'||this.config!.communicationConfig||this.config!.memoryConfig?.retrievalStrategy==='agent_query'
+        const execution=this.config!.worldConfig?.competition?.enabled||this.config!.decisionConfig?.mode==='agent_selected'||this.config!.communicationConfig||this.config!.memoryConfig?.retrievalStrategy==='agent_query'
             ?executionContext(this.config!,agentId,opConfig,currentOperational(original.state).location.id,configuredWorldActions(this.config!.worldConfig)):undefined;
         this.currentAttempt = { startedAt: new Date().toISOString(), prompt: { system: prompt.system, messages: prompt.messages }, retrieval: prompt.retrieval, ...(opContext ? {operationalContext:opContext} : {}),...(worldObservation?{worldObservation,schedulerDecision}:{}) };
         this.llmAdapter.setExperimentConfig(this.config!.llmConfig);
@@ -827,9 +837,24 @@ ${transcript || '(No conversation supplied)'}${memoryOperationGuide(config)}${pa
         }
         await this.commitRecord(record);
     }
+    private async recordCompetitionRejection(error:any,agentId?:string){
+        if(!this.config?.worldConfig?.competition?.enabled)return;
+        const operations=this.currentAttempt?.worldOperations??this.currentAttempt?.parsedResponse?.world_operations??[];
+        for(const [index,operation] of operations.entries())if(['commit_team_recipe','cancel_team_recipe'].includes(operation.action)){
+            const event={id:`${this.config.runId}:turn:${this.currentTurnIndex}:competition-rejected:${this.pending?.attemptNumber??0}:${index}`,type:'competition_commitment_rejected',source:'backend_validation',runId:this.config.runId,agentId,simulationMinute:this.world?.minute,operation,code:classifyFailure(error).code,reason:error.message,stateCommitted:false};
+            if(this.currentAttempt)this.currentAttempt.competitionRejection=event;
+            await this.jsonlStorage.appendEvent(this.config.runId,event);this.emit('environment_event',event);
+        }
+    }
+    private async closeCompetition(reason:string){
+        if(!this.world?.competition||this.world.competition.result||!this.config)return;
+        const state=structuredClone(this.world),events=competition.finalize(state,this.config.worldConfig as WorldConfig,reason,state.minute);state.revision++;
+        await this.appendWorldCheckpoint({id:`${this.config.runId}:world:${state.revision}`,type:'world_checkpoint',beforeTurn:this.currentTurnIndex,simulationMinute:state.minute,worldAfter:state,events,timestamp:new Date().toISOString()});this.world=state;for(const event of events)this.emit('environment_event',event);
+    }
     private async finishAtLimit(){
-        if(this.config&&this.currentTurnIndex>=this.config.maxTurns&&!this.shouldStop){
-            await this.recordHistoryControl('limit_reached');
+        if(this.config&&(this.currentTurnIndex>=this.config.maxTurns||competition.terminal(this.world,this.config.worldConfig))&&!this.shouldStop){
+            if(!this.world?.competition?.result)await this.closeCompetition('turn_limit');
+            await this.recordHistoryControl(this.world?.competition?.result?.reason??'limit_reached');
             if(!this.shouldStop){await this.saveExecution({lifecycle:'completed'});await this.jsonlStorage.releaseWriter(this.writerId);this.status='completed';}
         }
     }

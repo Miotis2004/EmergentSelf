@@ -1,0 +1,6 @@
+/** Pure schemas avoid engine/prompt import cycles during cold startup. */
+const id={type:'string',pattern:'^[A-Za-z0-9_-]{1,120}$'},minute={type:'integer',minimum:0,maximum:1000000000};
+const ids={type:'array',maxItems:100,uniqueItems:true,items:id};
+const object=(properties:any)=>({type:'object',additionalProperties:false,properties,required:Object.keys(properties)});
+export const competitionSchema=object({version:{const:1},enabled:{type:'boolean'},startMinute:minute,deadlineMinute:{anyOf:[minute,{type:'null'}]},teamIds:ids,eligibleAgentIds:ids,objective:object({type:{const:'first_verified_transformation'},eligibleRecipeIds:ids,eligibleWorkspaceIds:ids,maxActiveCommitmentsPerTeam:{type:'integer',minimum:1,maximum:10},allowSwitchBeforeAssembly:{type:'boolean'},allowSwitchAfterAssemblyStarts:{type:'boolean'},allowMixedTeamParticipation:{type:'boolean'}}),victory:object({terminateOnFirstCompletion:{type:'boolean'},tiePolicy:{const:'shared_victory'}})});
+export const operationSchemas=[object({action:{enum:['commit_team_recipe']},recipe_id:id,reason:{type:'string',minLength:1,maxLength:2000}}),{...object({action:{enum:['commit_team_recipe']},recipe_id:id,replace_recipe_id:id,reason:{type:'string',minLength:1,maxLength:2000}})},object({action:{enum:['cancel_team_recipe']},recipe_id:id,reason:{type:'string',minLength:1,maxLength:2000}})];

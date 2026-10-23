@@ -1,0 +1,338 @@
+{
+  "runId": "competition-stage2",
+  "agentIds": [
+    "bob",
+    "sara",
+    "tim",
+    "julie"
+  ],
+  "maxTurns": 100,
+  "initialTopic": "Choose your own activities under the configured environment and optional team competition rules.",
+  "llmConfig": {
+    "baseUrl": "http://127.0.0.1:8080/v1",
+    "model": "select-loaded-model",
+    "maxTokens": 2048,
+    "outputMode": "json_schema"
+  },
+  "operationalConfig": {
+    "version": 1,
+    "enabled": true,
+    "observationPolicy": "self_only",
+    "locations": [
+      {
+        "id": "start",
+        "name": "Starting Room",
+        "description": "A gathering room."
+      },
+      {
+        "id": "search",
+        "name": "Search Room",
+        "description": "A room with storage."
+      },
+      {
+        "id": "workshop",
+        "name": "Assembly Workshop",
+        "description": "A room with a shared workbench."
+      }
+    ]
+  },
+  "decisionConfig": {
+    "version": 1,
+    "mode": "agent_selected",
+    "availableModes": [
+      "plan",
+      "observe",
+      "act",
+      "idle",
+      "change_location",
+      "communicate",
+      "reflect"
+    ]
+  },
+  "communicationConfig": {
+    "version": 1,
+    "defaultScope": "local",
+    "allowPrivateMessages": true,
+    "allowTeamMessages": false,
+    "allowLocalMessages": true,
+    "allowGlobalMessages": false
+  },
+  "worldConfig": {
+    "enabled": true,
+    "initialMinute": 540,
+    "minutesPerTurn": 5,
+    "initialPositions": {
+      "bob": "start",
+      "sara": "start",
+      "tim": "start",
+      "julie": "start"
+    },
+    "exploration": {
+      "version": 1,
+      "connections": [
+        {
+          "from": "start",
+          "to": "search",
+          "bidirectional": true,
+          "requiredEnvironment": {
+            "access": "open"
+          }
+        },
+        {
+          "from": "search",
+          "to": "workshop",
+          "bidirectional": true
+        }
+      ]
+    },
+    "items": [
+      {
+        "id": "sheet",
+        "name": "Unlabeled instruction sheet",
+        "unit": "unit",
+        "stackable": false,
+        "consumable": false
+      },
+      {
+        "id": "part",
+        "name": "Component",
+        "unit": "unit",
+        "stackable": true,
+        "consumable": false
+      },
+      {
+        "id": "widget",
+        "name": "Widget",
+        "unit": "unit",
+        "stackable": true,
+        "consumable": false
+      },
+      {
+        "id": "sheet-two",
+        "name": "Second instruction sheet",
+        "unit": "unit",
+        "stackable": false,
+        "consumable": false
+      }
+    ],
+    "inventories": [
+      {
+        "id": "search-stock",
+        "ownerType": "location",
+        "ownerId": "search",
+        "visibility": "local",
+        "authorizedAgentIds": [],
+        "quantities": {
+          "sheet": 1,
+          "part": 6,
+          "sheet-two": 1
+        }
+      },
+      {
+        "id": "bench-stock",
+        "ownerType": "location",
+        "ownerId": "workshop",
+        "visibility": "local",
+        "authorizedAgentIds": [
+          "bob",
+          "sara"
+        ],
+        "quantities": {}
+      },
+      {
+        "id": "bob-bag",
+        "ownerType": "agent",
+        "ownerId": "bob",
+        "visibility": "private",
+        "authorizedAgentIds": [],
+        "quantities": {}
+      },
+      {
+        "id": "sara-bag",
+        "ownerType": "agent",
+        "ownerId": "sara",
+        "visibility": "private",
+        "authorizedAgentIds": [],
+        "quantities": {}
+      },
+      {
+        "id": "tim-bag",
+        "ownerType": "agent",
+        "ownerId": "tim",
+        "visibility": "private",
+        "authorizedAgentIds": [],
+        "quantities": {}
+      },
+      {
+        "id": "julie-bag",
+        "ownerType": "agent",
+        "ownerId": "julie",
+        "visibility": "private",
+        "authorizedAgentIds": [],
+        "quantities": {}
+      }
+    ],
+    "events": [
+      {
+        "id": "unlock",
+        "atMinute": 600,
+        "occurrences": 1,
+        "affectedAgentIds": [
+          "bob",
+          "sara"
+        ],
+        "observation": "The exit is now unlocked.",
+        "wake": true,
+        "environmentKey": "access",
+        "value": "open"
+      }
+    ],
+    "transformations": {
+      "version": 1,
+      "recipes": [
+        {
+          "id": "hidden-recipe",
+          "name": "Hidden widget recipe",
+          "description": "Assemble a widget.",
+          "requiredLocation": "workshop",
+          "inputs": [
+            {
+              "itemId": "part",
+              "quantity": 1
+            }
+          ],
+          "requiredTools": [],
+          "catalysts": [],
+          "outputs": [
+            {
+              "itemId": "widget",
+              "quantity": 1
+            }
+          ],
+          "requiredEnvironment": {},
+          "environmentChanges": {},
+          "itemRequirements": {},
+          "itemChanges": {},
+          "durationMinutes": 7,
+          "minParticipants": 2,
+          "consumption": "completion",
+          "interruption": "continue",
+          "failurePolicy": "return_unconsumed"
+        },
+        {
+          "id": "second-recipe",
+          "name": "Second widget recipe",
+          "description": "Assemble a widget.",
+          "requiredLocation": "workshop",
+          "inputs": [
+            {
+              "itemId": "part",
+              "quantity": 1
+            }
+          ],
+          "requiredTools": [],
+          "catalysts": [],
+          "outputs": [
+            {
+              "itemId": "widget",
+              "quantity": 1
+            }
+          ],
+          "requiredEnvironment": {},
+          "environmentChanges": {},
+          "itemRequirements": {},
+          "itemChanges": {},
+          "durationMinutes": 7,
+          "minParticipants": 2,
+          "consumption": "completion",
+          "interruption": "continue",
+          "failurePolicy": "return_unconsumed"
+        }
+      ],
+      "workspaces": [
+        {
+          "id": "bench",
+          "inventoryId": "bench-stock",
+          "locationId": "workshop",
+          "authorizedAgentIds": [
+            "bob",
+            "sara",
+            "tim",
+            "julie"
+          ],
+          "capacity": 1
+        }
+      ],
+      "initialEnvironment": {
+        "access": "locked"
+      },
+      "locationCapabilities": {},
+      "knowledgePolicy": "verified",
+      "initialKnowledge": {},
+      "recipeObjects": [
+        {
+          "itemId": "sheet",
+          "revealsRecipeId": "hidden-recipe",
+          "discoveryAction": "inspect"
+        },
+        {
+          "itemId": "sheet-two",
+          "revealsRecipeId": "second-recipe",
+          "discoveryAction": "inspect"
+        }
+      ]
+    },
+    "competition": {
+      "version": 1,
+      "enabled": true,
+      "startMinute": 600,
+      "deadlineMinute": 900,
+      "teamIds": [
+        "team-a",
+        "team-b"
+      ],
+      "eligibleAgentIds": [],
+      "objective": {
+        "type": "first_verified_transformation",
+        "eligibleRecipeIds": [],
+        "eligibleWorkspaceIds": [
+          "bench"
+        ],
+        "maxActiveCommitmentsPerTeam": 1,
+        "allowSwitchBeforeAssembly": true,
+        "allowSwitchAfterAssemblyStarts": false,
+        "allowMixedTeamParticipation": false
+      },
+      "victory": {
+        "terminateOnFirstCompletion": true,
+        "tiePolicy": "shared_victory"
+      }
+    }
+  },
+  "schedulingConfig": {
+    "version": 1,
+    "mode": "round_robin",
+    "seed": 0,
+    "algorithm": "mulberry32-fisher-yates-v1",
+    "teamSelection": "round_robin",
+    "memberSelection": "round_robin",
+    "teams": [
+      {
+        "id": "team-a",
+        "name": "Team A",
+        "agentIds": [
+          "bob",
+          "sara"
+        ]
+      },
+      {
+        "id": "team-b",
+        "name": "Team B",
+        "agentIds": [
+          "tim",
+          "julie"
+        ]
+      }
+    ]
+  }
+}

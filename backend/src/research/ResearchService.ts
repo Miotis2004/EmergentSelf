@@ -1,3 +1,4 @@
+import {competitionReport} from '../competition/report';
 import {authorizedConversations} from '../memory/selective';
 import {executionContext} from '../interaction/execution';
 import {resolveHistoryConfig,retrieveTaskHistory} from '../taskHistory/history';
@@ -81,7 +82,7 @@ export class ResearchService {
             const memoryConfig = resolveMemoryConfig(input.memoryConfig);
             const operational = resolveOperational(input.operationalConfig);
             resolveHistoryConfig(input.taskHistoryConfig);
-            const worldConfig=resolveWorld(input.worldConfig,input.agentIds,operational);
+            const worldConfig=resolveWorld(input.worldConfig,input.agentIds,operational,input.schedulingConfig?.teams??[]);
             const environment = resolveEnvironment(input);
             const interaction:any=!input.protocol?.snapshotId||input.decisionConfig||input.schedulingConfig||input.communicationConfig?resolveInteraction(input):{};
             if(input.decisionConfig?.mode==='unrestricted'){if(!input.communicationConfig)delete interaction.communicationConfig;if(!input.schedulingConfig)delete interaction.schedulingConfig;}
@@ -92,7 +93,7 @@ export class ResearchService {
                 if(snapshot.schedulerState&&hash(snapshot.schedulerState)!==snapshot.schedulerHash)throw new Error('Snapshot scheduler hash mismatch');
                 if(snapshot.worldState&&worldHash(snapshot.worldState)!==snapshot.worldHash)throw new Error('Snapshot world hash mismatch');
                 if (hash(snapshot.states)!==snapshot.stateHash || hash(Object.keys(snapshot.states).sort())!==hash([...input.agentIds].sort())) throw new Error('Snapshot state/participant mismatch');
-                if(snapshot.worldState&&worldConfig?.enabled)assertWorldCompatible(snapshot.worldState,worldConfig,input.agentIds,operational.locations.map(l=>l.id));
+                if(snapshot.worldState&&worldConfig?.enabled)assertWorldCompatible(snapshot.worldState,worldConfig,input.agentIds,operational.locations.map(l=>l.id),input.schedulingConfig?.teams??[]);
                 Object.assign(states,snapshot.states);
                 const taskHistory=[];for(const agentId of input.agentIds)taskHistory.push(...await this.logs.snapshotTaskHistory(snapshot,agentId));
                 source={...(snapshot.schedulerState?{schedulerState:snapshot.schedulerState,schedulerHash:snapshot.schedulerHash}:{}),taskHistory,taskHistoryHash:hash(taskHistory),sourceRunId:snapshot.sourceRunId,sourceTurnIndex:snapshot.sourceTurnIndex,parentSnapshotId:snapshot.snapshotId,...(snapshot.worldState?{worldState:snapshot.worldState,worldHash:snapshot.worldHash}:{})};
@@ -244,6 +245,7 @@ export class ResearchService {
         bundle.benchmarkDefinitions=await Promise.all([...new Set(bundle.benchmarkSessions.map((record:any)=>record.benchmarkId))].map(benchmarkId=>this.logs.loadArtifact('benchmarks',String(benchmarkId))));
         const ratings=await Promise.all((await this.logs.listArtifacts('ratings')).map(ratingId=>this.logs.loadArtifact('ratings',ratingId)));
         bundle.evaluations=ratings.filter(record=>record.source.runId===runId);
+        if(config.worldConfig?.competition?.enabled){const state=await this.logs.worldAt(runId);bundle.competition={config:config.worldConfig.competition,state:state?.competition,report:state?competitionReport(config,state,bundle.turns,bundle.events):null};}
         bundle.integrityHash=hash(bundle);return bundle;
     }
     async compare(leftId: string,rightId: string) {

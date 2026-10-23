@@ -1,3 +1,6 @@
+import {resolveOperational} from '../operations/state';
+import {resolveWorld} from '../world/simulation';
+import {resolveInteraction} from '../interaction/policy';
 import {validateLocationDocument} from '../operations/state';
 import { Router, Request, Response } from 'express';
 import { JsonlStorage } from '../storage/JsonlStorage';
@@ -5,6 +8,10 @@ import { ExperimentController } from '../experiments/ExperimentController';
 
 export function createExperimentRouter(controller: ExperimentController, logs?: JsonlStorage): Router {
     const router = Router();
+    router.post('/validate-competition',(req,res)=>{try{
+        const input=req.body;if(!Array.isArray(input.agentIds)||input.agentIds.length<2||new Set(input.agentIds).size!==input.agentIds.length)throw new Error('/agentIds: select at least two distinct agents');
+        const interaction=resolveInteraction(input);resolveWorld({...input.worldConfig,competition:input.competition},input.agentIds,resolveOperational(input.operationalConfig),interaction.schedulingConfig.teams);res.json(input.competition);
+    }catch(error:any){res.status(400).json({error:error.message});}});
     router.post('/validate-locations',(req,res)=>{try{res.json(validateLocationDocument(req.body));}catch(error:any){res.status(400).json({error:error.message});}});
 
     router.get('/runs/:runId/agents/:agentId/memory', async (req, res) => {

@@ -232,6 +232,7 @@
 
         <app-selective-memory-controls [config]="memoryConfig" [locked]="configurationLocked"></app-selective-memory-controls>
         <app-recovery-controls [config]="recoveryConfig" [locked]="configurationLocked"></app-recovery-controls>
+        <app-competition-controls [world]="worldConfig" [operational]="operationalConfig" [scheduling]="interaction.schedulingConfig" [communication]="interaction.communicationConfig" [agentIds]="savedAgentIds || nextParticipantIds" [locked]="configurationLocked" (validityChange)="competitionConfigurationValid=$event"></app-competition-controls>
         <app-world-controls [modern]="!legacyInteraction" [config]="worldConfig" [locked]="configurationLocked" [agentIds]="savedAgentIds || nextParticipantIds" (validityChange)="worldConfigurationValid=$event"></app-world-controls>
         <app-operational-controls [config]="operationalConfig" [locked]="configurationLocked" (validityChange)="locationConfigurationValid=$event"></app-operational-controls>
         <app-publication-panel [running]="experimentStatus === 'running'"></app-publication-panel>
@@ -245,7 +246,8 @@
 
     <!-- Right: Audit Log & Memory -->
     <div class="panel right-panel">
-        <app-world-state [state]="worldState" [config]="worldConfig" [running]="experimentStatus==='running' || requestPending" (advance)="worldControl('advance',$event)" (wake)="worldControl('wake',$event)"></app-world-state>
+        <app-competition-status [world]="worldState" [config]="worldConfig.competition"></app-competition-status>
+            <app-world-state [state]="worldState" [config]="worldConfig" [running]="experimentStatus==='running' || requestPending" (advance)="worldControl('advance',$event)" (wake)="worldControl('wake',$event)"></app-world-state>
         <div class="header">
             <h2>Audit & State Events</h2>
         </div>

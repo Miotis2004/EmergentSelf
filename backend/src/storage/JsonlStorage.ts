@@ -260,11 +260,12 @@ export class JsonlStorage {
         if(!config?.worldConfig?.enabled)return undefined;
         let initial:WorldState|undefined;
         if(config.protocol?.snapshotId){const snapshot=await this.loadArtifact('snapshots',config.protocol.snapshotId);if(snapshot.worldState&&hash(snapshot.worldState)!==snapshot.worldHash)throw new Error('Snapshot world hash mismatch');initial=snapshot.worldState;}
-        let state=structuredClone(initial??initialWorld(config.worldConfig,config.agentIds));
+        let state=structuredClone(initial??initialWorld(config.worldConfig,config.agentIds,config.schedulingConfig?.teams??[],runId));
+        if(initial?.competition&&state.competition)state.competition.runId=runId; // Forked execution retains source evidence but scopes new events to its own run.
         const records=[...(await this.getConversationHistory(runId)).filter(t=>atTurn===undefined||t.turnIndex<=atTurn),
             ...(await this.getEventHistory(runId)).filter(e=>e.type==='world_checkpoint'&&(atTurn===undefined||e.beforeTurn<=atTurn))];
         for(const record of records.sort((a,b)=>(a.worldAfter?.revision??-1)-(b.worldAfter?.revision??-1)))if(record.worldAfter&&record.worldAfter.revision>state.revision)state=structuredClone(record.worldAfter);
-        assertWorldCompatible(state,config.worldConfig,config.agentIds,config.operationalConfig.locations.map((l:any)=>l.id));
+        assertWorldCompatible(state,config.worldConfig,config.agentIds,config.operationalConfig.locations.map((l:any)=>l.id),config.schedulingConfig?.teams??[]);
         return state;
     }
 

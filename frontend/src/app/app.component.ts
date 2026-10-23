@@ -1,3 +1,5 @@
+import {CompetitionControlsComponent} from './competition-controls.component';
+import {CompetitionStatusComponent} from './competition-status.component';
 import {SelectiveMemoryControlsComponent} from './selective-memory-controls.component';
 import {TurnForfeitureComponent} from './turn-forfeiture.component';
 import {InteractionControlsComponent,defaultInteraction} from './interaction-controls.component';
@@ -26,7 +28,7 @@ import { Subscription } from 'rxjs';
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [SelectiveMemoryControlsComponent,TurnForfeitureComponent,InteractionControlsComponent,ChannelFiltersComponent,TurnChannelComponent,TaskHistoryComponent,TaskHistoryControlsComponent,AgentArchiveComponent,RecoveryControlsComponent,RecoveryStatusComponent,RecoveryAuditComponent,WorldControlsComponent,WorldStateComponent,OperationalControlsComponent, CommonModule, FormsModule, MemoryInspectorComponent, ResearchPanelComponent, AnalysisPanelComponent, RouterOutlet, SocialControlsComponent, BranchPanelComponent, PublicationPanelComponent],
+  imports: [CompetitionControlsComponent,CompetitionStatusComponent,SelectiveMemoryControlsComponent,TurnForfeitureComponent,InteractionControlsComponent,ChannelFiltersComponent,TurnChannelComponent,TaskHistoryComponent,TaskHistoryControlsComponent,AgentArchiveComponent,RecoveryControlsComponent,RecoveryStatusComponent,RecoveryAuditComponent,WorldControlsComponent,WorldStateComponent,OperationalControlsComponent, CommonModule, FormsModule, MemoryInspectorComponent, ResearchPanelComponent, AnalysisPanelComponent, RouterOutlet, SocialControlsComponent, BranchPanelComponent, PublicationPanelComponent],
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.css']
 })
@@ -53,6 +55,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
   worldState:any;
   worldConfigurationValid=true;
   locationConfigurationValid=true;
+  competitionConfigurationValid=true;
   worldControl(action:string,body:any){this.perform(this.experimentService.world(action,body));}
   simulationTime(minute:number){return `Day ${Math.floor(minute/1440)+1} ${String(Math.floor(minute%1440/60)).padStart(2,'0')}:${String(minute%60).padStart(2,'0')}`;}
   operationalStates:Record<string,any>={};
@@ -297,8 +300,10 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
   }
 
   startExperiment() {
+      if(this.worldConfig.competition?.enabled&&!this.worldConfig.enabled){this.diagnostic='Enabled competition requires World Simulation. Disable competition explicitly or enable the world.';return;}
       if(!this.legacyInteraction){const error=InteractionControlsComponent.validate(this.interaction,this.savedAgentIds??this.nextParticipantIds,this.worldConfig.enabled,this.taskConfig.kind);if(error){this.diagnostic=error;return;}}
       if(!RecoveryControlsComponent.valid(this.recoveryConfig)){this.diagnostic='Correct Error Recovery settings before starting.';return;}
+      if(!this.competitionConfigurationValid){this.diagnostic='Validate Competition JSON before starting.';return;}
       if(this.operationalConfig.enabled&&!this.locationConfigurationValid){this.diagnostic='Validate Location & activity JSON before starting.';return;}
       if(this.worldConfig.enabled&&!this.worldConfigurationValid){this.diagnostic='Correct World Simulation JSON fields before starting.';return;}
       if (this.requestPending || (this.experimentStatus !== 'idle' && this.experimentStatus !== 'stopped')) return;
