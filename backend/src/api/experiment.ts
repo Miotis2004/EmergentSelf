@@ -1,9 +1,11 @@
+import {validateLocationDocument} from '../operations/state';
 import { Router, Request, Response } from 'express';
 import { JsonlStorage } from '../storage/JsonlStorage';
 import { ExperimentController } from '../experiments/ExperimentController';
 
 export function createExperimentRouter(controller: ExperimentController, logs?: JsonlStorage): Router {
     const router = Router();
+    router.post('/validate-locations',(req,res)=>{try{res.json(validateLocationDocument(req.body));}catch(error:any){res.status(400).json({error:error.message});}});
 
     router.get('/runs/:runId/agents/:agentId/memory', async (req, res) => {
         try {

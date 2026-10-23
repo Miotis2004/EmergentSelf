@@ -36,7 +36,7 @@ test('new agents persist deterministic defaults; legacy reads expose defaults wi
 test('registry validation is deterministic, reserved location normalization is idempotent, and unsupported configuration fails',()=>{
  const normalized=resolveOperational(config());assert.deepEqual(resolveOperational(normalized),normalized);assert.equal(normalized.locations[0].id,'unspecified');
  const largest=resolveOperational(config({locations:Array.from({length:30},(_,i)=>({id:`loc-${i}`,name:`Location ${i}`}))}));assert.deepEqual(resolveOperational(largest),largest);
- for(const input of [{enabled:'yes'},{observationPolicy:'omniscient'},{locations:[{id:'bad id',name:'Bad'}]},{locations:[...locations,locations[0]]},{locations:[{id:'unspecified',name:'Invented'}]}])assert.throws(()=>resolveOperational(input),/Invalid|Duplicate|reserved|Locations/);
+ for(const input of [{enabled:'yes'},{observationPolicy:'omniscient'},{locations:[{id:'bad id',name:'Bad'}]},{locations:[...locations,locations[0]]},{locations:[{id:'unspecified',name:'Invented'}]}])assert.throws(()=>resolveOperational(input),/invalid|duplicate|reserved|location/i);
 });
 
 test('atomic batches validate moves, starts, continuations, stops and self-reported statuses without environmental outcomes',async t=>{

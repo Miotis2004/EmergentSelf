@@ -791,7 +791,7 @@ ${transcript || '(No conversation supplied)'}${memoryOperationGuide(config)}${pa
         let worldResult:ReturnType<typeof prepareWorld>|undefined;
         if(this.world){
             this.currentAttempt.worldOperations=structuredClone(response.world_operations);
-            try{worldResult=prepareWorld(this.world,this.config!.worldConfig as WorldConfig,agentId,response.world_operations,currentOperational(prepared.state).location.id,this.config!.agentIds,`${this.config!.runId}:turn:${this.currentTurnIndex}`,response.response,response.social?.recipient_id??null,this.config!.communicationConfig?message??null:undefined);}
+            try{worldResult=prepareWorld(this.world,this.config!.worldConfig as WorldConfig,agentId,response.world_operations,currentOperational(prepared.state).location.id,this.config!.agentIds,`${this.config!.runId}:turn:${this.currentTurnIndex}`,response.response,response.social?.recipient_id??null,this.config!.communicationConfig?message??null:undefined,{runId:this.config!.runId,communicationConfig:this.config!.communicationConfig,schedulingConfig:this.config!.schedulingConfig,locationIds:opConfig.locations.map((l: {id: string})=>l.id)});}
             catch(error){this.currentAttempt.worldValidation={status:'rejected',error:(error as Error).message};throw error;}
             this.currentAttempt.worldValidation={status:'passed'};
         }

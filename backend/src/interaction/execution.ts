@@ -10,7 +10,7 @@ export const RESPONSE_DESCRIPTION='Outward-facing speech only, not private refle
 export const SPEECH_WITHOUT_COMMUNICATION='Nonempty response is outward-facing speech and requires explicit enabled communication scope and recipientAgentIds. If you intend to speak, provide authorized communication metadata; communicate may express the primary intent, and compatible modes including reflect may also include authorized speech. If you intend private reflection, keep reflect, use response "" and communication null, a brief decision.reason and optional decision.goal, and memory_operations only for intended durable changes. Do not add recipients merely to make private reflection pass validation.';
 export const MAX_LOCATION_TRANSITIONS=1;
 export const MAX_ACTIVITY_TRANSITIONS=1;
-export const INSPECTIONS=['inspect_inventory','discover_transformations','inspect_transformation','inspect_task'];
+export const INSPECTIONS=['inspect_recipe_object','inspect_inventory','discover_transformations','inspect_transformation','inspect_task'];
 export const WAITS=['wait','wait_until','wait_for_event'];
 // This table drives both the executable-mode validator and the model contract.
 export const MODE_RULES={

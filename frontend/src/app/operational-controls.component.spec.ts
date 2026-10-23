@@ -1,14 +1,15 @@
 import {TestBed,ComponentFixture} from '@angular/core/testing';
+import {of,throwError,Subject} from 'rxjs';
 import {OperationalControlsComponent} from './operational-controls.component';
-describe('Operational controls',()=>{
- let fixture:ComponentFixture<OperationalControlsComponent>,component:OperationalControlsComponent;
- beforeEach(async()=>{await TestBed.configureTestingModule({imports:[OperationalControlsComponent]}).compileComponents();fixture=TestBed.createComponent(OperationalControlsComponent);component=fixture.componentInstance;fixture.detectChanges();});
+import {ExperimentService} from './services/experiment.service';
+describe('Operational location JSON editor',()=>{
+ let fixture:ComponentFixture<OperationalControlsComponent>,component:OperationalControlsComponent,service:any;
+ beforeEach(async()=>{service={validateLocations:jasmine.createSpy().and.callFake((d:any)=>of(d))};await TestBed.configureTestingModule({imports:[OperationalControlsComponent],providers:[{provide:ExperimentService,useValue:service}]}).compileComponents();fixture=TestBed.createComponent(OperationalControlsComponent);component=fixture.componentInstance;fixture.detectChanges();});
  afterEach(()=>fixture.destroy());
- it('adds explicit locations and prevents edits through controls on saved runs',()=>{
-  component.add();expect(component.config.locations.length).toBe(1);component.config.locations[0]={id:'garden',name:'Garden'};
-  component.locked=true;component.add();component.remove(0);fixture.detectChanges();expect(component.config.locations[0].id).toBe('garden');expect(fixture.nativeElement.querySelector('fieldset').disabled).toBeTrue();
- });
- it('keeps observation policy explicit and labels outcomes unverified',()=>{
-  expect(component.config.observationPolicy).toBe('self_only');expect(fixture.nativeElement.textContent).toContain('do not verify physical reachability');expect(fixture.nativeElement.querySelectorAll('option').length).toBe(2);
- });
+ it('uses one JSON editor and displays existing persisted rooms including optional descriptions',()=>{component.config={enabled:true,locations:[{id:'room',name:'Room',description:'Original'}],observationPolicy:'self_only'};component.ngOnChanges();fixture.detectChanges();expect(JSON.parse(component.draft)).toEqual({version:1,locations:component.config.locations});expect(fixture.nativeElement.querySelectorAll('textarea').length).toBe(1);expect(fixture.nativeElement.textContent).toContain('Validate JSON');});
+ it('retains malformed text, leaves configuration unchanged and blocks start',()=>{const changed=jasmine.createSpy();component.validityChange.subscribe(changed);component.edit('{bad');component.validate();expect(component.draft).toBe('{bad');expect(component.error).toContain('invalid JSON');expect(service.validateLocations).not.toHaveBeenCalled();expect(component.config.locations).toEqual([]);expect(changed).toHaveBeenCalledWith(false);});
+ it('saves validated large configurations without frontend-only acceptance and reloads exact data',()=>{const document={version:1,locations:Array.from({length:100},(_,i)=>({id:'room-'+i,name:'Room '+i,description:'Context'}))};component.edit(JSON.stringify(document));component.validate();expect(service.validateLocations).toHaveBeenCalledWith(document);expect(component.config.locations.length).toBe(100);component.ngOnChanges();expect(JSON.parse(component.draft)).toEqual(document);expect(component.message).toBe('');});
+ it('keeps schema failure paths and draft text without silently dropping entries',()=>{service.validateLocations.and.returnValue(throwError(()=>({error:{error:'/locations/4/id: duplicate location identifier'}})));const draft=JSON.stringify({version:1,locations:[{id:'x'}]});component.edit(draft);component.validate();expect(component.error).toContain('/locations/4/id');expect(component.draft).toBe(draft);expect(component.config.locations.length).toBe(0);});
+ it('locks saved run editing and refuses stale asynchronous validation results',()=>{const pending=new Subject<any>();service.validateLocations.and.returnValue(pending);component.edit('{"version":1,"locations":[]}');component.validate();component.edit('{new draft');pending.next({locations:[{id:'stale',name:'Stale'}]});expect(component.config.locations).toEqual([]);component.locked=true;component.edit('changed');component.validate();expect(component.draft).toBe('{new draft');fixture.detectChanges();expect(fixture.nativeElement.querySelector('fieldset').disabled).toBeTrue();});
+ it('copies the complete editor document',async()=>{const copy=jasmine.createSpy().and.resolveTo();spyOnProperty(navigator,'clipboard','get').and.returnValue({writeText:copy} as any);await component.copy();expect(copy).toHaveBeenCalledWith(component.draft);});
 });
