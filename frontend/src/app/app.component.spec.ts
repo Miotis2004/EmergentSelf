@@ -51,6 +51,13 @@ describe('Experiment participants and initial topic', () => {
 
     const completedTurn = (index: number, response = 'Actual model words') => ({type:'turn_completed',data:{turnRecord:{turnIndex:index,agentId:'bob',agentName:'Bob',response},auditTrail:[]}});
 
+    it('does not silently drop enabled competition when World Simulation is disabled',()=>{
+        component.worldConfig={enabled:false,competition:{enabled:true}};
+        component.startExperiment();
+        expect(component.diagnostic).toContain('competition requires World Simulation');
+        expect(experiments.startExperiment).not.toHaveBeenCalled();
+    });
+
     it('shows a removal icon for every available agent and refreshes only after successful archival',()=>{
         const icons=Array.from(fixture.nativeElement.querySelectorAll('app-agent-archive > button')) as HTMLButtonElement[];
         expect(icons.length).toBe(component.availableAgents.length);

@@ -92,7 +92,7 @@ Committed graph movement produces `world_location_changed` with source/destinati
 
 The conversation turn's environmental event details display these authoritative records. Existing append-only turn/event logs and research export preserve the events and saved configuration; there is no separate discovery database or incompatible export format. World checkpoints permit reconstruction of knowledge and locations after commits. The existing error/recovery panels and audit records preserve rejected proposals and validation reasons. A failed candidate's diagnostic evidence is not a successful discovery. Resume retries the failed turn without duplicating earlier commits. Researcher JSON exports contain privileged data and must not be fed to agents as observations.
 
-Stage 2 still needs competition setup, team objectives, winner verification and any large recipe dataset. Stage 1 deliberately supplies no scoring, winner adjudication, physics or autonomous path planner. Live local-model choices and trajectories remain researcher experiments; automated tests use a mock inference endpoint and do not claim a real model explored or won.
+[Stage 2](USER_GUIDE.md#18-team-competitions-commitments-verified-victory-and-termination) now provides optional competition management and verified termination. The large recipe dataset remains a Stage 3 task. Stage 1 deliberately supplies no scoring, winner adjudication, physics or autonomous path planner. Live local-model choices and trajectories remain researcher experiments; automated tests use a mock inference endpoint and do not claim a real model explored or won.
 
 ## Implementation map
 

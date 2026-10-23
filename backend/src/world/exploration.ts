@@ -1,5 +1,5 @@
 import type {WorldConfig,WorldState} from './simulation';
-import {WorldError} from './simulation';
+import {WorldError} from './errors';
 const id={type:'string',pattern:'^[A-Za-z0-9_-]{1,120}$'};
 export interface Connection {from:string;to:string;bidirectional:boolean;requiredEnvironment?:Record<string,string>;authorizedAgentIds?:string[];}
 export interface ExplorationConfig {version:1;connections:Connection[];}

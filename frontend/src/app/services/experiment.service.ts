@@ -37,6 +37,7 @@ export class ExperimentService {
     return this.http.post(`${this.apiUrl}/start`, config);
   }
 
+  validateCompetition(request:any):Observable<any>{return this.http.post(`${this.apiUrl}/validate-competition`,request);}
   validateLocations(document:any):Observable<any>{return this.http.post(`${this.apiUrl}/validate-locations`,document);}
 
   world(action:string,body:any):Observable<any>{return this.http.post(`${this.apiUrl}/world/${action}`,body);}
