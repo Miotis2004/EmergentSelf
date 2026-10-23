@@ -1,4 +1,4 @@
-import {intentViolations} from './execution';
+import {intentViolations,SPEECH_WITHOUT_COMMUNICATION} from './execution';
 import Ajv from 'ajv';
 import {hash} from '../research/protocol';
 import {ProposalError} from '../recovery/recovery';
@@ -34,13 +34,13 @@ export function resolveInteraction(config:any){
  if(schedulingConfig.mode==='event_driven'&&!hasLocation)throw new Error('Event-driven scheduling requires a world');
  return result as {decisionConfig:DecisionConfig;schedulingConfig:SchedulingConfig;communicationConfig:CommunicationConfig};
 }
-export const decisionSchema=object({mode:{enum:modes},reason:{type:'string',minLength:1,maxLength:2000},goal:{type:['string','null'],maxLength:2000}});
+export const decisionSchema=object({mode:{enum:modes},reason:{type:'string',minLength:1,maxLength:2000,description:'Brief immediate decision rationale, researcher audit metadata, not a message or a request for detailed private reasoning.'},goal:{type:['string','null'],maxLength:2000,description:'Optional intended objective, researcher audit metadata; null means no stated goal. Not delivered as speech.'}});
 export function channelSchema(allowed=scopes,recipients?:string[]){
  const variants:any[]=[{type:'null'}];
  if(allowed.includes('private'))variants.push(object({scope:{enum:['private']},recipientAgentIds:{type:'array',minItems:1,maxItems:100,uniqueItems:true,items:recipients?.length?{...text,enum:recipients}:text}}));
  const resolved=allowed.filter(scope=>scope!=='private');
  if(resolved.length)variants.push(object({scope:{enum:resolved},recipientAgentIds:{type:'array',maxItems:0,items:text,description:'Must be []; backend resolves this scope audience.'}}));
- return {anyOf:variants};
+ return {description:'Null for no speech, including private reflection. Nonempty response requires an authorized scope and audience; reflect does not bypass delivery validation.',anyOf:variants};
 }
 export const communicationSchema=channelSchema();
 function invalidCommunication(message:string){return new ProposalError(message,'INVALID_COMMUNICATION');}
@@ -52,7 +52,8 @@ export function routeMessage(response:any,config:any,sender:string,turnIndex:num
  if(!config.communicationConfig)return undefined;
  const proposal=response.communication,c=config.communicationConfig;
  if(!response.response){if(proposal!==null)throw invalidCommunication('Silent response requires communication null');return undefined;}
- if(!proposal||!scopes.includes(proposal.scope)||!c['allow'+proposal.scope[0].toUpperCase()+proposal.scope.slice(1)+'Messages'])throw invalidCommunication('Communication scope is missing or disabled');
+ if(!proposal)throw invalidCommunication(SPEECH_WITHOUT_COMMUNICATION);
+ if(!scopes.includes(proposal.scope)||!c['allow'+proposal.scope[0].toUpperCase()+proposal.scope.slice(1)+'Messages'])throw invalidCommunication('Communication scope is missing or disabled');
  const requested=proposal.recipientAgentIds;
  if(!Array.isArray(requested)||new Set(requested).size!==requested.length||requested.some((id:string)=>id===sender||!config.agentIds.includes(id)))throw invalidCommunication('Unauthorized communication recipient');
  const team=config.schedulingConfig?.teams.find((t:Team)=>t.agentIds.includes(sender));

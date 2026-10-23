@@ -78,6 +78,7 @@ export function analyzeBundles(bundles:any[],options:any={}) {
             const key=observationKey(bundle.runId,record.stream,record.recordId);
             if(seenKeys.has(key))throw new Error('Duplicate source record');seenKeys.add(key);
             observations.push({source,key,condition,designHash,probeKey,
+                ...(record.decision?{decisionMode:record.decision.mode,communicationState:Object.hasOwn(record,'message')?(record.message?'message':'silent'):'legacy_unspecified'}:{}),
                 status:successful?'success':record.status==='incomplete'?'incomplete':'failed',...(record.completionSource?{turnOutcome:record.turnOutcome,completionSource:record.completionSource}:{}),error:successful?null:record.completionSource==='system_fallback'?'System-generated incomplete turn; no agent decision':record.error??record.message??'Invalid response',...metrics,
                 benchmark:record.benchmark??null,
                 exposure:record.retrieval?{selectedIds:record.retrieval.selectedIds,summaryIds:record.retrieval.summaryIds}:null,

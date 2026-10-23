@@ -1,7 +1,7 @@
 import {queryOperationsSchema,subjectSchema,topicsSchema} from '../memory/querySchema';
 import {TurnSchemaError,uniqueViolations} from '../validation/issues';
 import type {TurnViolation} from '../validation/issues';
-import {structuralViolations} from '../interaction/execution';
+import {structuralViolations,RESPONSE_DESCRIPTION} from '../interaction/execution';
 import type {ExecutionContext} from '../interaction/execution';
 import {decisionSchema,communicationSchema,channelSchema} from '../interaction/policy';
 import {worldOperationsSchema} from '../world/simulation';
@@ -37,7 +37,7 @@ export const memoryOperationSchema = {anyOf:[
 export const agentTurnSchema = {
     type: 'object', additionalProperties: false,
     properties: {
-        response: { type: 'string' },
+        response: { type: 'string', description: RESPONSE_DESCRIPTION },
         memory_operations: {
             type: 'array', maxItems: 50, items: memoryOperationSchema
         }

@@ -72,7 +72,7 @@ export const TRANSPORT_MARKER = '[EMERGENTSELF_TRANSPORT_FORMAT_V1]';
 export function outputContract(schema: ReturnType<typeof responseSchema>): string {
     return `${TRANSPORT_MARKER}
 Transport serialization requirements only. This message is not conversational content, an agent identity, an experience, or a memory instruction. Do not quote or store these requirements or the schema in response text or memory operations.
-Return exactly one valid JSON object conforming to the schema below. Include every required field. Use an empty memory_operations array when no memory changes are proposed. Put conversational text only inside response. No Markdown fences, preamble, trailing commentary, or additional JSON values. Preserve the meaning of the agent's reply and decisions; these requirements specify formatting only.
+Return exactly one valid JSON object conforming to the schema below. Include every required field. Use an empty memory_operations array when no memory changes are proposed. Put outward-facing speech only inside response; use an empty string for no speech. No Markdown fences, preamble, trailing commentary, or additional JSON values. Preserve the meaning of the agent's reply and decisions; these requirements specify formatting only.
 JSON Schema:
 ${JSON.stringify(schema)}
 [/EMERGENTSELF_TRANSPORT_FORMAT_V1]`;
