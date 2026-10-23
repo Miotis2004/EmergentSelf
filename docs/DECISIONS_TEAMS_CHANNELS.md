@@ -120,3 +120,78 @@ The automated 100-turn experiment uses a mock model; it is not evidence of local
 - The 100-turn mock run preserves raw conversational text and records schema validation/request/raw output alongside decisions and scheduler evidence. Maximum concurrent inference was one. Privacy checks include bounded windows, compact/replayed records, current prompts, own memory isolation, world report audiences, restarted runs, historical snapshot branches and read-only inherited-context probes.
 
 One intermediate test run exposed an import-order problem from eagerly subclassing the recovery error in the schema policy module. Error construction now occurs at validation time; the complete final suite passes in all existing module entry orders. Other intermediate fixture failures were resolved by explicitly selecting legacy transport, testing a permitted local scope in the physical-action case, and simulating a paused persisted restart rather than attempting Resume on a stopped run. No failed final checks remain; the live-server limitation above is outstanding.
+
+
+## Private reflection and optional speech
+
+`response` is outward-facing speech, not a general narrative or private-reflection
+buffer. This meaning is shared by routing, world speech observations, authorized
+conversation context, transcript rendering and textual research measures. The
+original nonempty-response/null-communication rejection was therefore correct;
+the previous execution instructions did not clearly explain the private alternative.
+
+A private `reflect` turn uses `response: ""`, `communication: null`, a brief
+`decision.reason`, optional `decision.goal` (or null), and `memory_operations: []`
+unless the agent proposes intended durable changes. No additional reflection field
+or detailed private reasoning narrative is required. Empty operational/world arrays
+preserve state when those fields are required. A no-operation reflection is valid.
+Decision rationale/objective are researcher audit metadata and are never routed as
+conversation messages. A memory proposal is a separate owned persistent edit.
+
+`communicate` expresses primary messaging intent, while `idle` expresses voluntary
+inactivity. Existing compatible optional speech remains permitted in all modes:
+`reflect` may remain the primary intent if the agent separately chooses outward
+speech with authorized communication metadata. Reflection does not bypass scope,
+recipient, location or team checks. Neither validator nor retry handler changes the
+mode, invents recipients, converts prose into a memory, or repairs invalid output.
+The agent may revise an inconsistent proposal to either valid private reflection
+or separately authorized speech.
+
+The versioned request contract is now `turn-execution-v2`; the established
+`EMERGENTSELF_TURN_EXECUTION_V1` boundary marker remains unchanged for contamination
+detection. Schema descriptions clarify response/rationale/goal/communication without
+adding properties or changing structural constraints. The shared missing-metadata
+violation explains both options, so corrective feedback does not imply that private
+reflection must become a message. Retries, atomic commit and forfeiture are unchanged.
+Researcher UI labels silent reflect as private/no message, while full audit records
+retain exact requests, raw proposals, decisions and memory changes. Historical
+records and their original contract/schema hashes are not rewritten.
+
+
+Pipeline references: `interaction/policy.ts` resolves configured modes and routes
+only `response` into captured `message`/`messageRecipients` audiences;
+`ExperimentController.buildPrompt` and research `renderProtocol` retain the agent
+prompt, while `LlmAdapter` appends the versioned execution contract and schema-derived
+output contract on every modern inference. The adapter parses the original JSON,
+retains raw/parsed evidence, and validates the schema without normalizing prose.
+`executionViolations` checks intent/communication before pure operational, memory
+and world preparation. A failure feeds the existing private correction mechanism;
+only a completely accepted candidate enters the canonical commit/projections.
+`world.prepareWorld`, transcript selection and conversation queries use delivered
+speech, not `decision.reason` or `decision.goal`. Existing `social.recipient_id`
+is an additional social target, not a private-reflection or routing substitute.
+There is no dedicated internal-reflection field or alternate narrative adapter.
+
+The researcher timeline retains `decision.mode` even when `turnKind` is an
+intentional no-op. Analysis observations now add `decisionMode` and
+`communicationState` (`silent`, `message`, or `legacy_unspecified`) when a main-turn decision
+is recorded; they do not turn rationale/goal into analyzed speech. System-incomplete
+slots have no fabricated decision and retain their existing outcome/source markers.
+These additive report fields do not rewrite persisted turns or metric definitions.
+
+Existing separate social-decline constraints still apply: in a legacy social
+experiment, decline forbids memory edits. Private reflect can use memory edits
+when permitted by the saved memory/social conditions; this clarification grants
+no new exception to those conditions. No live-model compliance guarantee follows
+from deterministic mock-inference tests.
+
+Verification for this clarification: 442 backend tests pass, including 21 focused
+reflection regressions; 105 Chromium frontend tests pass, including three new
+reflection/audit-label tests. Backend TypeScript and Angular production builds pass.
+Existing Angular template and bundle/style budget warnings remain below error limits.
+Tests exercise both output modes, standard/research prompts, private/no-op and
+memory-edit reflection, optional authorized reflective speech, scope/recipient
+rejections, operational/world compatibility, atomicity, exact rejected evidence,
+correction/forfeiture, peer-context privacy and analysis classification. Live Qwen3
+Coder behavior was not tested; the new contract makes the valid representation
+explicit but does not guarantee that a model will comply on every turn.
