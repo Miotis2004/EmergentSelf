@@ -15,7 +15,7 @@ export interface Recipe {
  interruption:'continue'|'fail_if_participant_leaves';failurePolicy:'return_unconsumed';
 }
 export interface TransformationConfig {
- version:1;recipes:Recipe[];workspaces:{id:string;inventoryId:string;locationId:string;authorizedAgentIds:string[]}[];
+ version:1;recipeObjects?:{itemId:string;revealsRecipeId:string;discoveryAction:'inspect'}[];recipes:Recipe[];workspaces:{id:string;inventoryId:string;locationId:string;authorizedAgentIds:string[]}[];
  initialEnvironment:Record<string,string>;locationCapabilities:Record<string,string[]>;
  knowledgePolicy:'all'|'discover'|'verified';initialKnowledge:Record<string,string[]>;
 }
@@ -43,9 +43,10 @@ export const recipeSchema=object({id,name:text,description:text,requiredLocation
  itemRequirements:map(properties),itemChanges:map(properties),durationMinutes:integer,minParticipants:{...integer,minimum:1,maximum:100},
  consumption:{enum:['completion','start']},interruption:{enum:['continue','fail_if_participant_leaves']},failurePolicy:{const:'return_unconsumed'}
 },['id','name','description','inputs','requiredTools','catalysts','outputs','requiredEnvironment','environmentChanges','itemRequirements','itemChanges','durationMinutes','minParticipants','consumption','interruption','failurePolicy']);
-export const configSchema=object({version:{const:1},recipes:list(recipeSchema),workspaces:list(object({id,inventoryId:id,locationId:id,authorizedAgentIds:ids})),initialEnvironment:environment,locationCapabilities:map(ids),knowledgePolicy:{enum:['all','discover','verified']},initialKnowledge:map(ids)});
+export const configSchema=object({version:{const:1},recipeObjects:{type:'array',maxItems:2000,items:object({itemId:id,revealsRecipeId:id,discoveryAction:{const:'inspect'}})},recipes:list(recipeSchema),workspaces:list(object({id,inventoryId:id,locationId:id,authorizedAgentIds:ids})),initialEnvironment:environment,locationCapabilities:map(ids),knowledgePolicy:{enum:['all','discover','verified']},initialKnowledge:map(ids)},['version','recipes','workspaces','initialEnvironment','locationCapabilities','knowledgePolicy','initialKnowledge']);
 const reason=text;
 export const operationSchemas=[
+ object({action:{enum:['inspect_recipe_object']},inventory_id:id,item_id:id,reason}),
  object({action:{enum:['discover_transformations']},reason}),
  object({action:{enum:['inspect_transformation']},transformation_id:id,reason}),
  object({action:{enum:['propose_transformation']},transformation_id:id,task_id:id,workspace_id:id,reason}),
@@ -63,7 +64,9 @@ function task(state:WorldState,id:string){const t=extension(state).tasks.find(t=
 function inventory(state:WorldState,id:string){const i=state.inventories.find(i=>i.id===id);if(!i)fail('UNAUTHORIZED_RESOURCE_ACCESS',`Unknown inventory ${id}`);return i;}
 function unique(entries:{id:string}[],label:string){if(new Set(entries.map(x=>x.id)).size!==entries.length)fail('INVALID_TASK_STATE',`Duplicate ${label} ID`);}
 export function validateConfig(config:WorldConfig,agents:string[],locations:string[]){
- const c=definition(config),items=new Map(config.items.map(i=>[i.id,i]));unique(c.recipes,'recipe');unique(c.workspaces,'workspace');
+ const c=definition(config),items=new Map(config.items.map(i=>[i.id,i]));
+ const recipeIds=new Set(c.recipes.map(r=>r.id)),objectIds=new Set<string>();
+ for(const association of c.recipeObjects??[]){if(!items.has(association.itemId)||!recipeIds.has(association.revealsRecipeId)||objectIds.has(association.itemId))fail('INVALID_RECIPE_OBJECT','Recipe objects require unique catalog items and valid recipe IDs');objectIds.add(association.itemId);}unique(c.recipes,'recipe');unique(c.workspaces,'workspace');
  const envKeys=new Set([...Object.keys(c.initialEnvironment),...config.events.flatMap(e=>e.environmentKey?[e.environmentKey]:[]),...c.recipes.flatMap(r=>Object.keys(r.environmentChanges))]);
  for(const [loc,caps] of Object.entries(c.locationCapabilities))if(!locations.includes(loc)||new Set(caps).size!==caps.length)fail('WRONG_LOCATION','Invalid capability location');
  for(const w of c.workspaces){const inv=config.inventories.find(i=>i.id===w.inventoryId);if(!inv||inv.ownerType!=='location'||inv.ownerId!==w.locationId||!locations.includes(w.locationId)||w.authorizedAgentIds.length===0||w.authorizedAgentIds.some(a=>!agents.includes(a)))fail('UNAUTHORIZED_RESOURCE_ACCESS','Workspace requires a local inventory and valid authorized participants');}
@@ -118,21 +121,34 @@ function prerequisites(state:WorldState,config:WorldConfig,t:TransformationTask,
  for(const q of [...r.requiredTools,...r.catalysts])if(t.contributions.filter(c=>c.itemId===q.itemId&&!c.released).reduce((n,c)=>n+c.quantity,0)!==q.quantity)fail('REQUIRED_TOOL_UNAVAILABLE',`Contribute reusable tool or catalyst ${q.itemId} (${q.quantity})`);
  if(!resourcesReady(t,r))fail('MISSING_REQUIRED_INPUT','Contribute exact required inputs, reusable tools, catalysts and modification targets before starting');
 }
-export function applyOperation(state:WorldState,config:WorldConfig,agent:string,op:any,id:string){
+export function applyOperation(state:WorldState,config:WorldConfig,agent:string,op:any,id:string,permissions?:{runId?:string;communicationConfig?:any;schedulingConfig?:any}){
  const c=definition(config),s=extension(state),events:any[]=[];
  const learn=(who:string,r:string)=>{if(!s.knowledge[who].includes(r))s.knowledge[who].push(r);};
+ if(op.action==='inspect_recipe_object'){
+  const inv=state.inventories.find(i=>i.id===op.inventory_id),location=state.positions[agent];
+  if(!inv||location==='unspecified'||!(inv.ownerType==='agent'?inv.ownerId===agent||inv.authorizedAgentIds.includes(agent)&&state.positions[inv.ownerId]===location:inv.ownerId===location&&(inv.visibility!=='private'||inv.authorizedAgentIds.includes(agent)))||(inv.quantities[op.item_id]??0)<1)fail('RECIPE_OBJECT_NOT_ACCESSIBLE','Recipe object is absent or not accessible at the current location');
+  checkWorkspaceAccess(config,inv.id,agent);
+  const association=c.recipeObjects?.find(o=>o.itemId===op.item_id);
+  if(!association||!c.recipes.some(r=>r.id===association.revealsRecipeId))fail('INVALID_RECIPE_OBJECT','Object has no valid recipe association');
+  const before=[...s.knowledge[agent]];learn(agent,association.revealsRecipeId);
+  const e=emit(state,id,'recipe_object_discovered',state.minute,undefined,agent,{runId:permissions?.runId??id.split(':turn:')[0],locationId:location,inventoryId:inv.id,itemId:op.item_id,recipeId:association.revealsRecipeId,operation:op,validation:'passed',status:'committed',knowledgeBefore:before,knowledgeAfter:[...s.knowledge[agent]],newlyLearned:before.length!==s.knowledge[agent].length,recipe:recipe(config,association.revealsRecipeId)});observe(state,e,[agent]);return [e];
+ }
  if(op.action==='discover_transformations'){
   const available=c.knowledgePolicy==='verified'?c.recipes.filter(r=>s.knowledge[agent].includes(r.id)):c.recipes;
   if(c.knowledgePolicy==='discover')for(const r of available)learn(agent,r.id);
   const e=emit(state,id,'transformation_discovery',state.minute,undefined,agent,{recipes:available});observe(state,e,[agent]);return [e];
  }
  if(op.action==='inspect_transformation'||op.action==='teach_transformation'||op.action==='propose_transformation'){
+  if(c.knowledgePolicy==='verified'&&!s.knowledge[agent].includes(op.transformation_id))fail('TRANSFORMATION_NOT_FOUND','Recipe unavailable: acquire authorized knowledge first');
   const r=recipe(config,op.transformation_id);
   if(!s.knowledge[agent].includes(r.id)){if(c.knowledgePolicy==='discover'&&op.action==='inspect_transformation')learn(agent,r.id);else fail('TRANSFORMATION_NOT_FOUND','Recipe not known: inspect/discover or learn through a verified operation first');}
   if(op.action==='inspect_transformation'){const e=emit(state,id,'transformation_inspected',state.minute,undefined,agent,{recipe:r});observe(state,e,[agent]);return [e];}
   if(op.action==='teach_transformation'){
    if(!s.knowledge[op.recipient_id]||state.positions[agent]==='unspecified'||state.positions[op.recipient_id]!==state.positions[agent])fail('UNAUTHORIZED_RESOURCE_ACCESS','Teaching requires a known colocated recipient');
-   learn(op.recipient_id,r.id);const e=emit(state,id,'transformation_taught',state.minute,undefined,agent,{recipe:r,recipientId:op.recipient_id});observe(state,e,[agent,op.recipient_id]);return [e];
+   const scopes:string[]=[];const channel=permissions?.communicationConfig;
+   if(channel){if(channel.allowPrivateMessages)scopes.push('private');if(channel.allowGlobalMessages)scopes.push('global');if(channel.allowLocalMessages)scopes.push('local');if(channel.allowTeamMessages&&permissions?.schedulingConfig?.teams.some((t:any)=>t.agentIds.includes(agent)&&t.agentIds.includes(op.recipient_id)))scopes.push('team');}
+   if(c.recipeObjects&&channel&&!scopes.length)fail('KNOWLEDGE_TRANSFER_NOT_AUTHORIZED','No enabled communication scope authorizes this knowledge transfer');
+   const before=[...s.knowledge[op.recipient_id]];learn(op.recipient_id,r.id);const e=emit(state,id,'transformation_taught',state.minute,undefined,agent,{recipe:r,recipientId:op.recipient_id,...(c.recipeObjects?{runId:permissions?.runId??id.split(':turn:')[0],locationId:state.positions[agent],validation:'passed',status:'committed',transferContext:{permittedScopes:channel?scopes:['legacy_local']},knowledgeBefore:before,knowledgeAfter:[...s.knowledge[op.recipient_id]]}:{})});if(c.recipeObjects){const {knowledgeBefore,knowledgeAfter,...publicTransfer}=e;observe(state,{...publicTransfer,id:e.id+':teacher'},[agent]);observe(state,{...e,id:e.id+':recipient'},[op.recipient_id]);}else observe(state,e,[agent,op.recipient_id]);return [e];
   }
   if(s.tasks.length>=10000)fail('INVALID_TASK_STATE','Maximum 10,000 transformation tasks per run');
   if(s.tasks.some(t=>t.id===op.task_id))fail('INVALID_TASK_STATE','Task ID already exists; inspect existing task');
@@ -216,8 +232,15 @@ export function completeDue(state:WorldState,config:WorldConfig,toMinute:number,
   }
   t.finishedMinute=minute;events.push(...release(state,t,minute,id));
   const recipients=agents.filter(a=>t.participants.includes(a)||config.observationPolicy==='local'&&state.positions[a]===w.locationId);
-  const e=emit(state,id,'transformation_'+t.status,minute,t,undefined,{before,after:t,...(failure?{failureReason:failure}:{outputs:r.outputs,itemChanges:r.itemChanges,environmentChanges:r.environmentChanges})});events.push(e);observe(state,e,recipients);
-  for(const a of recipients){if(t.status==='completed'&&!extension(state).knowledge[a].includes(r.id))extension(state).knowledge[a].push(r.id);delete state.waits[a];(state.wakeReasons[a]??=[]).push(`task:${t.id}:${t.status}`);}
+  const e=emit(state,id,'transformation_'+t.status,minute,t,undefined,{before,after:t,...(failure?{failureReason:failure}:{outputs:r.outputs,itemChanges:r.itemChanges,environmentChanges:r.environmentChanges})});events.push(e);
+  // Observing a physical outcome does not disclose a private recipe or its input requirements.
+  if(config.transformations?.recipeObjects&&config.transformations.knowledgePolicy==='verified'){
+   const informed=recipients.filter(a=>t.participants.includes(a)||extension(state).knowledge[a].includes(r.id));
+   observe(state,e,informed);
+   const others=recipients.filter(a=>!informed.includes(a));
+   if(others.length)observe(state,{id:e.id+':physical',type:e.type,simulationMinute:minute,locationId:w.locationId,status:t.status,...(failure?{failureReason:'Observed task did not complete'}:{outputs:r.outputs,itemChanges:r.itemChanges,environmentChanges:r.environmentChanges})},others);
+  }else observe(state,e,recipients);
+  for(const a of recipients){if(!config.transformations?.recipeObjects&&t.status==='completed'&&!extension(state).knowledge[a].includes(r.id))extension(state).knowledge[a].push(r.id);delete state.waits[a];(state.wakeReasons[a]??=[]).push(`task:${t.id}:${t.status}`);}
  }
  return events;
 }
@@ -254,11 +277,12 @@ export function recordMovement(state:WorldState,event:any){
 export function context(state:WorldState,config:WorldConfig,agent:string){
  if(!config.transformations||!state.transformations)return undefined;
  const c=config.transformations,s=state.transformations,known=s.knowledge[agent]??[],workspaces=c.workspaces.filter(w=>w.authorizedAgentIds.includes(agent)&&w.locationId===state.positions[agent]);
- const accessibleTasks=s.tasks.filter(t=>workspaces.some(w=>w.id===t.workspaceId)||t.participants.includes(agent));
- const visibleItems=new Set(state.inventories.filter(i=>i.ownerType==='agent'?i.ownerId===agent||i.authorizedAgentIds.includes(agent):i.ownerId===state.positions[agent]&&i.visibility!=='private'||i.authorizedAgentIds.includes(agent)).flatMap(i=>Object.keys(i.quantities)));
+ const accessibleTasks=s.tasks.filter(t=>(workspaces.some(w=>w.id===t.workspaceId)||t.participants.includes(agent))&&(!c.recipeObjects||c.knowledgePolicy!=='verified'||known.includes(t.recipeId)||t.participants.includes(agent)));
+ const restricted=!!config.exploration||!!c.recipeObjects;
+ const visibleItems=new Set(state.inventories.filter(i=>(!restricted||(i.ownerType==='agent'?i.ownerId===agent||state.positions[i.ownerId]===state.positions[agent]:i.ownerId===state.positions[agent]))).filter(i=>i.ownerType==='agent'?i.ownerId===agent||i.authorizedAgentIds.includes(agent):i.ownerId===state.positions[agent]&&i.visibility!=='private'||i.authorizedAgentIds.includes(agent)).flatMap(i=>Object.keys(i.quantities)));
  return {knownRecipes:c.recipes.filter(r=>known.includes(r.id)),discoverableRecipeIds:c.knowledgePolicy==='verified'?known:c.recipes.map(r=>r.id),workspaces,tasks:accessibleTasks,itemProperties:Object.fromEntries(Object.entries(s.itemProperties).filter(([id])=>visibleItems.has(id)))};
 }
-export const instructions=`Transformation transport guide (not conversational content or memory): recipes are immutable backend rules; describing work does not execute it. Use discover_transformations (reason) or inspect_transformation (transformation_id, reason). propose_transformation requires a new stable task_id, known transformation_id and workspace_id. join_transformation explicitly consents to participation. contribute_transformation reserves inventory_id/item_id/quantity with role input, tool, catalyst or target; only your own or authorized local shared resources may be contributed. Never invent resources or take another agent's private supplies. start_transformation uses task_id after all exact contributions and participants are ready. inspect_task and cancel_transformation use task_id; only creator can cancel. teach_transformation uses a known transformation_id and colocated recipient_id. All operations require reason. Completion follows simulation time, not dialogue. Tools and catalysts are released, inputs are consumed according to the recipe; cancelling cannot restore already consumed inputs. Task outputs enter the configured shared workspace inventory; use ordinary inventory operations to receive and consume them. No recipe rules may be created through speech.`;
+export const instructions=`Transformation transport guide (not conversational content or memory): recipes are immutable backend rules; describing work does not execute it. Physical recipe objects can be inspected with inspect_recipe_object (inventory_id, item_id, reason) only when configured and physically accessible. This learns a recipe privately; speech does not transfer executable knowledge. verified policy exposes only known recipes; guessing recipe IDs does not grant inspection or proposal rights. Use discover_transformations (reason) or inspect_transformation (transformation_id, reason). propose_transformation requires a new stable task_id, known transformation_id and workspace_id. join_transformation explicitly consents to participation. contribute_transformation reserves inventory_id/item_id/quantity with role input, tool, catalyst or target; only your own or authorized local shared resources may be contributed. Never invent resources or take another agent's private supplies. start_transformation uses task_id after all exact contributions and participants are ready. inspect_task and cancel_transformation use task_id; only creator can cancel. teach_transformation uses a known transformation_id and colocated recipient_id. All operations require reason. Completion follows simulation time, not dialogue. Tools and catalysts are released, inputs are consumed according to the recipe; cancelling cannot restore already consumed inputs. Task outputs enter the configured shared workspace inventory; use ordinary inventory operations to receive and consume them. No recipe rules may be created through speech.`;
 const persistedArray=(items:any)=>({type:'array',items});
 const lotSchema=object({id:text,quantity:{...integer,minimum:1},origin:text,producerTaskId:id,parents:persistedArray(text)},['id','quantity','origin']);
 const contributionSchema=object({id:text,agentId:id,inventoryId:id,itemId:id,quantity:{...integer,minimum:1},role:{enum:['input','tool','catalyst','target']},consumed:{type:'boolean'},released:{type:'boolean'},consumedLots:persistedArray(lotSchema)},['id','agentId','inventoryId','itemId','quantity','role','consumed','released']);

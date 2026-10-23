@@ -28,18 +28,20 @@ export function resolveOperational(input:any):OperationalConfig {
     if(input===undefined)return {version:1,enabled:false,locations:[{...DEFAULT_LOCATION}],observationPolicy:'self_only'};
     if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).some(key=>!['version','enabled','locations','observationPolicy'].includes(key)))throw new OperationalError('Invalid operational configuration');
     const config={version:1,enabled:false,locations:[],observationPolicy:'self_only',...input};
-    if(config.version!==1||typeof config.enabled!=='boolean'||!['self_only','co_located'].includes(config.observationPolicy)||!Array.isArray(config.locations)||config.locations.length>31)throw new OperationalError('Invalid operational version, switch, observation policy or location list (maximum 30)');
+    if(config.version!==1||typeof config.enabled!=='boolean'||!['self_only','co_located'].includes(config.observationPolicy)||!Array.isArray(config.locations)||config.locations.length>1001)throw new OperationalError('Invalid operational version, switch, observation policy or location list (maximum 1000)');
     const locations:Location[]=[{...DEFAULT_LOCATION}];
     const inputIds=new Set<string>();
-    for(const item of config.locations){
-        if(!item||Object.keys(item).some(key=>!['id','name','description'].includes(key))||typeof item.id!=='string'||!/^[A-Za-z0-9_-]{1,120}$/.test(item.id)||typeof item.name!=='string'||!item.name.trim()||item.name.length>200||item.description!==undefined&&(typeof item.description!=='string'||item.description.length>1000))throw new OperationalError('Locations need a stable ID, nonempty name (up to 200 characters) and optional description (up to 1,000)');
-        if(inputIds.has(item.id))throw new OperationalError('Duplicate location ID');
+    for(const [index,item] of config.locations.entries()){
+        if(!item||typeof item!=='object'||Array.isArray(item)||Object.keys(item).some(key=>!['id','name','description'].includes(key)))throw new OperationalError(`/locations/${index}: invalid location object or unknown field`);
+        if(typeof item.id!=='string'||!/^[A-Za-z0-9_-]{1,120}$/.test(item.id))throw new OperationalError(`/locations/${index}/id: invalid location identifier`);
+        if(typeof item.name!=='string'||!item.name.trim()||item.name.length>200)throw new OperationalError(`/locations/${index}/name: nonempty name up to 200 characters required`);
+        if(item.description!==undefined&&(typeof item.description!=='string'||item.description.length>1000))throw new OperationalError(`/locations/${index}/description: expected text up to 1000 characters`);
+        if(inputIds.has(item.id))throw new OperationalError(`/locations/${index}/id: duplicate location identifier`);
         inputIds.add(item.id);
         if(item.id==='unspecified'){if(item.name!==DEFAULT_LOCATION.name||item.description!==undefined)throw new OperationalError('The unspecified location is reserved');continue;}
-        if(locations.some(location=>location.id===item.id))throw new OperationalError('Duplicate location ID');
         locations.push(structuredClone(item));
     }
-    if(locations.length>31)throw new OperationalError('Maximum 30 researcher-defined locations');
+    if(locations.length>1001)throw new OperationalError('Maximum 1000 researcher-defined locations');
     return {...config,locations};
 }
 const common={reason:{type:'string',minLength:1,maxLength:2000}};
@@ -94,4 +96,12 @@ export function validateOperationalState(value:unknown):void {
     if(value===undefined)return;
     const op=value as OperationalState;
     if(!op||typeof op!=='object'||Object.keys(op).some(key=>!['location','action','source','outcomeVerified'].includes(key))||op.outcomeVerified!==false||!op.location||Object.keys(op.location).some(key=>!['id','name','description'].includes(key))||op.location.description!==undefined&&(typeof op.location.description!=='string'||op.location.description.length>1000)||typeof op.location.id!=='string'||!/^[A-Za-z0-9_-]{1,120}$/.test(op.location.id)||typeof op.location.name!=='string'||!op.location.name.trim()||op.location.name.length>200||!op.action||Object.keys(op.action).some(key=>!['type','description','status'].includes(key))||op.source!==undefined&&(!op.source||typeof op.source.runId!=='string'||!Number.isSafeInteger(op.source.turnIndex)||typeof op.source.eventId!=='string')||!['idle','moving','working','interacting','observing'].includes(op.action.type)||typeof op.action.description!=='string'||!op.action.description.trim()||op.action.description.length>1000||!['planned','in_progress','completed','failed'].includes(op.action.status))throw new OperationalError('Invalid persisted operational state');
+}
+
+/** JSON-editor adapter only; persisted operational payloads keep their original shape. */
+export function validateLocationDocument(input:any){
+ if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).some(k=>!['version','locations'].includes(k)))throw new OperationalError('/: expected version and locations only');
+ if(input.version!==1)throw new OperationalError('/version: required value 1');
+ if(!Array.isArray(input.locations))throw new OperationalError('/locations: required array');
+ resolveOperational({enabled:true,...input});return structuredClone(input);
 }

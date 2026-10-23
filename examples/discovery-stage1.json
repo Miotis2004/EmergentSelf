@@ -1,0 +1,221 @@
+{
+  "runId": "discovery-stage1",
+  "agentIds": [
+    "bob",
+    "sara"
+  ],
+  "maxTurns": 100,
+  "initialTopic": "You are in a building with other participants. Choose your own activities. Movement and recipe knowledge follow the configured environment.",
+  "llmConfig": {
+    "baseUrl": "http://127.0.0.1:8080/v1",
+    "model": "select-loaded-model",
+    "maxTokens": 2048,
+    "outputMode": "json_schema"
+  },
+  "operationalConfig": {
+    "version": 1,
+    "enabled": true,
+    "observationPolicy": "self_only",
+    "locations": [
+      {
+        "id": "start",
+        "name": "Starting Room",
+        "description": "A gathering room."
+      },
+      {
+        "id": "search",
+        "name": "Search Room",
+        "description": "A room with storage."
+      },
+      {
+        "id": "workshop",
+        "name": "Assembly Workshop",
+        "description": "A room with a shared workbench."
+      }
+    ]
+  },
+  "decisionConfig": {
+    "version": 1,
+    "mode": "agent_selected",
+    "availableModes": [
+      "plan",
+      "observe",
+      "act",
+      "idle",
+      "change_location",
+      "communicate",
+      "reflect"
+    ]
+  },
+  "communicationConfig": {
+    "version": 1,
+    "defaultScope": "local",
+    "allowPrivateMessages": true,
+    "allowTeamMessages": false,
+    "allowLocalMessages": true,
+    "allowGlobalMessages": false
+  },
+  "worldConfig": {
+    "enabled": true,
+    "initialMinute": 540,
+    "minutesPerTurn": 5,
+    "initialPositions": {
+      "bob": "start",
+      "sara": "start"
+    },
+    "exploration": {
+      "version": 1,
+      "connections": [
+        {
+          "from": "start",
+          "to": "search",
+          "bidirectional": true,
+          "requiredEnvironment": {
+            "access": "open"
+          }
+        },
+        {
+          "from": "search",
+          "to": "workshop",
+          "bidirectional": true
+        }
+      ]
+    },
+    "items": [
+      {
+        "id": "sheet",
+        "name": "Unlabeled instruction sheet",
+        "unit": "unit",
+        "stackable": false,
+        "consumable": false
+      },
+      {
+        "id": "part",
+        "name": "Component",
+        "unit": "unit",
+        "stackable": true,
+        "consumable": false
+      },
+      {
+        "id": "widget",
+        "name": "Widget",
+        "unit": "unit",
+        "stackable": true,
+        "consumable": false
+      }
+    ],
+    "inventories": [
+      {
+        "id": "search-stock",
+        "ownerType": "location",
+        "ownerId": "search",
+        "visibility": "local",
+        "authorizedAgentIds": [],
+        "quantities": {
+          "sheet": 1,
+          "part": 2
+        }
+      },
+      {
+        "id": "bench-stock",
+        "ownerType": "location",
+        "ownerId": "workshop",
+        "visibility": "local",
+        "authorizedAgentIds": [
+          "bob",
+          "sara"
+        ],
+        "quantities": {}
+      },
+      {
+        "id": "bob-bag",
+        "ownerType": "agent",
+        "ownerId": "bob",
+        "visibility": "private",
+        "authorizedAgentIds": [],
+        "quantities": {}
+      },
+      {
+        "id": "sara-bag",
+        "ownerType": "agent",
+        "ownerId": "sara",
+        "visibility": "private",
+        "authorizedAgentIds": [],
+        "quantities": {}
+      }
+    ],
+    "events": [
+      {
+        "id": "unlock",
+        "atMinute": 600,
+        "occurrences": 1,
+        "affectedAgentIds": [
+          "bob",
+          "sara"
+        ],
+        "observation": "The exit is now unlocked.",
+        "wake": true,
+        "environmentKey": "access",
+        "value": "open"
+      }
+    ],
+    "transformations": {
+      "version": 1,
+      "recipes": [
+        {
+          "id": "hidden-recipe",
+          "name": "Hidden widget recipe",
+          "description": "Assemble a widget.",
+          "requiredLocation": "workshop",
+          "inputs": [
+            {
+              "itemId": "part",
+              "quantity": 1
+            }
+          ],
+          "requiredTools": [],
+          "catalysts": [],
+          "outputs": [
+            {
+              "itemId": "widget",
+              "quantity": 1
+            }
+          ],
+          "requiredEnvironment": {},
+          "environmentChanges": {},
+          "itemRequirements": {},
+          "itemChanges": {},
+          "durationMinutes": 5,
+          "minParticipants": 1,
+          "consumption": "completion",
+          "interruption": "continue",
+          "failurePolicy": "return_unconsumed"
+        }
+      ],
+      "workspaces": [
+        {
+          "id": "bench",
+          "inventoryId": "bench-stock",
+          "locationId": "workshop",
+          "authorizedAgentIds": [
+            "bob",
+            "sara"
+          ]
+        }
+      ],
+      "initialEnvironment": {
+        "access": "locked"
+      },
+      "locationCapabilities": {},
+      "knowledgePolicy": "verified",
+      "initialKnowledge": {},
+      "recipeObjects": [
+        {
+          "itemId": "sheet",
+          "revealsRecipeId": "hidden-recipe",
+          "discoveryAction": "inspect"
+        }
+      ]
+    }
+  }
+}

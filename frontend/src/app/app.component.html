@@ -134,7 +134,7 @@
                 <div class="turn-content" *ngIf="turn.turnRecord.completionSource!=='system_fallback'">{{turn.turnRecord.response || (turn.turnRecord.turnKind ? 'Speech: None (intentional)' : '')}}</div>
                 <p *ngIf="turn.turnRecord.simulationMinute !== undefined">{{simulationTime(turn.turnRecord.simulationMinute)}}</p>
                 <details *ngIf="turn.turnRecord.worldOperations?.length"><summary>World interactions</summary><pre>{{turn.turnRecord.worldOperations | json}}</pre></details>
-                <div *ngFor="let event of turn.turnRecord.environmentEvents"><span *ngIf="event.type==='world_operation'">Committed {{event.requestedOperation.action}} · {{event.changes | json}}</span><span *ngIf="event.type?.startsWith('transformation_') || event.type==='resource_reserved' || event.type==='resource_released'">Verified {{event.type}} · {{event.taskId}} · {{simulationTime(event.simulationMinute)}}</span><span *ngIf="event.type==='world_scheduled_event'">{{simulationTime(event.simulationMinute)}} · {{event.eventId}} · {{event.status}} {{event.effects | json}}</span></div>
+                <div *ngFor="let event of turn.turnRecord.environmentEvents"><details *ngIf="event.type==='world_location_changed' || event.type==='recipe_object_discovered' || event.type==='transformation_taught'"><summary>Authoritative {{event.type}} · {{event.agentId}} · {{simulationTime(event.simulationMinute)}}</summary><pre>{{event | json}}</pre></details><span *ngIf="event.type==='world_operation'">Committed {{event.requestedOperation.action}} · {{event.changes | json}}</span><span *ngIf="event.type?.startsWith('transformation_') || event.type==='resource_reserved' || event.type==='resource_released'">Verified {{event.type}} · {{event.taskId}} · {{simulationTime(event.simulationMinute)}}</span><span *ngIf="event.type==='world_scheduled_event'">{{simulationTime(event.simulationMinute)}} · {{event.eventId}} · {{event.status}} {{event.effects | json}}</span></div>
                 <div *ngIf="turn.turnRecord.operationalState as operational" class="turn-operational">
                     <strong>{{turn.turnRecord.turnKind}}</strong><br>
                     Location: {{operational.location.name}}<br>
@@ -233,7 +233,7 @@
         <app-selective-memory-controls [config]="memoryConfig" [locked]="configurationLocked"></app-selective-memory-controls>
         <app-recovery-controls [config]="recoveryConfig" [locked]="configurationLocked"></app-recovery-controls>
         <app-world-controls [modern]="!legacyInteraction" [config]="worldConfig" [locked]="configurationLocked" [agentIds]="savedAgentIds || nextParticipantIds" (validityChange)="worldConfigurationValid=$event"></app-world-controls>
-        <app-operational-controls [config]="operationalConfig" [locked]="configurationLocked"></app-operational-controls>
+        <app-operational-controls [config]="operationalConfig" [locked]="configurationLocked" (validityChange)="locationConfigurationValid=$event"></app-operational-controls>
         <app-publication-panel [running]="experimentStatus === 'running'"></app-publication-panel>
         <app-branch-panel [running]="experimentStatus === 'running'"></app-branch-panel>
         <app-social-controls [social]="socialConfig" [task]="taskConfig" [feedback]="feedbackConfig" [locked]="configurationLocked" [running]="experimentStatus === 'running'" [runId]="savedAgentIds ? runId : ''" (recorded)="handleServerEvent({type:'environment_event',data:$event})"></app-social-controls>

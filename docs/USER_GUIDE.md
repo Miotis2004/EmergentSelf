@@ -229,11 +229,23 @@ A complete four-participant scheduling/communication configuration appears in Ex
 
 ## 7. World Simulation
 
-World Simulation provides deterministic state transitions within a configured environment. It does not provide navigation/pathfinding, physics, autonomous resource generation or a general-purpose planner.
+### Stage 1: world exploration and physical recipe discovery
+
+The location row forms have been replaced by **Locations JSON**, **Validate JSON** and **Copy JSON**. Paste a complete `{ "version": 1, "locations": [...] }` document. The backend checks the real operational schema, including duplicate IDs and field paths. Invalid drafts remain visible and block a new operational run until validated. Valid rooms save with the existing experiment configuration; old saved arrays reload without migration. Descriptions remain optional under the existing rules. The registry now supports 1,000 defined locations plus reserved `unspecified`.
+
+World Simulation's optional exploration JSON editor configures `worldConfig.exploration`: version 1 and a connections array with `from`, `to`, `bidirectional`, optional `requiredEnvironment` and optional `authorizedAgentIds`. Omission preserves unrestricted legacy movement. A present empty graph allows no room changes. Scheduled environmental events can unlock exits, including a first-hour lock, without special time or room names in code. Rejected movement cannot partially commit a turn.
+
+For private physical discovery, use `transformations.knowledgePolicy: "verified"`, empty initial knowledge and the optional `transformations.recipeObjects` list. Each association supplies `itemId`, `revealsRecipeId` and `discoveryAction: "inspect"`. `inspect_recipe_object` takes `inventory_id`, `item_id` and `reason`; only a valid accessible physical object grants its recipe to the inspecting agent. Guessed IDs, remote objects and ordinary speech grant no executable knowledge. Deliberate colocated teaching respects enabled communication scopes. Existing recipe execution remains unchanged.
+
+The [Stage 1 guide](DISCOVERY_STAGE1.md) provides complete Locations JSON, graph and operation examples, field rules, movement/inspection error codes, privacy and teaching semantics, evidence interpretation, limits and backward compatibility. Its [complete two-agent configuration](../examples/discovery-stage1.json) demonstrates a scheduled one-hour lock, search room and workshop. Follow that full example rather than mixing an isolated association with an unrelated recipe catalog.
+
+Conversation event details, append-only research logs and existing exports retain committed movement, object discovery and teaching, including before/after knowledge. Rejected proposals remain in error/recovery evidence. Resume/restart retain committed knowledge without repeating acquisition. This capability does not implement competition scoring, winner selection or pathfinding.
+
+World Simulation provides deterministic state transitions within a configured environment. Optional connectivity enforces directed room movement and environmental access gates. It does not provide pathfinding, physics, autonomous resource generation or a general-purpose planner.
 
 ### UI configuration blocks
 
-Enable **Location & activity > Enable operational turns**, add locations, then enable **World Simulation > Enable deterministic world simulation**. Initial day/time becomes absolute `initialMinute`: day one midnight is zero, 09:00 is 540. **Minutes per successful turn** maps to `minutesPerTurn` (1-10,080); forfeitures consume the same interval despite not being successful agent responses.
+Enable **Location & activity > Enable operational turns**, paste a version-1 Locations JSON document and click **Validate JSON**, then enable **World Simulation > Enable deterministic world simulation**. Initial day/time becomes absolute `initialMinute`: day one midnight is zero, 09:00 is 540. **Minutes per successful turn** maps to `minutesPerTurn` (1-10,080); forfeitures consume the same interval despite not being successful agent responses.
 
 | JSON editor | Value to paste | Assembled backend field |
 |---|---|---|
@@ -670,7 +682,7 @@ After starting, inspect delivered self-descriptions in Conversation and actual `
 
 This noncompetitive example begins at Day 1 09:00 with four agents in a kitchen. It provides one coffee maker, one pot, four individually identified cups, a table and four chairs. Four units of grounds, sixteen units of water and four filters support **four brewing cycles**, each producing four servings, for sixteen total possible servings.
 
-In Location & activity, add `kitchen` (Kitchen). In World Simulation paste the matching `initialPositions`, `items`, `inventories`, `events` and the entire `transformations` value from this complete configuration into their respective editors. Set initial time 09:00 and five minutes per turn. Configure local/private/global channels as shown; no teams or social scoring task is enabled.
+In Location & activity, paste a Locations JSON document containing `kitchen` (Kitchen) and click Validate JSON. In World Simulation paste the matching `initialPositions`, `items`, `inventories`, `events` and the entire `transformations` value from this complete configuration into their respective editors. Set initial time 09:00 and five minutes per turn. Configure local/private/global channels as shown; no teams or social scoring task is enabled.
 
 Agents may discover/inspect the recipe, propose a uniquely named brewing task, reserve one grounds/four water/one filter as inputs, reserve maker/pot as tools, and start it. Five simulated minutes complete it; supplies are consumed and tools released. Cups, table and chairs are deliberately not recipe inputs. There are no seating or pouring operations. For drinking, the supported abstraction is to transfer coffee servings to the agent's defined inventory and `consume_item` there; the engine does not track cup contents or posture.
 

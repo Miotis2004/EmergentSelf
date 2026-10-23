@@ -1,3 +1,4 @@
+import {ExplorationConfig,explorationSchema,validateExploration,validateMovement,exits} from './exploration';
 import Ajv from 'ajv';
 import {hash} from '../research/protocol';
 import * as transformations from './transformations';
@@ -7,7 +8,7 @@ import {OperationalConfig} from '../operations/state';
 export interface ItemDefinition {id:string;name:string;unit:string;stackable:boolean;consumable:boolean;description?:string;category?:string;durability?:number;condition?:string;properties?:Record<string,string|number|boolean>;usageRoles?:string[];provenance?:string;}
 export interface Inventory {id:string;ownerType:'location'|'agent';ownerId:string;visibility:'private'|'local'|'public';authorizedAgentIds:string[];quantities:Record<string,number>;}
 export interface ScheduledEvent {id:string;atMinute:number;intervalMinutes?:number;occurrences:number;inventoryId?:string;itemId?:string;quantityDelta?:number;environmentKey?:string;value?:string;affectedAgentIds:string[];locationId?:string;observation:string;wake:boolean;}
-export interface WorldConfig {version:1;enabled:boolean;initialMinute:number;minutesPerTurn:number;initialPositions:Record<string,string>;items:ItemDefinition[];inventories:Inventory[];events:ScheduledEvent[];observationPolicy:'local'|'self_only';communicationPolicy:'local'|'global';schedulingMode:'round_robin'|'event_driven';transformations?:transformations.TransformationConfig;}
+export interface WorldConfig {version:1;enabled:boolean;initialMinute:number;minutesPerTurn:number;initialPositions:Record<string,string>;items:ItemDefinition[];inventories:Inventory[];events:ScheduledEvent[];observationPolicy:'local'|'self_only';communicationPolicy:'local'|'global';schedulingMode:'round_robin'|'event_driven';exploration?:ExplorationConfig;transformations?:transformations.TransformationConfig;}
 export interface WorldState {version:1;revision:number;minute:number;positions:Record<string,string>;inventories:Inventory[];environment:Record<string,string>;executed:string[];waits:Record<string,{untilMinute?:number;eventId?:string}>;wakeReasons:Record<string,string[]>;observations:any[];lastAgentId?:string;transformations?:transformations.TransformationState;}
 export class WorldError extends Error {constructor(message:string,public code?:string){super(message);}}
 const identifier={type:'string',pattern:'^[A-Za-z0-9_-]{1,120}$'};
@@ -15,10 +16,10 @@ const integer={type:'integer',minimum:0,maximum:1000000000};
 const object=(properties:any,required=Object.keys(properties))=>({type:'object',additionalProperties:false,properties,required});
 const ids={type:'array',maxItems:100,uniqueItems:true,items:identifier};
 const configSchema=object({version:{const:1},enabled:{type:'boolean'},initialMinute:integer,minutesPerTurn:{...integer,minimum:1,maximum:10080},
- initialPositions:{type:'object',propertyNames:identifier,additionalProperties:identifier},items:{type:'array',maxItems:100,items:object({id:identifier,name:{type:'string',minLength:1,maxLength:200},unit:{type:'string',minLength:1,maxLength:80},stackable:{type:'boolean'},consumable:{type:'boolean'},...transformations.itemPropertiesSchema},['id','name','unit','stackable','consumable'])},
- inventories:{type:'array',maxItems:200,items:object({id:identifier,ownerType:{enum:['location','agent']},ownerId:identifier,visibility:{enum:['private','local','public']},authorizedAgentIds:ids,quantities:{type:'object',propertyNames:identifier,additionalProperties:integer}})},
+ initialPositions:{type:'object',propertyNames:identifier,additionalProperties:identifier},items:{type:'array',maxItems:2000,items:object({id:identifier,name:{type:'string',minLength:1,maxLength:200},unit:{type:'string',minLength:1,maxLength:80},stackable:{type:'boolean'},consumable:{type:'boolean'},...transformations.itemPropertiesSchema},['id','name','unit','stackable','consumable'])},
+ inventories:{type:'array',maxItems:2000,items:object({id:identifier,ownerType:{enum:['location','agent']},ownerId:identifier,visibility:{enum:['private','local','public']},authorizedAgentIds:ids,quantities:{type:'object',propertyNames:identifier,additionalProperties:integer}})},
  events:{type:'array',maxItems:100,items:object({id:identifier,atMinute:integer,intervalMinutes:{...integer,minimum:1},occurrences:{...integer,minimum:1,maximum:1000},inventoryId:identifier,itemId:identifier,quantityDelta:{type:'integer',minimum:-1000000000,maximum:1000000000},environmentKey:identifier,value:{type:'string',maxLength:1000},affectedAgentIds:ids,locationId:identifier,observation:{type:'string',minLength:1,maxLength:2000},wake:{type:'boolean'}},['id','atMinute','occurrences','affectedAgentIds','observation','wake'])},
- observationPolicy:{enum:['local','self_only']},communicationPolicy:{enum:['local','global']},schedulingMode:{enum:['round_robin','event_driven']},transformations:transformations.configSchema},['version','enabled','initialMinute','minutesPerTurn','initialPositions','items','inventories','events','observationPolicy','communicationPolicy','schedulingMode']);
+ observationPolicy:{enum:['local','self_only']},communicationPolicy:{enum:['local','global']},schedulingMode:{enum:['round_robin','event_driven']},exploration:explorationSchema,transformations:transformations.configSchema},['version','enabled','initialMinute','minutesPerTurn','initialPositions','items','inventories','events','observationPolicy','communicationPolicy','schedulingMode']);
 const checkConfig=new Ajv({strict:false}).compile<WorldConfig>(configSchema);
 export function resolveWorld(input:any,agents:string[],operational:OperationalConfig):WorldConfig|undefined {
  if(input===undefined)return undefined;
@@ -43,6 +44,7 @@ export function resolveWorld(input:any,agents:string[],operational:OperationalCo
   if(event.atMinute+(event.occurrences-1)*(event.intervalMinutes??0)>1000000000)throw new WorldError('Scheduled time exceeds clock range');
  }
  if(total>10000)throw new WorldError('Maximum 10,000 scheduled occurrences per run');
+ validateExploration(config,agents,locations);
  if(config.transformations)transformations.validateConfig(config,agents,[...locations]);
  return config;
 }
@@ -101,26 +103,32 @@ export const worldOperationsSchema={type:'array',maxItems:8,items:{anyOf:[
 ]}};
 export function configuredWorldActions(config?:Partial<WorldConfig>):string[]{
  if(!config?.enabled)return [];
- return worldOperationsSchema.items.anyOf.flatMap(schema=>schema.properties.action.enum).filter(action=>!!config.transformations||!transformations.isOperation(action));
+ return worldOperationsSchema.items.anyOf.flatMap(schema=>schema.properties.action.enum).filter(action=>(!!config.transformations||!transformations.isOperation(action))&&(action!=='inspect_recipe_object'||!!config.transformations?.recipeObjects?.length));
 }
 const validateOperations=new Ajv({strict:false}).compile(worldOperationsSchema);
 function canAccess(state:WorldState,inventory:Inventory,agent:string){return inventory.ownerType==='agent'?inventory.ownerId===agent:inventory.ownerId===state.positions[agent]&&state.positions[agent]!=='unspecified';}
 function visible(state:WorldState,inventory:Inventory,agent:string){return inventory.visibility==='public'||inventory.authorizedAgentIds.includes(agent)||inventory.ownerType==='agent'&&inventory.ownerId===agent||inventory.visibility==='local'&&canAccess(state,inventory,agent);}
 function withoutReasons(value:any):any {if(Array.isArray(value))return value.map(withoutReasons);if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).filter(([key])=>key!=='reason').map(([key,v])=>[key,withoutReasons(v)]));return value;}
 export function worldContext(state:WorldState,config:WorldConfig,agent:string,privateChannels=false){
- const location=state.positions[agent];
+ const location=state.positions[agent],restricted=!!config.exploration||!!config.transformations?.recipeObjects;
+ const inventories=state.inventories.filter(i=>visible(state,i,agent)&&(!restricted||i.ownerType==='agent'&&i.ownerId===agent||(i.ownerType==='location'?i.ownerId:state.positions[i.ownerId])===location));
+ const itemIds=new Set(inventories.flatMap(i=>Object.entries(i.quantities).filter(([,n])=>n>0).map(([id])=>id)));
+ const known=state.transformations?.knowledge[agent]??[];for(const r of config.transformations?.recipes??[])if(known.includes(r.id))for(const q of [...r.inputs,...r.requiredTools,...r.catalysts,...r.outputs])itemIds.add(q.itemId);
  return {simulationMinute:state.minute,simulationTime:formatSimulationTime(state.minute),locationId:location,
   colocatedAgents:config.observationPolicy==='local'&&location!=='unspecified'?Object.keys(state.positions).filter(id=>id!==agent&&state.positions[id]===location):[],
   transformationContext:transformations.context(state,config,agent),
-  inventories:state.inventories.filter(i=>visible(state,i,agent)),items:config.items,
+  ...(config.exploration?{movement:{restricted:true,exits:exits(state,config,agent)}}:{}),inventories,items:restricted?config.items.filter(i=>itemIds.has(i.id)):config.items,
   observations:state.observations.filter(o=>o.recipients.includes(agent)).slice(-50).map(o=>privateChannels?withoutReasons(o):o),
   upcomingEvents:schedule(config).filter(o=>!state.executed.includes(o.id)&&(o.event.affectedAgentIds.includes(agent)||o.event.locationId===location)).slice(0,20).map(o=>({id:o.event.id,atMinute:o.minute})),wakeReasons:state.wakeReasons[agent]??[]};
 }
 function configInstructions(context:ReturnType<typeof worldContext>){return context.transformationContext?transformations.instructions+'\n':'';}
-export function worldInstructions(context:ReturnType<typeof worldContext>){return `\n\nAuthoritative world observations (world facts, separate from beliefs or conversational reports):\n${JSON.stringify(context)}\n${configInstructions(context)}World interactions use world_operations, never claims in speech. Return [] for no interaction. inspect_inventory uses inventory_id. take_item moves from an accessible location inventory to your inventory; deposit_item reverses this; transfer_item moves between accessible inventories. Transfers require source_inventory_id, destination_inventory_id, item_id, positive integer quantity and reason. consume_item requires your inventory_id, a consumable item_id, quantity and reason. Private inventories require ownership or explicit authorization to inspect; physical transfers require colocation and access, even if publicly visible. Operational location changes precede inventory actions in the same transaction. wait requires only reason and waits for an addressed message, waking event, or researcher request. wait_until uses a future absolute until_minute; wait_for_event uses a known future event_id. In event_driven scheduling waiting suppresses inference until a deterministic wake; round_robin retains its original turns. Active social tasks require their original per-participant decision rounds even while waiting. Observations are evidence of committed effects; activity descriptions and claims alone do not prove work. Do not store formatting instructions as memory.`;}
-export function prepareWorld(before:WorldState,config:WorldConfig,agent:string,operations:unknown,newLocation:string,agents:string[],commitId:string,speech:string,recipient:string|null,message?:any){
+export function worldInstructions(context:ReturnType<typeof worldContext>){return `\n\nAuthoritative world observations (world facts, separate from beliefs or conversational reports):\n${JSON.stringify(context)}\n${configInstructions(context)}When movement.restricted is true, set_location must follow one listed authorized and unlocked exit at the current simulation minute. Registered locations describe existence, not reachability or resource contents. World interactions use world_operations, never claims in speech. Return [] for no interaction. inspect_inventory uses inventory_id. take_item moves from an accessible location inventory to your inventory; deposit_item reverses this; transfer_item moves between accessible inventories. Transfers require source_inventory_id, destination_inventory_id, item_id, positive integer quantity and reason. consume_item requires your inventory_id, a consumable item_id, quantity and reason. Private inventories require ownership or explicit authorization to inspect; physical transfers require colocation and access, even if publicly visible. Operational location changes precede inventory actions in the same transaction. wait requires only reason and waits for an addressed message, waking event, or researcher request. wait_until uses a future absolute until_minute; wait_for_event uses a known future event_id. In event_driven scheduling waiting suppresses inference until a deterministic wake; round_robin retains its original turns. Active social tasks require their original per-participant decision rounds even while waiting. Observations are evidence of committed effects; activity descriptions and claims alone do not prove work. Do not store formatting instructions as memory.`;}
+export function prepareWorld(before:WorldState,config:WorldConfig,agent:string,operations:unknown,newLocation:string,agents:string[],commitId:string,speech:string,recipient:string|null,message?:any,permissions?:{runId?:string;communicationConfig?:any;schedulingConfig?:any;locationIds?:string[]}){
  if(!validateOperations(operations))throw new WorldError('Invalid world operation structure');
+ if(permissions?.locationIds&&!permissions.locationIds.includes(newLocation))throw new WorldError('Unknown movement destination','INVALID_LOCATION_REFERENCE');
+ validateMovement(before,config,agent,newLocation);
  const state=structuredClone(before),events:any[]=[];state.positions[agent]=newLocation;
+ if(config.exploration&&before.positions[agent]!==newLocation){const e={id:commitId+':location',type:'world_location_changed',source:'authoritative_world',runId:permissions?.runId??commitId.split(':turn:')[0],agentId:agent,simulationMinute:before.minute,fromLocationId:before.positions[agent],toLocationId:newLocation,validation:'passed',status:'committed'};events.push(e);observe(state,e.id+':observation',state.minute,[agent],'world_location_changed',e);}
  events.push(...transformations.interruptDepartures(state,config,agents,commitId));
  const inv=(id:string)=>{const result=state.inventories.find(i=>i.id===id);if(!result)throw new WorldError('Unknown inventory ID');transformations.checkWorkspaceAccess(config,id,agent);return result;};
  const proposals=operations as any[];
@@ -128,9 +136,9 @@ export function prepareWorld(before:WorldState,config:WorldConfig,agent:string,o
   const id=`${commitId}:operation:${index}`,changes:any[]=[];
   if(!op.reason.trim())throw new WorldError('World operation reason must be nonempty');
   if(transformations.isOperation(op.action)){
-   events.push(...transformations.applyOperation(state,config,agent,op,id));
+   events.push(...transformations.applyOperation(state,config,agent,op,id,permissions));
   }else if(op.action==='inspect_inventory'){
-   const inventory=inv(op.inventory_id);if(!visible(state,inventory,agent))throw new WorldError('Unauthorized inventory inspection');
+   const inventory=inv(op.inventory_id);if(!visible(state,inventory,agent))throw new WorldError('Unauthorized inventory inspection');if((config.exploration||config.transformations?.recipeObjects)&&!(inventory.ownerType==='agent'?inventory.ownerId===agent||state.positions[inventory.ownerId]===state.positions[agent]:inventory.ownerId===state.positions[agent]))throw new WorldError('Inventory inspection is not accessible at this location','INVENTORY_NOT_ACCESSIBLE');
    observe(state,`${id}:observation`,state.minute,[agent],'inventory_inspection',inventory);
   }else if(op.action==='wait'){
    state.waits[agent]={};

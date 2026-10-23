@@ -52,6 +52,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
   worldConfig:any=defaultWorldConfig();
   worldState:any;
   worldConfigurationValid=true;
+  locationConfigurationValid=true;
   worldControl(action:string,body:any){this.perform(this.experimentService.world(action,body));}
   simulationTime(minute:number){return `Day ${Math.floor(minute/1440)+1} ${String(Math.floor(minute%1440/60)).padStart(2,'0')}:${String(minute%60).padStart(2,'0')}`;}
   operationalStates:Record<string,any>={};
@@ -298,6 +299,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
   startExperiment() {
       if(!this.legacyInteraction){const error=InteractionControlsComponent.validate(this.interaction,this.savedAgentIds??this.nextParticipantIds,this.worldConfig.enabled,this.taskConfig.kind);if(error){this.diagnostic=error;return;}}
       if(!RecoveryControlsComponent.valid(this.recoveryConfig)){this.diagnostic='Correct Error Recovery settings before starting.';return;}
+      if(this.operationalConfig.enabled&&!this.locationConfigurationValid){this.diagnostic='Validate Location & activity JSON before starting.';return;}
       if(this.worldConfig.enabled&&!this.worldConfigurationValid){this.diagnostic='Correct World Simulation JSON fields before starting.';return;}
       if (this.requestPending || (this.experimentStatus !== 'idle' && this.experimentStatus !== 'stopped')) return;
       const agentIds = this.experimentStatus === 'stopped' && this.savedAgentIds ? [...this.savedAgentIds] : this.nextParticipantIds;

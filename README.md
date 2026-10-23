@@ -4,6 +4,10 @@
 
 Read the [comprehensive User Guide](docs/USER_GUIDE.md) for installation, agent and experiment setup, world recipes, monitoring, research reports, auditing, and exports.
 
+## World exploration and physical recipe discovery
+
+Stage 1 adds a validated Locations JSON editor, optional directed room connections with scheduled environmental gates, and private recipe acquisition through accessible physical objects. Deliberate teaching and authoritative movement/discovery events use the existing world transaction and research logs. Legacy worlds remain compatible. See the [Stage 1 configuration guide](docs/DISCOVERY_STAGE1.md), [User Guide section](docs/USER_GUIDE.md#stage-1-world-exploration-and-physical-recipe-discovery), and [complete two-agent example](examples/discovery-stage1.json). Competition scoring and winner selection are not part of Stage 1.
+
 ## Overview
 
 Emergent Self is a research-oriented application in which two or more artificial agents converse using a **single shared local language model**. Each agent has its own persistent state, including numeric attributes, memories, beliefs, and a self-description. The application invokes the model **sequentially**, loading the appropriate agent's context for each turn so that a single local inference server can support multiple independent agent identities.
